@@ -6,9 +6,12 @@
   "scripts": {
     "dev": "node --import tsx server.ts",
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
-    "start": "node dist/server.cjs",
+    "start": "node dist/server.cjs --production",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "admin:setup": "node --import tsx scripts/admin-setup.ts",
+    "video:add": "node scripts/add-video.mjs",
+    "migrate:legacy": "node --import tsx scripts/import-legacy.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -36,5 +39,8 @@
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

@@ -4,7 +4,6 @@ import {
   Menu, Search, type LucideIcon
 } from 'lucide-react';
 import { PortalBrand, PortalDialog } from './PortalUI';
-import type { DashboardTabType } from './StudentDashboard';
 
 export interface WorkspaceAction {
   label: string;
@@ -13,31 +12,32 @@ export interface WorkspaceAction {
   detail?: string;
 }
 
-export interface WorkspacePage {
-  id: DashboardTabType;
+export interface WorkspacePage<Page extends string> {
+  id: Page;
   label: string;
   icon: LucideIcon;
 }
 
-export interface WorkspaceNavGroup {
+export interface WorkspaceNavGroup<Page extends string> {
   label: string;
-  pages: WorkspacePage[];
+  pages: WorkspacePage<Page>[];
 }
 
-interface WorkspaceChromeProps {
-  groups: WorkspaceNavGroup[];
-  activePage: DashboardTabType;
-  onNavigate: (page: DashboardTabType) => void;
+interface WorkspaceChromeProps<Page extends string> {
+  groups: WorkspaceNavGroup<Page>[];
+  activePage: Page;
+  onNavigate: (page: Page) => void;
   searchActions: WorkspaceAction[];
   accountActions: WorkspaceAction[];
   onHelp: () => void;
   userName: string;
+  workspaceLabel?: string;
   children: ReactNode;
 }
 
-function WorkspaceNav({ groups, activePage, onNavigate }: Pick<WorkspaceChromeProps, 'groups' | 'activePage' | 'onNavigate'>) {
+function WorkspaceNav<Page extends string>({ groups, activePage, onNavigate, workspaceLabel }: Pick<WorkspaceChromeProps<Page>, 'groups' | 'activePage' | 'onNavigate' | 'workspaceLabel'>) {
   return (
-    <nav className="pbs-navigation" aria-label="Student workspace">
+    <nav className="pbs-navigation" aria-label={workspaceLabel || "Student workspace"}>
       {groups.map((group) => (
         <div className="pbs-nav-group" key={group.label}>
           <p>{group.label}</p>
@@ -63,9 +63,9 @@ export function WorkspaceActionRow({ action }: { action: WorkspaceAction }) {
   );
 }
 
-export function WorkspaceChrome({
-  groups, activePage, onNavigate, searchActions, accountActions, onHelp, userName, children
-}: WorkspaceChromeProps) {
+export function WorkspaceChrome<Page extends string>({
+  groups, activePage, onNavigate, searchActions, accountActions, onHelp, userName, workspaceLabel, children
+}: WorkspaceChromeProps<Page>) {
   const [dialog, setDialog] = useState<'navigation' | 'search' | 'account' | null>(null);
   const [query, setQuery] = useState('');
   const pages = groups.flatMap(group => group.pages);
@@ -98,8 +98,8 @@ export function WorkspaceChrome({
     <div className="pbs-workspace">
       <a href="#workspace-content" className="pbs-skip-link">Skip to content</a>
       <aside className="pbs-sidebar">
-        <PortalBrand workspace />
-        <WorkspaceNav groups={groups} activePage={activePage} onNavigate={onNavigate} />
+        <PortalBrand workspace subtitle={workspaceLabel} />
+        <WorkspaceNav workspaceLabel={workspaceLabel} groups={groups} activePage={activePage} onNavigate={onNavigate} />
         <button className="pbs-sidebar-help" type="button" onClick={onHelp}>
           <CircleHelp /> <span>Help and FAQs</span> <ArrowUpRight />
         </button>
@@ -138,7 +138,7 @@ export function WorkspaceChrome({
 
       {dialog === 'navigation' && (
         <PortalDialog title="Workspace navigation" onClose={() => setDialog(null)} className="pbs-navigation-dialog">
-          <WorkspaceNav groups={groups} activePage={activePage} onNavigate={(page) => {
+          <WorkspaceNav workspaceLabel={workspaceLabel} groups={groups} activePage={activePage} onNavigate={(page) => {
             setDialog(null);
             onNavigate(page);
           }} />

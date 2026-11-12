@@ -1,13 +1,13 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 
-export function PortalBrand({ workspace = false }: { workspace?: boolean }) {
+export function PortalBrand({ workspace = false, subtitle }: { workspace?: boolean; subtitle?: string }) {
   return (
     <div className="pbs-brand">
       <img src="/pbs-logo.svg" alt="" width={42} height={42} />
       <span>
         <strong>Pragmatic BIM Solution</strong>
-        <small>{workspace ? 'Student workspace' : 'BIM learning portal'}</small>
+        <small>{subtitle ?? (workspace ? 'Student workspace' : 'BIM learning portal')}</small>
       </span>
     </div>
   );

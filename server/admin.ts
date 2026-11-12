@@ -1,0 +1,240 @@
+import type { Express } from 'express';
+import { findAccount, publicAccount, requireAccount } from './auth';
+import { type Database, makeId, makeStudentId, now, transaction } from './database';
+import { badRequest, conflict, emailAddress, field, integer, notFound, route } from './http';
+import { httpsLink, paymentClaim, paymentReference, phoneNumber } from './inputs';
+import { hashPassword, temporaryPassword } from './passwords';
+import { adminWorkspace, courseById, courseDetails, enrollmentById, getAssessment, issueReceipt } from './records';
+
+export function mountAdmin(app: Express, db: Database) {
+  app.get('/api/admin/workspace', route((req, res) => {
+    requireAccount(db, req, 'admin');
+    res.json(adminWorkspace(db));
+  }));
+
+  app.get('/api/admin/export', route((req, res) => {
+    requireAccount(db, req, 'admin');
+    res.attachment('PBS-records.json').json({ exportedAt: now(), ...adminWorkspace(db) });
+  }));
+
+  app.post('/api/admin/courses', route((req, res) => {
+    requireAccount(db, req, 'admin');
+    const id = makeId();
+    db.prepare('INSERT INTO courses VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(id, ...courseValues(req.body), now());
+    res.status(201).json({ course: courseDetails(db, courseById(db, id)) });
+  }));
+
+  app.patch('/api/admin/courses/:id', route((req, res) => {
+    requireAccount(db, req, 'admin');
+    courseById(db, req.params.id);
+    db.prepare(`UPDATE courses SET title = ?, description = ?, category = ?, instructor = ?, schedule = ?,
+      fee = ?, published = ? WHERE id = ?`).run(...courseValues(req.body), req.params.id);
+    res.json({ course: courseDetails(db, courseById(db, req.params.id)) });
+  }));
+
+  app.post('/api/admin/courses/:id/modules', route((req, res) => {
+    requireAccount(db, req, 'admin');
+    const id = makeId();
+    const title = field(req.body?.title, 'module title');
+    transaction(db, () => {
+      courseById(db, req.params.id);
+      db.prepare(`INSERT INTO modules (id, course_id, title, position)
+        SELECT ?, ?, ?, COALESCE(MAX(position), 0) + 1 FROM modules WHERE course_id = ?`)
+        .run(id, req.params.id, title, req.params.id);
+    });
+    res.status(201).json({ id, title });
+  }));
+
+  app.post('/api/admin/courses/:id/links', route((req, res) => {
+    requireAccount(db, req, 'admin');
+    courseById(db, req.params.id);
+    const kind = req.body?.kind;
+    if (kind !== 'resource' && kind !== 'session') throw badRequest('Choose a resource or live session.');
+    const title = field(req.body?.title, 'title');
+    const url = httpsLink(req.body?.url, 'link');
+    let startsAt = '';
+    if (kind === 'session') {
+      const parsed = new Date(field(req.body?.startsAt, 'session date', 50));
+      if (Number.isNaN(parsed.getTime())) throw badRequest('Enter a valid session date and time.');
+      startsAt = parsed.toISOString();
+    }
+    const id = makeId();
+    db.prepare('INSERT INTO course_links VALUES (?, ?, ?, ?, ?, ?)')
+      .run(id, req.params.id, kind, title, url, startsAt);
+    res.status(201).json({ id });
+  }));
+
+  app.get('/api/admin/courses/:id/assessment', route((req, res) => {
+    requireAccount(db, req, 'admin');
+    res.json(getAssessment(db, req.params.id));
+  }));
+
+  app.put('/api/admin/courses/:id/assessment', route((req, res) => {
+    requireAccount(db, req, 'admin');
+    courseById(db, req.params.id);
+    const input = req.body?.questions;
+    if (!Array.isArray(input) || input.length < 1 || input.length > 50) throw badRequest('Add between 1 and 50 assessment questions.');
+    const questions = input.map(question => {
+      if (!Array.isArray(question?.options) || question.options.length < 2 || question.options.length > 6) {
+        throw badRequest('Each question needs two to six options.');
+      }
+      return {
+        prompt: field(question.prompt, 'question', 600),
+        options: question.options.map(option => field(option, 'answer option', 300)),
+        answer: integer(question.answer, 'correct answer', 0, question.options.length - 1),
+      };
+    });
+    const passingScore = integer(req.body?.passingScore, 'passing score', 1, 100);
+    db.prepare(`INSERT INTO assessments VALUES (?, ?, ?) ON CONFLICT(course_id) DO UPDATE SET
+      questions = excluded.questions, passing_score = excluded.passing_score`)
+      .run(req.params.id, JSON.stringify(questions), passingScore);
+    res.status(204).end();
+  }));
+
+  app.post('/api/admin/students', route(async (req, res) => {
+    const admin = requireAccount(db, req, 'admin');
+    const email = emailAddress(req.body?.email);
+    const courseId = field(req.body?.courseId, 'course', 80);
+    const course = courseById(db, courseId);
+    const total = integer(req.body?.total ?? course.fee, 'course fee');
+    const claim = paymentClaim(req.body, total);
+    const existing = db.prepare('SELECT id, role FROM accounts WHERE email = ?')
+      .get(email) as { id: string; role: string } | undefined;
+    if (existing?.role === 'admin') throw conflict('This email is already used by an administrator.');
+    const id = existing?.id || makeStudentId();
+    const name = existing ? '' : field(req.body?.name, 'full name', 120);
+    const phone = phoneNumber(req.body?.phone);
+    const rollNumber = field(req.body?.rollNumber, 'roll number', 60, false) || id;
+    const password = existing ? undefined : temporaryPassword();
+    const hash = password ? await hashPassword(password) : undefined;
+    const result = transaction(db, () => {
+      if (!existing) {
+        db.prepare(`INSERT INTO accounts (id, role, name, email, phone, roll_number, password_hash, must_change, created_at)
+          VALUES (?, 'student', ?, ?, ?, ?, ?, 1, ?)`).run(id, name, email, phone, rollNumber, hash!, now());
+      }
+      const prior = db.prepare('SELECT id, status FROM enrollments WHERE account_id = ? AND course_id = ?')
+        .get(id, course.id) as { id: string; status: string } | undefined;
+      if (prior?.status === 'approved') throw conflict('This student is already enrolled in the course.');
+      if (prior?.status === 'pending') throw conflict('Review the existing application from Enrollments.');
+      const enrollmentId = prior?.id || makeId();
+      const date = now();
+      db.prepare(`INSERT INTO enrollments (id, account_id, course_id, total, status, submitted_at, approved_at)
+        VALUES (?, ?, ?, ?, 'approved', ?, ?) ON CONFLICT(account_id, course_id) DO UPDATE SET
+        total = excluded.total, status = 'approved', approved_at = excluded.approved_at, notes = '',
+        requested_payment = 0, reference = ''`).run(enrollmentId, id, course.id, total, date, date);
+      const receipt = claim.amount ? issueReceipt(db, enrollmentId, claim.amount,
+        field(req.body?.method, 'payment method', 60), claim.reference, admin.id) : undefined;
+      return { student: publicAccount(findAccount(db, id)!), enrollment: enrollmentById(db, enrollmentId), receipt };
+    });
+    res.status(201).json({ ...result, temporaryPassword: password });
+  }));
+
+  app.post('/api/admin/students/:id/reset-password', route(async (req, res) => {
+    requireAccount(db, req, 'admin');
+    const student = findAccount(db, req.params.id);
+    if (!student || student.role !== 'student') throw notFound('This student is unavailable.');
+    const password = temporaryPassword();
+    const hash = await hashPassword(password);
+    transaction(db, () => {
+      db.prepare('UPDATE accounts SET password_hash = ?, must_change = 1 WHERE id = ?').run(hash, student.id);
+      db.prepare('DELETE FROM sessions WHERE account_id = ?').run(student.id);
+    });
+    res.json({ temporaryPassword: password });
+  }));
+
+  app.patch('/api/admin/students/:id', route((req, res) => {
+    requireAccount(db, req, 'admin');
+    const student = findAccount(db, req.params.id);
+    if (!student || student.role !== 'student') throw notFound('This student is unavailable.');
+    db.prepare('UPDATE accounts SET name = ?, email = ?, phone = ?, roll_number = ? WHERE id = ?')
+      .run(field(req.body?.name, 'full name', 120), emailAddress(req.body?.email),
+        phoneNumber(req.body?.phone), field(req.body?.rollNumber, 'roll number', 60), student.id);
+    res.json({ student: publicAccount(findAccount(db, student.id)!) });
+  }));
+
+  app.patch('/api/admin/students/:id/placement', route((req, res) => {
+    requireAccount(db, req, 'admin');
+    const student = findAccount(db, req.params.id);
+    if (!student || student.role !== 'student') throw notFound('This student is unavailable.');
+    db.prepare(`INSERT INTO placements VALUES (?, ?, ?, ?) ON CONFLICT(account_id) DO UPDATE SET
+      status = excluded.status, target_role = excluded.target_role, notes = excluded.notes`)
+      .run(student.id, field(req.body?.status, 'placement status', 100),
+        field(req.body?.targetRole, 'target role', 160, false), field(req.body?.notes, 'notes', 2000, false));
+    res.status(204).end();
+  }));
+
+  app.post('/api/admin/enrollments/:id/decision', route((req, res) => {
+    const admin = requireAccount(db, req, 'admin');
+    const decision = req.body?.decision;
+    if (decision !== 'approved' && decision !== 'rejected') throw badRequest('Choose an enrollment decision.');
+    const note = field(req.body?.notes, 'decision notes', 1000, false);
+    const result = transaction(db, () => {
+      const enrollment = enrollmentById(db, req.params.id);
+      if (enrollment.status === decision) return { enrollment };
+      if (enrollment.status !== 'pending') throw conflict('This application has already been reviewed.');
+      db.prepare('UPDATE enrollments SET status = ?, approved_at = ?, notes = ? WHERE id = ?')
+        .run(decision, decision === 'approved' ? now() : '', note, enrollment.id);
+      const receipt = decision === 'approved' && req.body?.recordPayment === true && enrollment.requestedPayment
+        ? issueReceipt(db, enrollment.id, enrollment.requestedPayment, 'UPI', enrollment.reference, admin.id)
+        : undefined;
+      if (receipt || decision === 'rejected') {
+        db.prepare("UPDATE enrollments SET requested_payment = 0, reference = '' WHERE id = ?").run(enrollment.id);
+      }
+      return { enrollment: enrollmentById(db, enrollment.id), receipt };
+    });
+    res.json(result);
+  }));
+
+  app.post('/api/admin/enrollments/:id/payment', route((req, res) => {
+    const admin = requireAccount(db, req, 'admin');
+    const amount = integer(req.body?.amount, 'payment amount', 1);
+    const reference = paymentReference(req.body?.reference);
+    const method = field(req.body?.method, 'payment method', 60);
+    const receipt = transaction(db, () => {
+      const record = issueReceipt(db, req.params.id, amount, method, reference, admin.id);
+      db.prepare(`UPDATE enrollments SET requested_payment = 0, reference = '', notes = ''
+        WHERE id = ? AND reference = ? COLLATE NOCASE`).run(req.params.id, reference);
+      return record;
+    });
+    res.json({ receipt });
+  }));
+
+  app.post('/api/admin/enrollments/:id/reject-payment', route((req, res) => {
+    requireAccount(db, req, 'admin');
+    const enrollment = enrollmentById(db, req.params.id);
+    if (enrollment.status !== 'approved' || !enrollment.requestedPayment) throw conflict('There is no payment to review.');
+    db.prepare("UPDATE enrollments SET requested_payment = 0, reference = '', notes = ? WHERE id = ?")
+      .run(field(req.body?.notes, 'payment review notes', 1000), enrollment.id);
+    res.status(204).end();
+  }));
+
+  app.post('/api/admin/messages', route((req, res) => {
+    requireAccount(db, req, 'admin');
+    const student = findAccount(db, field(req.body?.studentId, 'student', 80));
+    if (!student || student.role !== 'student') throw notFound('This student is unavailable.');
+    db.prepare(`INSERT INTO messages VALUES (?, ?, 'admin', ?, ?, ?)`)
+      .run(makeId(), student.id, field(req.body?.subject, 'subject', 140), field(req.body?.body, 'message', 3000), now());
+    res.status(204).end();
+  }));
+
+  app.patch('/api/admin/assignments/:id', route((req, res) => {
+    requireAccount(db, req, 'admin');
+    const result = db.prepare('UPDATE assignments SET feedback = ?, reviewed_at = ? WHERE id = ?')
+      .run(field(req.body?.feedback, 'feedback', 4000), now(), req.params.id);
+    if (!result.changes) throw notFound('This submission is unavailable.');
+    res.status(204).end();
+  }));
+}
+
+function courseValues(body: Record<string, unknown> | undefined) {
+  return [
+    field(body?.title, 'course title'),
+    field(body?.description, 'description', 3000, false),
+    field(body?.category, 'category', 80),
+    field(body?.instructor, 'instructor', 120, false),
+    field(body?.schedule, 'schedule', 160, false),
+    integer(body?.fee, 'fee'),
+    Number(body?.published === true),
+  ] as const;
+}

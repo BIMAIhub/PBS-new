@@ -1,33 +1,65 @@
-# PBS Student Portal
+# Pragmatic BIM Solution
 
-The Pragmatic BIM Solution learning portal includes student and administrator sign-in, course enrollment, the student workspace and public portfolio pages.
+PBS is a BIM learning portal for students and administrators. Both workspaces use the same visual system, including the classroom, enrollment forms and downloadable student documents.
 
-## Run locally
+## Start PBS
 
-Use Node.js 22 or newer.
+Use Node.js 22.13 or later. Install dependencies and create your administrator from a trusted terminal.
 
 ```sh
 npm ci
+cp .env.example .env
+npm run admin:setup -- --email YOUR_ADMIN_EMAIL --name "PBS Administrator"
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+The setup command prompts for a password. Open [http://localhost:3000](http://localhost:3000), choose **Administrator**, and sign in. To reset an existing administrator password, rerun the setup command with `--reset`.
 
-| Demo account | Email | Password |
-| --- | --- | --- |
-| Student | student.demo@example.com | DemoStudent2026 |
-| Administrator | admin.demo@example.com | DemoAdmin2026 |
+The database starts with an empty roster and catalog. From **Courses & videos**, create a course, add a module, and publish it in the enrollment catalog when ready.
 
-Use the matching account type on the sign-in screen. In the student workspace, Ctrl+K or Command+K opens search for pages and tools.
+## Add video lessons
 
-## Build
+In **Courses & videos**, select **Add video** and choose a module. Upload an MP4 or WebM file, or use an HTTPS video link. Use **Edit lesson** under **Curriculum and materials** to replace an unavailable video. Uploaded files are served from the PBS data volume to authorized accounts. YouTube, Google Drive, Vimeo and provider-supplied OneDrive or SharePoint embed links can play in the classroom when the provider allows embedding. Students can open the source link when the provider requires sign-in.
+
+To add a lesson from a terminal, use the same administrator account. The command prompts for the password, or reads it from `PBS_ADMIN_PASSWORD` if supplied by the host.
+
+```sh
+npm run video:add -- --email YOUR_ADMIN_EMAIL --list
+npm run video:add -- --email YOUR_ADMIN_EMAIL --course COURSE_ID --module MODULE_ID \
+  --title "Lesson title" --duration "24 min" --file /path/to/lesson.mp4
+npm run video:add -- --email YOUR_ADMIN_EMAIL --course COURSE_ID --module MODULE_ID \
+  --title "Lesson title" --url "https://your-video-provider/your-video"
+```
+
+Set `PBS_PORTAL_URL` or pass `--server` to target a running PBS host. The upload limit defaults to 1,024 MB and can be changed with `PBS_MAX_UPLOAD_MB`.
+
+## Enroll students and issue receipts
+
+- **Student application.** Open **Explore courses**, choose a published course and submit the application. The student uses the account they create to track the decision. Their application code is also available under **My courses**.
+- **Direct enrollment.** Open **Students → Enroll student** and enter the student's email, course and agreed fee. For a new account, PBS displays a temporary password once. Share it privately so the student can set their own password at sign-in.
+- **Payment review.** Set `PBS_PAYMENT_UPI_ID` and `PBS_PAYMENT_NAME` to the verified PBS payment destination. Students can submit the bank UTR after paying. In **Enrollments**, review an application and record a verified initial payment. In **Payments & receipts**, review later references or record payments received through other methods.
+- **Receipt download.** Recording a payment creates a numbered receipt and updates the balance. Admins and the enrolled student can print or download the receipt as a PDF. The student ID and bonafide letter use the student's enrollment records.
+
+## Run on a live host
 
 ```sh
 npm run lint
 npm run build
-NODE_ENV=production npm start
+npm start
 ```
 
-The app uses Express for its API and Vite for the frontend. The demo store initializes locally. Keep the runtime database and environment variables private. The included sign-in and database endpoints are for demo use. Configure authenticated, role-scoped storage before hosting real student data.
+Run the Express server on a Node host with HTTPS and a persistent writable volume. Set `PBS_DATA_DIR` to that volume, outside the web root, and set `PBS_PUBLIC_ORIGIN` to the public HTTPS URL. Use `PBS_TRUST_PROXY=1` when there is exactly one trusted reverse proxy in front of the server. The default host is loopback. Set `PBS_HOST=0.0.0.0` when your hosting platform requires a network bind.
 
-The UI redesign was informed by [Unslop](https://github.com/heydamir/unslop) by Damir Sokolovsky, licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The Instrument typefaces include their licenses in `src/assets`.
+The volume holds the SQLite database and uploaded videos. Back up the volume using the host's snapshot mechanism or stop the server before copying it. **Export records** in the admin menu produces a readable JSON report.
+
+### Bring over existing records
+
+Use a reviewed legacy JSON backup on the server. Run the import against the same `PBS_DATA_DIR` as the portal.
+
+```sh
+npm run migrate:legacy -- --file /private/path/pbs_central_db.json
+```
+
+The importer carries over courses, valid lesson links, real student records and enrollment statuses. It skips recognized demo entries and creates receipts for approved applications with a verified payment reference. Review historical balances against your payment records. Set a new temporary password for imported students from their admin record.
+
+The interface was refined with [Unslop](https://github.com/heydamir/unslop) by Damir Sokolovsky. The Instrument font licenses are included in `src/assets`.
