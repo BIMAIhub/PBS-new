@@ -1,0 +1,1224 @@
+@font-face {
+  font-family: "Instrument Sans";
+  src: url("./assets/instrument-sans.woff2") format("woff2");
+  font-weight: 400 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Instrument Serif";
+  src: url("./assets/instrument-serif.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+
+:root {
+  --studio-ink: #1b2821;
+  --studio-secondary: #46564d;
+  --studio-muted: #5a6a60;
+  --studio-paper: #f5f6f1;
+  --studio-surface: #fff;
+  --studio-border: #dce3da;
+  --studio-wash: #eef1eb;
+  --studio-accent: #24563f;
+  --studio-accent-hover: #193f2e;
+  --studio-dark: #1a2c24;
+  --studio-radius: 8px;
+  --studio-panel-radius: 16px;
+  --studio-ease: cubic-bezier(.22, 1, .36, 1);
+}
+
+.pbs-login,
+.pbs-workspace,
+.pbs-dialog {
+  color: var(--studio-ink);
+  font-family: var(--font-sans);
+}
+
+.pbs-login button,
+.pbs-workspace button,
+.pbs-dialog button {
+  cursor: pointer;
+}
+
+.pbs-login button:disabled,
+.pbs-workspace button:disabled {
+  cursor: wait;
+}
+
+.pbs-login :focus-visible,
+.pbs-workspace :focus-visible,
+.pbs-dialog :focus-visible {
+  outline: 2px solid var(--studio-accent);
+  outline-offset: 3px;
+}
+
+.pbs-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  line-height: 1.2;
+}
+
+.pbs-brand img {
+  display: block;
+  flex: 0 0 42px;
+  border-radius: 8px;
+}
+
+.pbs-brand strong,
+.pbs-brand small {
+  display: block;
+}
+
+.pbs-brand strong {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.pbs-brand small {
+  margin-top: 4px;
+  color: var(--studio-muted);
+  font-size: 12px;
+}
+
+.pbs-button,
+.pbs-text-button,
+.pbs-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-weight: 600;
+  transition: background-color 150ms var(--studio-ease), color 150ms var(--studio-ease);
+}
+
+.pbs-button {
+  min-height: 48px;
+  padding: 0 16px;
+  border-radius: var(--studio-radius);
+  font-size: 15px;
+}
+
+.pbs-button svg,
+.pbs-text-button svg,
+.pbs-icon-button svg,
+.pbs-nav-group svg,
+.pbs-sidebar-help svg,
+.pbs-topbar svg,
+.pbs-row-icon svg,
+.pbs-row-end,
+.pbs-section-label svg,
+.pbs-learning-stats svg,
+.pbs-login-footer svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  stroke-width: 1.6;
+}
+
+.pbs-button-primary {
+  background: var(--studio-accent);
+  color: white;
+}
+
+.pbs-button-primary:hover {
+  background: var(--studio-accent-hover);
+}
+
+.pbs-button-primary:disabled {
+  opacity: .72;
+}
+
+.pbs-button-light {
+  background: #f7faf6;
+  color: var(--studio-dark);
+}
+
+.pbs-button-light:hover {
+  background: #e3eee5;
+}
+
+.pbs-button-light:focus-visible {
+  outline-color: #ecf7ed;
+}
+
+.pbs-text-button {
+  min-height: 32px;
+  border-radius: 4px;
+  color: var(--studio-accent);
+  font-size: 14px;
+  text-align: left;
+}
+
+.pbs-text-button:hover,
+.pbs-login-footer a:hover {
+  color: var(--studio-accent-hover);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.pbs-icon-button {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: var(--studio-radius);
+  color: var(--studio-secondary);
+}
+
+.pbs-icon-button:hover {
+  background: var(--studio-wash);
+  color: var(--studio-ink);
+}
+
+/* Sign-in */
+.pbs-login {
+  display: grid;
+  grid-template-columns: minmax(0, 1.12fr) minmax(0, 1fr);
+  min-height: 100svh;
+  background: var(--studio-surface);
+}
+
+.pbs-login-art {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 680px;
+  padding: clamp(32px, 4vw, 64px);
+  overflow: hidden;
+  background: var(--studio-dark);
+  color: #f7f9f3;
+}
+
+.pbs-login-image,
+.pbs-login-art::after {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.pbs-login-image {
+  z-index: -2;
+  object-fit: cover;
+  object-position: center 56%;
+}
+
+.pbs-login-art::after {
+  z-index: -1;
+  background: linear-gradient(180deg, rgb(18 33 26 / .36), transparent 48%, transparent 76%, rgb(18 33 26 / .78));
+  content: "";
+}
+
+.pbs-login-art .pbs-brand small {
+  color: #c4d0c6;
+}
+
+.pbs-login-intro {
+  position: relative;
+  width: fit-content;
+  margin-top: 32px;
+}
+
+.pbs-login-intro h2 {
+  margin: 0;
+  font-family: "Instrument Serif", Georgia, serif;
+  font-size: clamp(56px, min(5.8vw, 10svh), 88px);
+  font-weight: 400;
+  letter-spacing: -.025em;
+  line-height: .91;
+}
+
+.pbs-drawing-mark {
+  position: absolute;
+  top: 4px;
+  left: calc(100% + 12px);
+  color: #b4c7b9;
+}
+
+.pbs-drawing-mark svg {
+  width: 24px;
+  height: 24px;
+  stroke-width: 1;
+}
+
+.pbs-login-art-caption {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgb(255 255 255 / .34);
+  color: #e8eee8;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.pbs-login-pane {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  padding: 32px clamp(24px, 4vw, 64px) 24px;
+}
+
+.pbs-login-pane-top {
+  justify-self: end;
+}
+
+.pbs-login-content {
+  align-self: center;
+  justify-self: center;
+  width: min(100%, 416px);
+  padding: 32px 0;
+}
+
+.pbs-login-heading h1 {
+  font-size: clamp(36px, 4vw, 52px);
+  font-weight: 500;
+  letter-spacing: -.045em;
+  line-height: 1.04;
+}
+
+.pbs-login-heading p {
+  margin-top: 12px;
+  color: var(--studio-secondary);
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.pbs-role-control {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  margin-top: 24px;
+  padding: 4px;
+  border: 1px solid var(--studio-border);
+  border-radius: 12px;
+  background: var(--studio-wash);
+}
+
+.pbs-role-control button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  border: 1px solid transparent;
+  border-radius: var(--studio-radius);
+  color: var(--studio-secondary);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.pbs-role-control button[aria-pressed="true"] {
+  border-color: var(--studio-border);
+  background: white;
+  color: var(--studio-accent);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgb(20 30 24 / .05);
+}
+
+.pbs-role-control button:hover {
+  color: var(--studio-accent);
+}
+
+.pbs-role-control svg,
+.pbs-field-input > svg,
+.pbs-form-error svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  stroke-width: 1.6;
+}
+
+.pbs-login-form {
+  display: grid;
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.pbs-field {
+  display: grid;
+  gap: 4px;
+}
+
+.pbs-field label {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.pbs-field-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pbs-field-label .pbs-text-button {
+  min-height: 24px;
+  font-size: 13px;
+}
+
+.pbs-field-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 12px;
+  border: 1px solid #bfcac1;
+  border-radius: var(--studio-radius);
+  color: var(--studio-muted);
+}
+
+.pbs-field-input:focus-within {
+  border-color: var(--studio-accent);
+  outline: 2px solid rgb(36 86 63 / .16);
+}
+
+.pbs-field-input input {
+  min-width: 0;
+  width: 100%;
+  align-self: stretch;
+  color: var(--studio-ink);
+  font-size: 16px;
+}
+
+.pbs-field-input input:focus-visible,
+.pbs-dialog-search input:focus-visible {
+  outline: none;
+}
+
+.pbs-field-input input::placeholder,
+.pbs-dialog-search input::placeholder {
+  color: var(--studio-muted);
+}
+
+.pbs-field-action {
+  margin-right: -8px;
+}
+
+.pbs-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  min-height: 24px;
+  color: var(--studio-secondary);
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.pbs-check input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--studio-accent);
+}
+
+.pbs-login-submit {
+  justify-content: space-between;
+}
+
+.pbs-form-error,
+.pbs-form-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px;
+  border-radius: var(--studio-radius);
+  font-size: 14px;
+}
+
+.pbs-form-error {
+  background: #fcf0ee;
+  color: #9a3029;
+}
+
+.pbs-form-status {
+  background: #edf5ed;
+  color: var(--studio-accent);
+}
+
+.pbs-login-admissions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  column-gap: 12px;
+  margin-top: 24px;
+  padding-top: 12px;
+  border-top: 1px solid var(--studio-border);
+  color: var(--studio-secondary);
+  font-size: 14px;
+}
+
+.pbs-login-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 16px;
+  color: var(--studio-muted);
+  font-size: 13px;
+}
+
+.pbs-login-footer a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--studio-accent);
+}
+
+.pbs-login-footer svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Student workspace */
+.pbs-workspace {
+  display: grid;
+  grid-template-columns: 248px minmax(0, 1fr);
+  min-height: 100svh;
+  background: var(--studio-paper);
+}
+
+.pbs-skip-link {
+  position: fixed;
+  z-index: 10;
+  top: 12px;
+  left: 12px;
+  transform: translateY(-200%);
+  padding: 12px;
+  border-radius: var(--studio-radius);
+  background: white;
+  color: var(--studio-accent);
+}
+
+.pbs-skip-link:focus {
+  transform: translateY(0);
+}
+
+.pbs-sidebar {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  height: 100svh;
+  padding: 24px 16px 16px;
+  overflow-y: auto;
+  border-right: 1px solid var(--studio-border);
+  background: #fcfcf9;
+}
+
+.pbs-sidebar .pbs-brand {
+  gap: 8px;
+}
+
+.pbs-sidebar .pbs-brand strong {
+  font-size: 14px;
+}
+
+.pbs-navigation {
+  display: grid;
+  gap: 24px;
+}
+
+.pbs-nav-group {
+  display: grid;
+  gap: 4px;
+}
+
+.pbs-nav-group p {
+  padding: 0 12px 4px;
+  color: var(--studio-muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.pbs-nav-group button,
+.pbs-sidebar-help {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: var(--studio-radius);
+  color: var(--studio-secondary);
+  font-size: 14px;
+  text-align: left;
+  transition: background-color 150ms var(--studio-ease);
+}
+
+.pbs-nav-group button:hover,
+.pbs-sidebar-help:hover {
+  background: var(--studio-wash);
+}
+
+.pbs-nav-group button[aria-current="page"] {
+  background: #e7eee6;
+  color: var(--studio-accent);
+  font-weight: 600;
+}
+
+.pbs-sidebar-help {
+  width: 100%;
+  margin-top: auto;
+  border: 1px solid var(--studio-border);
+}
+
+.pbs-sidebar-help svg:last-child {
+  width: 16px;
+  height: 16px;
+  margin-left: auto;
+}
+
+.pbs-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 68px;
+  padding: 8px 32px;
+  border-bottom: 1px solid var(--studio-border);
+  background: #fcfcf9;
+}
+
+.pbs-breadcrumb,
+.pbs-topbar-controls,
+.pbs-search-trigger,
+.pbs-account-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.pbs-breadcrumb {
+  color: var(--studio-muted);
+  font-size: 14px;
+}
+
+.pbs-breadcrumb strong {
+  color: var(--studio-ink);
+  font-weight: 600;
+}
+
+.pbs-breadcrumb > svg {
+  width: 14px;
+  height: 14px;
+}
+
+.pbs-topbar-controls {
+  gap: 12px;
+}
+
+.pbs-mobile-menu {
+  display: none;
+}
+
+.pbs-search-trigger,
+.pbs-account-trigger {
+  min-height: 40px;
+  padding: 0 8px;
+  border: 1px solid var(--studio-border);
+  border-radius: var(--studio-radius);
+  background: var(--studio-surface);
+  color: var(--studio-secondary);
+  font-size: 14px;
+  transition: background-color 150ms var(--studio-ease);
+}
+
+.pbs-search-trigger:hover,
+.pbs-account-trigger:hover {
+  background: var(--studio-wash);
+}
+
+.pbs-search-trigger kbd {
+  margin-left: 12px;
+  padding: 2px 4px;
+  border: 1px solid var(--studio-border);
+  border-radius: 4px;
+  color: var(--studio-muted);
+  font-size: 11px;
+}
+
+.pbs-account-avatar {
+  display: grid;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 6px;
+  background: #e7eee6;
+  color: var(--studio-accent);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.pbs-account-name {
+  max-width: 16ch;
+  overflow: hidden;
+  color: var(--studio-ink);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pbs-workspace-main {
+  width: 100%;
+  max-width: 1440px;
+  margin-inline: auto;
+  padding: 28px 32px 48px;
+}
+
+.pbs-page-title {
+  margin: 0 0 24px;
+  font-size: clamp(32px, 4vw, 44px);
+  font-weight: 500;
+  letter-spacing: -.04em;
+  line-height: 1.05;
+}
+
+.pbs-overview {
+  display: grid;
+  gap: 20px;
+}
+
+.pbs-overview-main,
+.pbs-overview-secondary {
+  display: grid;
+  grid-template-columns: minmax(0, 1.85fr) minmax(276px, 1fr);
+  gap: 20px;
+}
+
+.pbs-course-feature {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  min-height: 260px;
+  overflow: hidden;
+  border-radius: var(--studio-panel-radius);
+  background: var(--studio-dark);
+  color: #f4f8f3;
+}
+
+.pbs-course-feature-content {
+  display: grid;
+  justify-items: start;
+  gap: 16px;
+  width: min(66%, 520px);
+  padding: 24px;
+}
+
+.pbs-section-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #d9e4db;
+  font-size: 13px;
+}
+
+.pbs-course-feature h2 {
+  font-size: clamp(26px, 3vw, 42px);
+  font-weight: 500;
+  letter-spacing: -.035em;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+
+.pbs-course-feature-image {
+  position: absolute;
+  z-index: -1;
+  inset: 0 0 0 40%;
+  background:
+    linear-gradient(90deg, var(--studio-dark) 5%, rgb(26 44 36 / .78) 38%, rgb(26 44 36 / .22) 67%, transparent),
+    url("/bim-study-model.webp") center 65% / cover;
+}
+
+.pbs-course-progress {
+  width: 100%;
+  max-width: 272px;
+  color: #d9e4db;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pbs-course-progress div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.pbs-course-progress strong {
+  font-weight: 600;
+}
+
+.pbs-course-progress progress {
+  display: block;
+  width: 100%;
+  height: 4px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 4px;
+  background: #52665a;
+  color: #d5e9d5;
+  appearance: none;
+}
+
+.pbs-course-progress progress::-webkit-progress-bar {
+  background: #52665a;
+}
+
+.pbs-course-progress progress::-webkit-progress-value {
+  background: #d5e9d5;
+}
+
+.pbs-course-progress progress::-moz-progress-bar {
+  background: #d5e9d5;
+}
+
+.pbs-panel {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--studio-border);
+  border-radius: var(--studio-panel-radius);
+  background: var(--studio-surface);
+}
+
+.pbs-panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  padding: 0 8px 4px;
+}
+
+.pbs-panel-heading h2,
+.pbs-dialog-header h2 {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.pbs-action-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 48px;
+  padding: 8px;
+  border-radius: var(--studio-radius);
+  color: var(--studio-ink);
+  text-align: left;
+  transition: background-color 150ms var(--studio-ease);
+}
+
+.pbs-action-row:hover,
+.pbs-session-preview:hover {
+  background: var(--studio-wash);
+}
+
+.pbs-action-row strong,
+.pbs-session-preview strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.pbs-action-row small,
+.pbs-session-preview small {
+  display: block;
+  margin-top: 4px;
+  color: var(--studio-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.pbs-row-icon {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: var(--studio-radius);
+  background: var(--studio-wash);
+  color: var(--studio-accent);
+}
+
+.pbs-row-end {
+  color: var(--studio-muted);
+}
+
+.pbs-learning-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+  border: 1px solid var(--studio-border);
+  border-radius: var(--studio-panel-radius);
+  background: var(--studio-surface);
+}
+
+.pbs-learning-stats > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 72px;
+  padding: 12px 20px;
+}
+
+.pbs-learning-stats > div + div {
+  border-left: 1px solid var(--studio-border);
+}
+
+.pbs-learning-stats dt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--studio-secondary);
+  font-size: 14px;
+}
+
+.pbs-learning-stats dd {
+  font-size: 28px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.pbs-course-row {
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+}
+
+.pbs-course-row-progress {
+  color: var(--studio-accent);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.pbs-session-preview {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 8px;
+  border-radius: var(--studio-radius);
+  text-align: left;
+}
+
+.pbs-session-date {
+  display: grid;
+  min-width: 52px;
+  place-items: center;
+  padding: 8px 4px;
+  border: 1px solid var(--studio-border);
+  border-radius: var(--studio-radius);
+  color: var(--studio-accent);
+}
+
+.pbs-session-date strong {
+  font-size: 22px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.pbs-calendar-link {
+  margin: 8px;
+}
+
+.pbs-empty {
+  padding: 16px 8px;
+  color: var(--studio-muted);
+  font-size: 14px;
+}
+
+.pbs-workspace-toast {
+  position: fixed;
+  z-index: 40;
+  right: 24px;
+  bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(400px, calc(100% - 48px));
+  padding: 8px 12px;
+  border: 1px solid var(--studio-border);
+  border-radius: 12px;
+  background: white;
+  color: var(--studio-ink);
+  box-shadow: 0 8px 24px rgb(19 34 24 / .12);
+  font-size: 14px;
+}
+
+/* Search, admissions and account dialogs */
+.pbs-dialog {
+  position: fixed;
+  inset: 0;
+  width: min(560px, calc(100% - 32px));
+  max-height: min(640px, calc(100svh - 32px));
+  margin: auto;
+  overflow: auto;
+  border: 1px solid var(--studio-border);
+  border-radius: var(--studio-panel-radius);
+  background: var(--studio-surface);
+  box-shadow: 0 20px 60px rgb(20 33 25 / .18);
+}
+
+.pbs-dialog::backdrop {
+  background: rgb(18 32 24 / .52);
+}
+
+.pbs-dialog-inner {
+  padding: 16px;
+}
+
+.pbs-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-left: 8px;
+  margin-bottom: 12px;
+}
+
+.pbs-dialog-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 12px;
+  border: 1px solid var(--studio-border);
+  border-radius: var(--studio-radius);
+  color: var(--studio-secondary);
+}
+
+.pbs-dialog-search:focus-within {
+  border-color: var(--studio-accent);
+  outline: 2px solid rgb(36 86 63 / .16);
+}
+
+.pbs-dialog-search svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  stroke-width: 1.6;
+}
+
+.pbs-dialog-search input {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  color: var(--studio-ink);
+  font-size: 16px;
+}
+
+.pbs-dialog-list {
+  margin-top: 8px;
+}
+
+.pbs-navigation-dialog .pbs-sidebar-help {
+  margin-top: 16px;
+}
+
+html:has(.pbs-dialog[open]) {
+  overflow: hidden;
+}
+
+@media (max-width: 1120px) {
+  .pbs-workspace {
+    grid-template-columns: 224px minmax(0, 1fr);
+  }
+
+  .pbs-topbar,
+  .pbs-workspace-main {
+    padding-inline: 24px;
+  }
+
+  .pbs-overview-main,
+  .pbs-overview-secondary {
+    grid-template-columns: minmax(0, 1.65fr) minmax(228px, 1fr);
+  }
+
+  .pbs-learning-stats > div {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 920px) {
+  .pbs-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pbs-sidebar {
+    display: none;
+  }
+
+  .pbs-mobile-menu {
+    display: inline-flex;
+    margin-left: -8px;
+  }
+}
+
+@media (max-width: 740px) {
+  .pbs-login {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pbs-login-art {
+    min-height: 216px;
+    padding: 20px 24px 24px;
+  }
+
+  .pbs-login-image {
+    left: auto;
+    width: 62%;
+    object-position: center 72%;
+  }
+
+  .pbs-login-art::after {
+    background: linear-gradient(90deg, var(--studio-dark) 32%, rgb(26 44 36 / .16) 76%, transparent);
+  }
+
+  .pbs-login-intro {
+    margin-top: 20px;
+  }
+
+  .pbs-login-intro h2 {
+    font-size: clamp(40px, 9vw, 56px);
+  }
+
+  .pbs-login-art-caption,
+  .pbs-drawing-mark {
+    display: none;
+  }
+
+  .pbs-login-pane {
+    padding: 12px 24px 20px;
+  }
+
+  .pbs-login-content {
+    padding: 16px 0 24px;
+  }
+}
+
+@media (max-width: 620px) {
+  .pbs-topbar {
+    min-height: 60px;
+    padding-inline: 16px;
+  }
+
+  .pbs-workspace-main {
+    padding: 20px 16px 32px;
+  }
+
+  .pbs-page-title {
+    margin-bottom: 16px;
+  }
+
+  .pbs-breadcrumb > span,
+  .pbs-breadcrumb > svg,
+  .pbs-search-trigger span,
+  .pbs-search-trigger kbd,
+  .pbs-account-name,
+  .pbs-account-trigger > svg {
+    display: none;
+  }
+
+  .pbs-search-trigger,
+  .pbs-account-trigger {
+    justify-content: center;
+    width: 40px;
+    padding: 0;
+  }
+
+  .pbs-overview-main,
+  .pbs-overview-secondary {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .pbs-overview {
+    gap: 12px;
+  }
+
+  .pbs-course-feature {
+    min-height: 228px;
+  }
+
+  .pbs-course-feature-content {
+    width: 76%;
+    padding: 16px;
+  }
+
+  .pbs-course-feature-image {
+    inset-inline-start: 27%;
+    background-image:
+      linear-gradient(90deg, var(--studio-dark), rgb(26 44 36 / .86) 52%, rgb(26 44 36 / .22)),
+      url("/bim-study-model.webp");
+  }
+
+  .pbs-learning-stats > div {
+    min-height: 88px;
+    padding: 8px 12px;
+  }
+
+  .pbs-learning-stats dt {
+    font-size: 12px;
+  }
+
+  .pbs-learning-stats dt svg {
+    display: none;
+  }
+
+  .pbs-learning-stats dd {
+    font-size: 24px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .pbs-login *,
+  .pbs-workspace *,
+  .pbs-dialog * {
+    transition-duration: 0ms;
+    animation-duration: 0ms;
+    animation-iteration-count: 1;
+  }
+}
+
+.pbs-enrollment-form {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.pbs-enrollment-form > button {
+  justify-self: start;
+}
+
+.pbs-enrollment-status {
+  padding: 12px;
+  margin-bottom: 8px;
+  border-radius: var(--studio-radius);
+  background: var(--studio-wash);
+  color: var(--studio-secondary);
+  font-size: 14px;
+}
+
+.pbs-route-loading {
+  display: grid;
+  min-height: 100svh;
+  place-items: center;
+  background: var(--studio-paper);
+  color: var(--studio-secondary);
+  font-size: 16px;
+}
