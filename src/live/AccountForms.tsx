@@ -43,6 +43,22 @@ export function ProfileForm({ account, onClose, onSaved }: { account: Account; o
   </DialogForm>;
 }
 
+export function AdminProfileForm({ account, onClose, onSaved }: {
+  account: Account; onClose: () => void; onSaved: (account: Account) => void;
+}) {
+  return <DialogForm title="Edit admin profile" submit="Save profile" onClose={onClose}
+    onSubmit={async form => {
+      const result = await send<{ account: Account }>('/admin/profile', {
+        name: value(form, 'name'), email: value(form, 'email'), current: String(form.get('current') ?? ''),
+      }, 'PATCH');
+      onSaved(result.account);
+    }}>
+    <Input label="Full name" name="name" autoComplete="name" defaultValue={account.name} maxLength={120} required />
+    <Input label="Sign-in email" name="email" type="email" autoComplete="username" autoCapitalize="none" defaultValue={account.email} maxLength={254} required />
+    <PasswordInput label="Current password" name="current" autoComplete="current-password" required />
+  </DialogForm>;
+}
+
 export function PortfolioForm({ account, portfolio, onClose, onSaved }: {
   account: Account; portfolio: Portfolio; onClose: () => void; onSaved: () => Promise<void>;
 }) {

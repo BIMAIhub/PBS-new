@@ -3,6 +3,7 @@ import express from 'express';
 import path from 'node:path';
 import { GoogleGenAI } from '@google/genai';
 import { dataDirectory, openDatabase } from './server/database';
+import { provisionInitialAdministrator } from './server/administrators';
 import { mountAuth, requireAccount } from './server/auth';
 import { mountAdmin } from './server/admin';
 import { mountStudent } from './server/student';
@@ -17,6 +18,7 @@ async function startServer() {
   const port = Number(process.env.PORT || '3000');
   const host = process.env.PBS_HOST || '127.0.0.1';
   const publicOrigin = process.env.PBS_PUBLIC_ORIGIN ? new URL(process.env.PBS_PUBLIC_ORIGIN).origin : '';
+  await provisionInitialAdministrator(db);
   app.disable('x-powered-by');
   if (process.env.PBS_TRUST_PROXY === '1') app.set('trust proxy', 1);
   app.use((_req, res, next) => {

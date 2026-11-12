@@ -1,12 +1,31 @@
 import type { Express } from 'express';
-import { findAccount, publicAccount, requireAccount } from './auth';
+import { findAccount, publicAccount, renewAccountSession, requireAccount } from './auth';
 import { type Database, makeId, makeStudentId, now, transaction } from './database';
-import { badRequest, conflict, emailAddress, field, integer, notFound, route } from './http';
+import { badRequest, conflict, emailAddress, field, integer, limitAttempts, notFound, route } from './http';
 import { httpsLink, paymentClaim, paymentReference, phoneNumber } from './inputs';
-import { hashPassword, temporaryPassword } from './passwords';
+import { hashPassword, temporaryPassword, verifyPassword } from './passwords';
 import { adminWorkspace, courseById, courseDetails, enrollmentById, getAssessment, issueReceipt } from './records';
 
 export function mountAdmin(app: Express, db: Database) {
+  app.patch('/api/admin/profile', limitAttempts(10), route(async (req, res) => {
+    const admin = requireAccount(db, req, 'admin');
+    const name = field(req.body?.name, 'full name', 120);
+    const email = emailAddress(req.body?.email);
+    const current = typeof req.body?.current === 'string' ? req.body.current : '';
+    if (!await verifyPassword(current, admin.passwordHash)) throw badRequest('The current password is incorrect.');
+
+    transaction(db, () => {
+      const active = requireAccount(db, req, 'admin');
+      if (active.passwordHash !== admin.passwordHash) throw conflict('Your password changed during this request. Sign in again.');
+      if (db.prepare('SELECT 1 FROM accounts WHERE email = ? AND id <> ?').get(email, active.id)) {
+        throw conflict('This email is already used by another account.');
+      }
+      db.prepare('UPDATE accounts SET name = ?, email = ? WHERE id = ?').run(name, email, active.id);
+      if (email !== active.email) renewAccountSession(db, req, res, active.id);
+    });
+    res.json({ account: publicAccount(findAccount(db, admin.id)!) });
+  }));
+
   app.get('/api/admin/workspace', route((req, res) => {
     requireAccount(db, req, 'admin');
     res.json(adminWorkspace(db));

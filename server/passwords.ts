@@ -22,12 +22,13 @@ function derive(password: string, salt: Buffer): Promise<Buffer> {
   });
 }
 
-export function validPassword(password: string) {
-  return password.length >= 12 && Buffer.byteLength(password) <= 256;
+export function validPassword(password: string, minimumLength = 12) {
+  return password.length >= minimumLength && Buffer.byteLength(password) <= 256;
 }
 
-export async function hashPassword(password: string) {
-  if (!validPassword(password)) throw new Error('Use at least 12 characters and at most 256 bytes.');
+export async function hashPassword(password: string, { temporary = false } = {}) {
+  const minimumLength = temporary ? 8 : 12;
+  if (!validPassword(password, minimumLength)) throw new Error(`Use at least ${minimumLength} characters and at most 256 bytes.`);
   const salt = randomBytes(16);
   const hash = await derive(password, salt);
   return `scrypt:${salt.toString('hex')}:${hash.toString('hex')}`;

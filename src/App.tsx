@@ -59,7 +59,7 @@ function Portal() {
   if (account.mustChangePassword) return <main className="pbs-public-paper">
     <PortalBrand />
     <h1>Set your password</h1>
-    <p className="pbs-muted">Your account is ready. Choose a password before opening your courses.</p>
+    <p className="pbs-muted">Your account is ready. Choose a new password to open your workspace.</p>
     <div className="pbs-actions"><Button onClick={() => setPasswordOpen(true)}>Set password</Button><Button quiet onClick={() => void signOut()}>Sign out</Button></div>
     <FormError error={error} />
     {passwordOpen && <PasswordForm account={account} onClose={() => setPasswordOpen(false)} onSaved={setAccount} />}

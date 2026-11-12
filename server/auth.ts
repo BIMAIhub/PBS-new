@@ -65,6 +65,11 @@ export function startSession(db: Database, req: Request, res: Response, accountI
   res.cookie(cookieName, token, { ...cookieSettings(req), ...(remember ? { maxAge: duration } : {}) });
 }
 
+export function renewAccountSession(db: Database, req: Request, res: Response, accountId: string) {
+  db.prepare('DELETE FROM sessions WHERE account_id = ?').run(accountId);
+  startSession(db, req, res, accountId, false);
+}
+
 export function mountAuth(app: Express, db: Database) {
   app.get('/api/session', route((req, res) => {
     const account = sessionAccount(db, req);
@@ -81,8 +86,15 @@ export function mountAuth(app: Express, db: Database) {
       .get(role, identifier, identifier, identifier) as unknown as AccountRow | undefined;
     const matches = await verifyPassword(password, account?.passwordHash ?? '');
     if (!account || !matches) throw new RequestError(401, 'Check your email or student ID and password.');
-    startSession(db, req, res, account.id, req.body.remember === true);
-    res.json({ account: publicAccount(account) });
+    const signedIn = transaction(db, () => {
+      const latest = findAccount(db, account.id);
+      if (!latest || latest.passwordHash !== account.passwordHash || latest.email !== account.email || latest.rollNumber !== account.rollNumber) {
+        throw new RequestError(401, 'Check your email or student ID and password.');
+      }
+      startSession(db, req, res, latest.id, req.body.remember === true);
+      return publicAccount(latest);
+    });
+    res.json({ account: signedIn });
   }));
 
   app.post('/api/auth/logout', route((req, res) => {
@@ -99,11 +111,11 @@ export function mountAuth(app: Express, db: Database) {
     if (!await verifyPassword(current, account.passwordHash)) throw badRequest('The current password is incorrect.');
     const hash = await hashPassword(next);
     transaction(db, () => {
+      requireAccount(db, req, undefined, true);
       const result = db.prepare('UPDATE accounts SET password_hash = ?, must_change = 0 WHERE id = ? AND password_hash = ?')
         .run(hash, account.id, account.passwordHash);
       if (!result.changes) throw new RequestError(409, 'The password changed during this request. Sign in again.');
-      db.prepare('DELETE FROM sessions WHERE account_id = ?').run(account.id);
-      startSession(db, req, res, account.id, false);
+      renewAccountSession(db, req, res, account.id);
     });
     res.json({ account: publicAccount(findAccount(db, account.id)!) });
   }));

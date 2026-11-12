@@ -17,6 +17,12 @@ The setup command prompts for a password. Open [http://localhost:3000](http://lo
 
 The database starts with an empty roster and catalog. From **Courses & videos**, create a course, add a module, and publish it in the enrollment catalog when ready.
 
+### Create the first administrator on startup
+
+Set `PBS_BOOTSTRAP_ADMIN_EMAIL` and `PBS_BOOTSTRAP_ADMIN_PASSWORD` in the host's private environment before starting PBS. For local use, set them in the ignored `.env` file. `PBS_BOOTSTRAP_ADMIN_NAME` is optional. The server creates the account if the database has no administrator. Sign in using the configured email and temporary password, then set a new password to open the workspace. Remove the bootstrap settings after the first sign-in.
+
+From the administrator account menu, choose **Edit admin profile** to update your name and sign-in email or **Change password** to update your password. Both actions ask for your current password.
+
 ## Add video lessons
 
 In **Courses & videos**, select **Add video** and choose a module. Upload an MP4 or WebM file, or use an HTTPS video link. Use **Edit lesson** under **Curriculum and materials** to replace an unavailable video. Uploaded files are served from the PBS data volume to authorized accounts. YouTube, Google Drive, Vimeo and provider-supplied OneDrive or SharePoint embed links can play in the classroom when the provider allows embedding. Students can open the source link when the provider requires sign-in.

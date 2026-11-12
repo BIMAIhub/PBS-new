@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { parseArgs } from 'node:util';
-import { openDatabase, makeId, now, transaction } from '../server/database';
+import { openDatabase, transaction } from '../server/database';
+import { insertAdministrator } from '../server/administrators';
 import { hashPassword } from '../server/passwords';
 import { emailAddress, field } from '../server/http';
 import { readSecret } from './secret.mjs';
@@ -22,9 +23,7 @@ async function main() {
         db.prepare("UPDATE accounts SET password_hash = ?, must_change = 0 WHERE id = ? AND role = 'admin'").run(hash, prior.id);
         db.prepare('DELETE FROM sessions WHERE account_id = ?').run(prior.id);
       } else {
-        const id = makeId();
-        db.prepare(`INSERT INTO accounts (id, role, name, email, roll_number, password_hash, created_at)
-          VALUES (?, 'admin', ?, ?, ?, ?, ?)`).run(id, name, email, `ADMIN-${id}`, hash, now());
+        insertAdministrator(db, { email, name, passwordHash: hash });
       }
     });
     console.log(`${prior ? 'Updated' : 'Created'} PBS administrator ${email}.`);

@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import {
   ArrowDownToLine, ArrowRight, BookOpen, BriefcaseBusiness, CircleHelp, ClipboardList,
-  CreditCard, FileText, IndianRupee, KeyRound, LogOut, MessageSquare, Plus, Search, Users, Video
+  CreditCard, FileText, IndianRupee, KeyRound, LogOut, MessageSquare, Plus, Search, UserRound, Users, Video
 } from 'lucide-react';
 import { PortalDialog } from '../components/student-dashboard/PortalUI';
 import { WorkspaceChrome, type WorkspaceNavGroup } from '../components/student-dashboard/WorkspaceChrome';
-import { HelpDialog, MessageForm, MessagesPanel, PasswordForm } from './AccountForms';
+import { AdminProfileForm, HelpDialog, MessageForm, MessagesPanel, PasswordForm } from './AccountForms';
 import {
   AssessmentForm, CourseForm, CourseLinkForm, EnrollStudentForm, ModuleForm, RecordPaymentForm, ReviewEnrollmentForm,
   TemporaryAccess, VideoForm, type CreatedStudent
@@ -43,7 +43,7 @@ type Dialog =
   | { kind: 'temp'; email: string; password: string; receipt?: Receipt }
   | { kind: 'feedback'; assignment: Assignment }
   | { kind: 'message'; student: { id: string; name: string }; subject?: string }
-  | { kind: 'password' | 'help' };
+  | { kind: 'profile' | 'password' | 'help' };
 
 function AdminStats({ data }: { data: AdminWorkspaceData }) {
   const active = data.students.filter(student => student.enrollments.some(enrollment => enrollment.status === 'approved')).length;
@@ -219,6 +219,7 @@ export function AdminWorkspace({ account, onAccount, onSignOut }: {
         { label: 'Enroll student', icon: Users, run: () => data?.courses.length ? show({ kind: 'enroll' }) : navigate('courses') },
       ]}
       accountActions={[
+        { label: 'Edit admin profile', icon: UserRound, run: () => show({ kind: 'profile' }) },
         { label: 'Change password', icon: KeyRound, run: () => show({ kind: 'password' }) },
         { label: 'Export records', icon: ArrowDownToLine, run: () => { window.location.href = '/api/admin/export'; } },
         { label: 'PBS support', icon: CircleHelp, run: () => show({ kind: 'help' }) },
@@ -317,6 +318,7 @@ export function AdminWorkspace({ account, onAccount, onSignOut }: {
     {dialog?.kind === 'message' && <MessageForm student={dialog.student} initialSubject={dialog.subject} onClose={close} onSaved={() => saved('Message sent.')} />}
     {dialog?.kind === 'temp' && <TemporaryAccess email={dialog.email} password={dialog.password} receipt={dialog.receipt} onClose={close} onReceipt={showReceipt} />}
     {dialog?.kind === 'document' && <DocumentDialog document={dialog.document} onClose={close} />}
+    {dialog?.kind === 'profile' && <AdminProfileForm account={account} onClose={close} onSaved={updated => { onAccount(updated); close(); setNotice('Admin profile updated.'); }} />}
     {dialog?.kind === 'password' && <PasswordForm account={account} onClose={close} onSaved={updated => { onAccount(updated); close(); setNotice('Password changed.'); }} />}
     {dialog?.kind === 'help' && <HelpDialog onClose={close} />}
   </>;
