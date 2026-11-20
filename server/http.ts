@@ -1,4 +1,6 @@
+import { createHash } from 'node:crypto';
 import type { Request, Response, NextFunction } from 'express';
+import type { Database } from './database';
 
 export class RequestError extends Error {
   constructor(public status: number, message: string) {
@@ -35,25 +37,46 @@ export function integer(value: unknown, label: string, min = 0, max = 100_000_00
   return value;
 }
 
-export function limitAttempts(limit: number, interval = 60_000) {
+export function limitAttempts(limit: number, shared?: Database) {
+  const interval = 60_000;
   const attempts = new Map<string, { expires: number; count: number }>();
   let nextCleanup = 0;
-  return (req: Request, res: Response, next: NextFunction) => {
+
+  async function recordAttempt(req: Request) {
     const time = Date.now();
+    const address = req.ip || req.socket.remoteAddress || 'unknown';
+    if (shared) {
+      if (time >= nextCleanup) {
+        nextCleanup = time + interval;
+        await shared.prepare('DELETE FROM rate_limits WHERE expires_at <= ?').run(time);
+      }
+      const key = createHash('sha256').update(`${req.method}:${req.route.path}:${address}`).digest('hex');
+      const row = await shared.prepare(`INSERT INTO rate_limits VALUES (?, 1, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          count = CASE WHEN expires_at <= ? THEN 1 ELSE count + 1 END,
+          expires_at = CASE WHEN expires_at <= ? THEN excluded.expires_at ELSE expires_at END
+        RETURNING count, expires_at AS expires`).get(key, time + interval, time, time);
+      return { count: Number(row?.count), expires: Number(row?.expires) };
+    }
     if (time >= nextCleanup) {
       for (const [key, value] of attempts) if (value.expires <= time) attempts.delete(key);
       nextCleanup = time + interval;
     }
-    const key = req.ip || req.socket.remoteAddress || 'unknown';
-    const current = attempts.get(key);
+    const current = attempts.get(address);
     const attempt = current && current.expires > time ? current : { expires: time + interval, count: 0 };
     attempt.count++;
-    attempts.set(key, attempt);
-    if (attempt.count > limit) {
-      res.set('Retry-After', String(Math.max(1, Math.ceil((attempt.expires - time) / 1000))));
-      return next(new RequestError(429, 'Too many requests. Try again in a moment.'));
-    }
-    next();
+    attempts.set(address, attempt);
+    return attempt;
+  }
+
+  return (req: Request, res: Response, next: NextFunction) => {
+    void recordAttempt(req).then(attempt => {
+      if (attempt.count > limit) {
+        res.set('Retry-After', String(Math.max(1, Math.ceil((attempt.expires - Date.now()) / 1000))));
+        return next(new RequestError(429, 'Too many requests. Try again in a moment.'));
+      }
+      next();
+    }).catch(next);
   };
 }
 

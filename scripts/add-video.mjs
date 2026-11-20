@@ -64,11 +64,21 @@ async function main() {
       const ext = path.extname(values.file).toLowerCase();
       const type = ext === '.mp4' ? 'video/mp4' : ext === '.webm' ? 'video/webm' : '';
       if (!file.isFile() || !type) throw new Error('Choose an MP4 or WebM file.');
-      const query = new URLSearchParams(details);
-      result = await request(`${route}/file?${query}`, {
-        method: 'POST', headers: { 'Content-Type': type, 'Content-Length': String(file.size) },
-        body: createReadStream(values.file), duplex: 'half',
+      const uploadRequest = await request(`${route}/upload`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contentType: type, size: file.size }),
       });
+      const upload = await uploadRequest.json();
+      const fileOptions = { headers: { 'Content-Type': type, 'Content-Length': String(file.size) },
+        body: createReadStream(values.file), duplex: 'half' };
+      if (upload.storage === 'blob') {
+        const uploaded = await fetch(upload.url, { ...fileOptions, method: 'PUT', redirect: 'error' });
+        if (!uploaded.ok) throw new Error(`Video upload failed with HTTP ${uploaded.status}.`);
+        result = await request(`${route}/upload/${encodeURIComponent(upload.uploadId)}`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(details),
+        });
+      } else {
+        result = await request(`${route}/file?${new URLSearchParams(details)}`, { ...fileOptions, method: 'POST' });
+      }
     } else {
       result = await request(route, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },

@@ -1,21 +1,13 @@
 import { chmodSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
+import { DatabaseSync, type SQLOutputValue } from 'node:sqlite';
+import type { Client, Transaction } from '@libsql/client/web';
 import { randomUUID } from 'node:crypto';
 
 export const dataDirectory = path.resolve(process.env.PBS_DATA_DIR || 'data');
 export const videoDirectory = path.join(dataDirectory, 'videos');
 
-export function openDatabase() {
-  mkdirSync(videoDirectory, { recursive: true, mode: 0o700 });
-  const file = path.join(dataDirectory, 'pbs.sqlite');
-  const db = new DatabaseSync(file);
-  if (process.platform !== 'win32') chmodSync(file, 0o600);
-  db.exec(`
-    PRAGMA foreign_keys = ON;
-    PRAGMA journal_mode = WAL;
-    PRAGMA busy_timeout = 5000;
-
+const schema = `
     CREATE TABLE IF NOT EXISTS accounts (
       id TEXT PRIMARY KEY, role TEXT NOT NULL CHECK(role IN ('admin', 'student')),
       name TEXT NOT NULL, email TEXT NOT NULL UNIQUE COLLATE NOCASE,
@@ -28,6 +20,10 @@ export function openDatabase() {
       expires_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS sessions_expiry ON sessions(expires_at);
+    CREATE TABLE IF NOT EXISTS rate_limits (
+      id TEXT PRIMARY KEY, count INTEGER NOT NULL, expires_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS rate_limits_expiry ON rate_limits(expires_at);
     CREATE TABLE IF NOT EXISTS courses (
       id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT NOT NULL,
       category TEXT NOT NULL, instructor TEXT NOT NULL, schedule TEXT NOT NULL,
@@ -43,6 +39,12 @@ export function openDatabase() {
       title TEXT NOT NULL, duration TEXT NOT NULL, description TEXT NOT NULL,
       source_url TEXT NOT NULL DEFAULT '', file_name TEXT NOT NULL DEFAULT '',
       content_type TEXT NOT NULL DEFAULT '', position INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS video_uploads (
+      id TEXT PRIMARY KEY, account_id TEXT NOT NULL REFERENCES accounts(id),
+      module_id TEXT NOT NULL REFERENCES modules(id) ON DELETE CASCADE,
+      content_type TEXT NOT NULL, size INTEGER NOT NULL, expires_at INTEGER NOT NULL,
+      lesson_id TEXT NOT NULL DEFAULT ''
     );
     CREATE TABLE IF NOT EXISTS enrollments (
       id TEXT PRIMARY KEY, account_id TEXT NOT NULL REFERENCES accounts(id),
@@ -104,26 +106,127 @@ export function openDatabase() {
       account_id TEXT PRIMARY KEY REFERENCES accounts(id),
       status TEXT NOT NULL, target_role TEXT NOT NULL, notes TEXT NOT NULL
     );
-  `);
-  const receiptColumns = new Set(db.prepare('PRAGMA table_info(receipts)').all().map(column => column.name));
-  if (!receiptColumns.has('student_name')) db.exec("ALTER TABLE receipts ADD COLUMN student_name TEXT NOT NULL DEFAULT ''");
-  if (!receiptColumns.has('course_title')) db.exec("ALTER TABLE receipts ADD COLUMN course_title TEXT NOT NULL DEFAULT ''");
-  return db;
+`;
+
+type Row = Record<string, SQLOutputValue>;
+type Parameter = string | number | bigint | Uint8Array | null;
+type Statement = {
+  get(...values: Parameter[]): Promise<Row | undefined>;
+  all(...values: Parameter[]): Promise<Row[]>;
+  run(...values: Parameter[]): Promise<{ changes: number | bigint }>;
+};
+
+export interface Database {
+  prepare(sql: string): Statement;
 }
 
-export type Database = ReturnType<typeof openDatabase>;
+export interface WritableDatabase extends Database {
+  write<T>(action: (db: Database) => Promise<T>): Promise<T>;
+  close(): void;
+}
+
+function sqliteConnection(db: DatabaseSync, schedule: <T>(task: () => T) => Promise<T>): Database {
+  return {
+    prepare: sql => ({
+      get: (...values) => schedule(() => db.prepare(sql).get(...values)),
+      all: (...values) => schedule(() => db.prepare(sql).all(...values)),
+      run: (...values) => schedule(() => db.prepare(sql).run(...values)),
+    }),
+  };
+}
+
+async function migrateReceiptLabels(db: Database, exec: (sql: string) => Promise<unknown>) {
+  const columns = new Set((await db.prepare('PRAGMA table_info(receipts)').all()).map(column => column.name));
+  if (!columns.has('student_name')) await exec("ALTER TABLE receipts ADD COLUMN student_name TEXT NOT NULL DEFAULT ''");
+  if (!columns.has('course_title')) await exec("ALTER TABLE receipts ADD COLUMN course_title TEXT NOT NULL DEFAULT ''");
+}
+
+async function openLocalDatabase(): Promise<WritableDatabase> {
+  mkdirSync(videoDirectory, { recursive: true, mode: 0o700 });
+  const file = path.join(dataDirectory, 'pbs.sqlite');
+  const db = new DatabaseSync(file);
+  try {
+    if (process.platform !== 'win32') chmodSync(file, 0o600);
+    db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;');
+    db.exec(schema);
+    const direct = sqliteConnection(db, async task => task());
+    await migrateReceiptLabels(direct, async sql => db.exec(sql));
+    let pending: Promise<unknown> = Promise.resolve();
+    function schedule<T>(task: () => T | Promise<T>) {
+      const result = pending.then(task);
+      pending = result.catch(() => {});
+      return result;
+    }
+    return {
+      ...sqliteConnection(db, schedule),
+      write: action => schedule(async () => {
+        db.exec('BEGIN IMMEDIATE');
+        try {
+          const result = await action(direct);
+          db.exec('COMMIT');
+          return result;
+        } catch (error) {
+          db.exec('ROLLBACK');
+          throw error;
+        }
+      }),
+      close: () => db.close(),
+    };
+  } catch (error) {
+    db.close();
+    throw error;
+  }
+}
+
+function libsqlConnection(client: Pick<Client | Transaction, 'execute'>): Database {
+  return {
+    prepare: sql => ({
+      get: async (...args) => (await client.execute({ sql, args })).rows[0] as unknown as Row | undefined,
+      all: async (...args) => (await client.execute({ sql, args })).rows as unknown as Row[],
+      run: async (...args) => ({ changes: (await client.execute({ sql, args })).rowsAffected }),
+    }),
+  };
+}
+
+export async function openDatabase(requireRemote = false): Promise<WritableDatabase> {
+  const pbsUrl = process.env.PBS_TURSO_DATABASE_URL?.trim();
+  const pbsToken = process.env.PBS_TURSO_AUTH_TOKEN?.trim();
+  const usePrefix = Boolean(pbsUrl || pbsToken);
+  const url = usePrefix ? pbsUrl : process.env.TURSO_DATABASE_URL?.trim();
+  const authToken = usePrefix ? pbsToken : process.env.TURSO_AUTH_TOKEN?.trim();
+  if (!url && !authToken && !process.env.VERCEL && !requireRemote) return openLocalDatabase();
+  if (!url || !authToken) throw new Error('Connect a Turso database and configure both its URL and auth token.');
+
+  const { createClient } = await import('@libsql/client/web');
+  const client = createClient({ url, authToken });
+  try {
+    await client.executeMultiple(schema);
+    const connection = libsqlConnection(client);
+    await migrateReceiptLabels(connection, sql => client.execute(sql));
+    return {
+      ...connection,
+      write: async action => {
+        const tx = await client.transaction('write');
+        try {
+          const result = await action(libsqlConnection(tx));
+          await tx.commit();
+          return result;
+        } finally {
+          tx.close();
+        }
+      },
+      close: () => client.close(),
+    };
+  } catch (error) {
+    client.close();
+    throw error;
+  }
+}
+
 export const now = () => new Date().toISOString();
 export const makeId = () => randomUUID();
 export const makeStudentId = () => `PBS-${randomUUID().replaceAll('-', '').slice(0, 12).toUpperCase()}`;
 
-export function transaction<T>(db: Database, action: () => T): T {
-  db.exec('BEGIN IMMEDIATE');
-  try {
-    const result = action();
-    db.exec('COMMIT');
-    return result;
-  } catch (error) {
-    db.exec('ROLLBACK');
-    throw error;
-  }
+export function transaction<T>(db: WritableDatabase, action: (db: Database) => Promise<T>) {
+  return db.write(action);
 }

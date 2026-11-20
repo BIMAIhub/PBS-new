@@ -52,9 +52,17 @@ export function VideoForm({ course, moduleId, lesson, onClose, onSaved }: FormPr
         if (!(file instanceof File) || !file.size) throw new Error('Choose an MP4 or WebM video.');
         const type = /\.mp4$/i.test(file.name) ? 'video/mp4' : /\.webm$/i.test(file.name) ? 'video/webm' : '';
         if (!type) throw new Error('Choose an MP4 or WebM video.');
-        await api(`${route}/file?${new URLSearchParams(details)}`, {
-          method: 'POST', headers: { 'Content-Type': type }, body: file,
-        });
+        const upload = await send<{ storage: 'local' } | { storage: 'blob'; url: string; uploadId: string }>(
+          `${route}/upload`, { contentType: type, size: file.size });
+        if (upload.storage === 'blob') {
+          const result = await fetch(upload.url, { method: 'PUT', headers: { 'Content-Type': type }, body: file, redirect: 'error' });
+          if (!result.ok) throw new Error('The video upload failed. Try again.');
+          await send(`${route}/upload/${encodeURIComponent(upload.uploadId)}`, details);
+        } else {
+          await api(`${route}/file?${new URLSearchParams(details)}`, {
+            method: 'POST', headers: { 'Content-Type': type }, body: file,
+          });
+        }
       } else {
         await send(route, { ...details, url: source === 'link' ? value(form, 'url') : '' });
       }

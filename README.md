@@ -58,6 +58,17 @@ Run the Express server on a Node host with HTTPS and a persistent writable volum
 
 The volume holds the SQLite database and uploaded videos. Back up the volume using the host's snapshot mechanism or stop the server before copying it. **Export records** in the admin menu produces a readable JSON report.
 
+## Deploy on Vercel
+
+Deploy the `pbs-vercel` branch in the connected Vercel project. The Vercel configuration builds the website and routes `/api/*` to the PBS server function. The local PBS installation continues to use SQLite and the `data` folder.
+
+1. In **Storage**, connect a [Turso Cloud database](https://vercel.com/marketplace/tursocloud) to the project. PBS accepts the connection's `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` with or without the `PBS_` prefix. Select the Vercel environments you intend to deploy.
+2. Connect a [private Vercel Blob store](https://vercel.com/docs/vercel-blob/private-storage) for uploaded lesson files. The server accepts the connected `BLOB_STORE_ID` with Vercel OIDC, or `BLOB_READ_WRITE_TOKEN` for token-based connections. Existing HTTPS lesson links can play without a Blob store.
+3. In **Environment Variables**, set `PBS_BOOTSTRAP_ADMIN_EMAIL` and a private `PBS_BOOTSTRAP_ADMIN_PASSWORD` for the first online administrator. A fresh cloud database has its own accounts and records. Sign in as **Administrator**, replace the temporary password, then remove the bootstrap variables. For a fixed production domain, set `PBS_PUBLIC_ORIGIN` to its HTTPS origin in the Production environment.
+4. Redeploy the branch after configuring storage and environment variables. Verify that `/api/health` returns `{"status":"ok"}` on the deployment, then sign in and test a lesson upload before assigning the production domain.
+
+The hosted app sends file uploads directly to private Blob storage. The PBS API verifies the file before attaching it to a lesson and checks enrollment before issuing a playback link.
+
 ### Bring over existing records
 
 Use a reviewed legacy JSON backup on the server. Run the import against the same `PBS_DATA_DIR` as the portal.
