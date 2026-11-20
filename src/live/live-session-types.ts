@@ -12,4 +12,4 @@ export interface LiveClass {
 }
 export interface StudentLiveData { classes: LiveClass[]; serverTime: string; points: number; attended: number }
 export interface AttendanceRow extends ClassAttendance { studentId: string; studentName: string; email: string; eligible: boolean }
-export interface AttendancePreview { rows: { studentId: string; studentName: string; email: string; minutes: number; status: AttendanceStatus; points: number }[]; skipped: number; applied: boolean }
+export interface AttendancePreview { rows: { studentId: string; studentName: string; email: string; minutes: number; status: AttendanceStatus; points: number }[]; skipped: number; applied: boolean; reviewToken: string }

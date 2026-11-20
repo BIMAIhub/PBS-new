@@ -103,6 +103,8 @@ Meeting URLs are excluded from student workspace/list/calendar responses. The jo
 
 Points are stored once per student/session, not incremented on repeated join clicks or imports. Existing Present awards retain their saved points when a session's point setting changes. Changing attendance to a non-Present status removes those points; a subsequent explicit Present confirmation uses the current setting. The roster, CSV export, student dashboard/history and admin student records show the resulting totals. All attendance verification and report imports are audited. The tests use isolated temporary databases; they do not create production classes or students or join real meetings.
 
+An attendance import is applied only when the reviewed CSV, session settings and matching attendance records are still current. If another admin changes them after preview, the portal asks for a fresh preview before writing any attendance. Administrators may correct an existing record to Partial, Absent or Excused after enrollment has been revoked, removing an incorrect award. A new Present decision and new points still require approved enrollment.
+
 The shared content surfaces use translucent gold derived from `#D4A94D`, with off-white input surfaces. This includes the standalone curriculum/offer introduction cards. Header account names use light text on the dark glass toolbar. Official printable documents retain a white paper surface.
 
 ## Global branding and glass appearance

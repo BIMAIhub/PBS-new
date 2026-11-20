@@ -1,4 +1,5 @@
 import type { Express } from 'express';
+import { createHash } from 'node:crypto';
 import { requireAccount } from './auth.js';
 import { type Database, type WritableDatabase, makeId, now, transaction } from './database.js';
 import { audit, saveSetting, setting } from './academy-data.js';
@@ -83,9 +84,9 @@ async function roster(db: Database, session: LiveClass): Promise<AttendanceRow[]
     WHERE e.course_id = ? AND (e.status = 'approved' OR p.account_id IS NOT NULL) ORDER BY a.name`).all(session.id, session.courseId)).map(({ enrollmentStatus, ...row }) => ({ ...row, eligible: enrollmentStatus === 'approved' })) as unknown as AttendanceRow[];
 }
 async function verifyAttendance(db: Database, session: LiveClass, actor: string, accountId: string, status: AttendanceStatus, minutes: number, source: string) {
-  if (!await approved(db, accountId, session.courseId)) throw badRequest('Only approved course students can receive attendance or points.');
-  if ((session.status === 'cancelled' && status === 'present') || Date.parse(session.startsAt) > Date.now()) throw badRequest('Verify attendance after a scheduled session has started.');
   const previous = await db.prepare('SELECT status, awarded_points FROM live_attendance WHERE class_id = ? AND account_id = ?').get(session.id, accountId);
+  if (!await approved(db, accountId, session.courseId) && (!previous || status === 'present')) throw badRequest('Only approved course students can receive attendance or points. Existing records may be corrected to a non-Present status.');
+  if ((session.status === 'cancelled' && status === 'present') || Date.parse(session.startsAt) > Date.now()) throw badRequest('Verify attendance after a scheduled session has started.');
   const points = status === 'present' ? previous?.status === 'present' ? Number(previous.awarded_points) : session.points : 0;
   const verifiedAt = now();
   await db.prepare(`INSERT INTO live_attendance (class_id, account_id, status, minutes, awarded_points, verified_at, verified_by, source)
@@ -140,7 +141,11 @@ async function previewAttendance(db: Database, session: LiveClass, csv: string):
       points: status === 'present' ? student.status === 'present' ? student.points : session.points : 0 });
   }
   if (!rows.length) throw badRequest('No approved student emails match this course. Check the report and the enrolled Google accounts.');
-  return { rows, skipped, applied: false };
+  const currentRecords = eligible.filter(item => seen.has(item.email.toLowerCase()))
+    .map(item => ({ id: item.studentId, status: item.status, minutes: item.minutes, points: item.points, verifiedAt: item.verifiedAt }))
+    .sort((a, b) => a.id.localeCompare(b.id));
+  const reviewToken = createHash('sha256').update(JSON.stringify({ revision: session.revision, csv, rows, skipped, currentRecords })).digest('hex');
+  return { rows, skipped, applied: false, reviewToken };
 }
 const csvCell = (value: unknown) => `"${String(value ?? '').replace(/^[=+@-]/, "'$&").replaceAll('"', '""')}"`;
 const icsText = (value: string) => value.replaceAll('\\', '\\\\').replaceAll('\n', '\\n').replaceAll(',', '\\,').replaceAll(';', '\\;').replaceAll('\r', '');
@@ -191,6 +196,8 @@ export function mountLiveClasses(app: Express, db: WritableDatabase, hosted: boo
       const session = await getClass(tx, req.params.id), preview = await previewAttendance(tx, session, csv);
       if (req.body?.apply === true) {
         if (req.body?.confirmed !== true) throw badRequest('Confirm that this report belongs to this session.');
+        if (typeof req.body?.reviewToken !== 'string') throw conflict('Refresh the PBS portal, then preview this report again before applying it.');
+        if (req.body?.reviewToken !== preview.reviewToken) throw conflict('This preview is outdated. Preview the report again; no attendance has been changed by this request.');
         for (const item of preview.rows) await verifyAttendance(tx, session, admin.id, item.studentId, item.status, item.minutes, 'meet-report');
         await audit(tx, admin.id, 'Meet attendance report imported', session.id, `${preview.rows.length} matched students; ${preview.skipped} unmatched rows skipped`); preview.applied = true;
       }

@@ -83,13 +83,36 @@ test('PBS scheduled live sessions, access, attendance and points', async t => {
       const preview = await req(admin, `/admin/live-classes/${past.id}/attendance/import`, { csv, apply: false }); assert.equal(preview.rows.length, 1); assert.equal(preview.skipped, 2); assert.equal(preview.rows[0].minutes, 45); assert.equal(preview.rows[0].points, 25);
       assert.equal((await req(student, '/student/live-classes')).points, 40);
       await req(admin, `/admin/live-classes/${past.id}/attendance/import`, { csv, apply: true }, 'POST', 400);
-      for (const count of [1, 2]) { const imported = await req(admin, `/admin/live-classes/${past.id}/attendance/import`, { csv, apply: true, confirmed: true }); assert.equal(imported.applied, true); }
+      for (const count of [1, 2]) {
+        const reviewed = await req(admin, `/admin/live-classes/${past.id}/attendance/import`, { csv, apply: false });
+        const imported = await req(admin, `/admin/live-classes/${past.id}/attendance/import`, { csv, apply: true, confirmed: true, reviewToken: reviewed.reviewToken }); assert.equal(imported.applied, true);
+      }
       assert.equal((await req(student, '/student/live-classes')).points, 65);
-      await req(admin, `/admin/live-classes/${past.id}/attendance/import`, { csv: 'Email,Duration\nlive-student@example.invalid,10m', apply: true, confirmed: true }); assert.equal((await req(student, '/student/live-classes')).points, 40);
+      const shorter = 'Email,Duration\nlive-student@example.invalid,10m';
+      const shorterPreview = await req(admin, `/admin/live-classes/${past.id}/attendance/import`, { csv: shorter });
+      await req(admin, `/admin/live-classes/${past.id}/attendance/import`, { csv: shorter, apply: true, confirmed: true, reviewToken: shorterPreview.reviewToken }); assert.equal((await req(student, '/student/live-classes')).points, 40);
       const attendance = (await req(student, '/student/live-classes')).classes.find((item: any) => item.id === past.id).attendance; assert.equal(attendance.status, 'partial'); assert.equal(attendance.source, 'meet-report');
       await req(admin, `/admin/live-classes/${past.id}/attendance/import`, { csv: 'Email,Duration\nlive-student@example.invalid,45m\nlive-student@example.invalid,45m' }, 'POST', 400);
       await req(admin, `/admin/live-classes/${past.id}/attendance/import`, { csv: 'Email,Duration\nlive-student@example.invalid,garbage' }, 'POST', 400);
       await req(admin, `/admin/live-classes/${past.id}/attendance/import`, { csv: 'Email,Duration\nlive-student@example.invalid,"unfinished' }, 'POST', 400);
+    });
+    await t.test('an attendance import requires the current reviewed report and award settings', async () => {
+      const endpoint = `/admin/live-classes/${past.id}/attendance/import`, csv = 'Email,Duration\nlive-student@example.invalid,45m';
+      const original = await req(admin, endpoint, { csv }); assert.match(original.reviewToken, /^[a-f0-9]{64}$/);
+      await req(admin, endpoint, { csv, apply: true, confirmed: true }, 'POST', 409);
+      await req(admin, endpoint, { csv: csv.replace('45m', '50m'), apply: true, confirmed: true, reviewToken: original.reviewToken }, 'POST', 409);
+      past = await req(admin, `/admin/live-classes/${past.id}`, { ...past, points: 35 }, 'PUT');
+      await req(admin, endpoint, { csv, apply: true, confirmed: true, reviewToken: original.reviewToken }, 'POST', 409);
+      assert.equal((await req(student, '/student/live-classes')).points, 40);
+      const beforeCorrection = await req(admin, endpoint, { csv });
+      await req(admin, `/admin/live-classes/${past.id}/attendance/${studentId}`, { status: 'absent', minutes: 0 }, 'PATCH', 204);
+      await req(admin, endpoint, { csv, apply: true, confirmed: true, reviewToken: beforeCorrection.reviewToken }, 'POST', 409);
+      const current = await req(admin, endpoint, { csv }); assert.equal(current.rows[0].points, 35);
+      await req(admin, endpoint, { csv, apply: true, confirmed: true, reviewToken: current.reviewToken });
+      assert.equal((await req(student, '/student/live-classes')).points, 75);
+      await req(admin, endpoint, { csv, apply: true, confirmed: true, reviewToken: current.reviewToken }, 'POST', 409);
+      assert.equal((await req(student, '/student/live-classes')).points, 75);
+      await req(admin, `/admin/live-classes/${past.id}/attendance/${studentId}`, { status: 'partial', minutes: 10 }, 'PATCH', 204);
     });
     await t.test('past, cancelled and draft meetings cannot be joined; attendance exports stay private', async () => {
       await req(student, `/live-classes/${past.id}/join`, {}, 'POST', 403);
@@ -113,6 +136,16 @@ test('PBS scheduled live sessions, access, attendance and points', async t => {
       await req(student, `/live-classes/${active.id}/join`, {}, 'POST', 404);
       const data = await req(student, '/student/live-classes'); assert.equal(data.classes.length, 0); assert.equal(data.points, 40);
       await req(admin, `/admin/live-classes/${active.id}/attendance/${studentId}`, { status: 'present', minutes: 45 }, 'PATCH', 400);
+    });
+    await t.test('admins can correct earlier awards after revocation without granting new points', async () => {
+      await req(admin, `/admin/live-classes/${active.id}/attendance/${studentId}`, { status: 'excused', minutes: 0 }, 'PATCH', 204);
+      assert.equal((await req(student, '/student/live-classes')).points, 0);
+      const row = (await req(admin, `/admin/live-classes/${active.id}/attendance`)).rows.find((item: any) => item.studentId === studentId);
+      assert.equal(row.eligible, false); assert.equal(row.status, 'excused'); assert.equal(row.points, 0);
+      await req(admin, `/admin/live-classes/${active.id}/attendance/${studentId}`, { status: 'present', minutes: 45 }, 'PATCH', 400);
+      const pendingId = String((await db.prepare('SELECT id FROM accounts WHERE email = ?').get('pending-live@example.invalid'))!.id);
+      await req(admin, `/admin/live-classes/${active.id}/attendance/${pendingId}`, { status: 'absent', minutes: 0 }, 'PATCH', 400);
+      await req(pending, `/admin/live-classes/${active.id}/attendance/${studentId}`, { status: 'absent', minutes: 0 }, 'PATCH', 403);
     });
   } finally { await new Promise<void>(resolve => server.close(() => resolve())); db.close(); rmSync(directory, { recursive: true, force: true }); }
 });
