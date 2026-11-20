@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   ArrowRight, Award, BookOpen, Bot, CalendarDays, Clock, CreditCard, Download, FileText, IdCard,
-  KeyRound, Layers, LayoutDashboard, LogOut, MessageSquare, Play, Plus, Settings, Share2
+  Compass, UserRound, KeyRound, Layers, LayoutDashboard, LogOut, MessageSquare, Play, Plus, Settings, Share2
 } from 'lucide-react';
 import { PortalDialog } from '../components/student-dashboard/PortalUI';
 import { WorkspaceActionRow, WorkspaceChrome, type WorkspaceNavGroup } from '../components/student-dashboard/WorkspaceChrome';
@@ -13,15 +13,22 @@ import { StudyTimer } from './StudyTools';
 import { send } from './api';
 import { StudentCertificates } from './Certificates';
 import { PortfolioHub } from './PortfolioHub';
+import { PortfolioBuilder } from './PortfolioBuilder';
+import { ProfilePage } from './ProfilePage';
+import { NotificationCenter } from './Notifications';
+import { CatalogBrowser } from './Catalog';
+import { TaskAssignments } from './TaskAssignments';
+import { CourseInformation } from './CourseInformation';
 import type { AcademyData } from './academy-types';
 import type { Account, AssessmentQuestion, AssessmentResult, Catalog, Course, CourseSummary, Enrollment, StudentWorkspaceData } from './types';
 import { Button, dateLabel, dateTimeLabel, DialogForm, Empty, ExternalLink, Field, FormError, Input, money, Panel, Status, useApiResource, value } from './ui';
 
-type Page = 'overview' | 'courses' | 'sessions' | 'project' | 'downloads' | 'fees' | 'reviews' | 'messages' | 'certificates' | 'portfolio';
+type Page = 'overview' | 'courses' | 'sessions' | 'project' | 'downloads' | 'fees' | 'reviews' | 'messages' | 'certificates' | 'portfolio' | 'profile' | 'explore';
 const groups: WorkspaceNavGroup<Page>[] = [
   { label: 'Learning', pages: [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
     { id: 'courses', label: 'My courses', icon: BookOpen },
+    { id: 'explore', label: 'Explore courses', icon: Compass },
     { id: 'sessions', label: 'Live sessions', icon: CalendarDays },
     { id: 'project', label: 'Capstone project', icon: Layers },
   ] },
@@ -30,6 +37,7 @@ const groups: WorkspaceNavGroup<Page>[] = [
     { id: 'fees', label: 'Fees & payments', icon: CreditCard },
     { id: 'certificates', label: 'My certificates', icon: Award },
     { id: 'portfolio', label: 'My portfolio', icon: Share2 },
+    { id: 'profile', label: 'My profile & CV', icon: UserRound },
     { id: 'reviews', label: 'Feedback & reviews', icon: FileText },
     { id: 'messages', label: 'Messages', icon: MessageSquare },
   ] },
@@ -38,6 +46,7 @@ const groups: WorkspaceNavGroup<Page>[] = [
 type Dialog =
   | { kind: 'catalog' | 'help' | 'password' | 'profile' | 'portfolio' | 'message' | 'assignment' | 'timer' | 'assistant' }
   | { kind: 'apply'; course: CourseSummary }
+  | { kind: 'course-info'; course: CourseSummary }
   | { kind: 'classroom' | 'assessment'; courseId: string }
   | { kind: 'payment'; enrollment: Enrollment }
   | { kind: 'document'; document: DocumentInfo };
@@ -137,6 +146,7 @@ function StudentFees({ data, catalog, open, academy }: { data: StudentWorkspaceD
         <div><h3>{enrollment.courseTitle}</h3><p className="pbs-muted">{money(enrollment.paid)} paid · {money(enrollment.total)} total</p>
           {enrollment.requestedPayment > 0 && <p className="pbs-muted">{money(enrollment.requestedPayment)} awaiting verification</p>}
           {enrollment.notes && <p className="pbs-muted pbs-pre-wrap">{enrollment.notes}</p>}
+          {Boolean(enrollment.discount) && <p className="pbs-muted">{enrollment.promotionTitle} · {money(enrollment.discount!)} saved</p>}
           {academy?.details.find(item => item.enrollmentId === enrollment.id)?.dueDate && <p className="pbs-muted">Due {dateLabel(academy.details.find(item => item.enrollmentId === enrollment.id)!.dueDate)}</p>}
         </div>
         <div className="pbs-actions">
@@ -151,11 +161,12 @@ function StudentFees({ data, catalog, open, academy }: { data: StudentWorkspaceD
   </div>;
 }
 
-function CourseAssessment({ course, onClose, onSaved }: { course: Course; onClose: () => void; onSaved: () => Promise<void> }) {
+function CourseAssessment({ course, onClose, onSaved, onCertificate }: { course: Course; onClose: () => void; onSaved: () => Promise<void>; onCertificate: () => void }) {
   const { data, error } = useApiResource<{ questions: Omit<AssessmentQuestion, 'answer'>[]; passingScore: number }>(`/student/courses/${course.id}/assessment`);
   const [result, setResult] = useState<AssessmentResult>();
   if (!data || result) return <PortalDialog title="Course assessment" onClose={onClose}>
     <p className="pbs-muted">{result ? `Score ${result.score}%. ${result.passed ? 'You passed the assessment.' : 'Review the course and try again.'}` : error || 'Loading assessment…'}</p>
+    {result?.passed && <div className="pbs-certificate-earned"><Award size={30} /><div><h3>Your course certificate is ready</h3><p>Your lessons and assessment are complete. Claim the credential from My certificates.</p><Button onClick={onCertificate}>View certificate progress</Button></div></div>}
   </PortalDialog>;
   return <DialogForm title="Course assessment" detail={`${course.title} · Passing score ${data.passingScore}%`} submit="Submit answers" onClose={onClose} wide
     onSubmit={async form => {
@@ -189,6 +200,7 @@ export function StudentWorkspace({ account, onAccount, onSignOut }: {
   const show = (next: Dialog) => { setNotice(''); setDialog(next); };
   function navigate(next: Page) {
     setPage(next); setNotice(''); window.scrollTo({ top: 0, behavior: 'instant' });
+    void refreshAll();
   }
   async function saved(message: string) {
     await refreshAll(); close(); setNotice(message);
@@ -196,6 +208,7 @@ export function StudentWorkspace({ account, onAccount, onSignOut }: {
   const enrollment = data && activeEnrollment(data.enrollments);
   return <>
     <WorkspaceChrome groups={groups} activePage={page} onNavigate={navigate} userName={account.name}
+      notifications={<NotificationCenter onNavigate={target => { if (groups.some(group => group.pages.some(item => item.id === target))) navigate(target as Page); }} />}
       onHelp={() => show({ kind: 'help' })}
       searchActions={[
         { label: 'Explore courses', icon: BookOpen, run: () => show({ kind: 'catalog' }) },
@@ -205,9 +218,9 @@ export function StudentWorkspace({ account, onAccount, onSignOut }: {
         ...(enrollment ? [{ label: 'Bonafide letter', icon: FileText, run: () => show({ kind: 'document', document: { kind: 'letter', account, enrollment } }) }] : []),
       ]}
       accountActions={[
-        { label: 'Profile settings', icon: Settings, run: () => show({ kind: 'profile' }) },
+        { label: 'Profile & CV', icon: Settings, run: () => navigate('profile') },
         { label: 'Change password', icon: KeyRound, run: () => show({ kind: 'password' }) },
-        { label: 'BIM portfolio', icon: Layers, run: () => show({ kind: 'portfolio' }) },
+        { label: 'BIM portfolio', icon: Layers, run: () => navigate('portfolio') },
         { label: 'Sign out', icon: LogOut, run: onSignOut },
       ]}>
       <FormError error={error || academy.error} />
@@ -217,7 +230,9 @@ export function StudentWorkspace({ account, onAccount, onSignOut }: {
       {data && page === 'courses' && <StudentCourses data={data} account={account} open={show} academy={academy.data} />}
       {data && page === 'fees' && <StudentFees data={data} catalog={catalog.data} open={show} academy={academy.data} />}
       {data && academy.data && page === 'certificates' && <StudentCertificates data={data} academy={academy.data} onSaved={refreshAll} />}
-      {data && page === 'portfolio' && <PortfolioHub account={account} data={data} onEdit={() => show({ kind: 'portfolio' })} />}
+      {data && page === 'portfolio' && <PortfolioBuilder account={account} portfolio={data.portfolio} certificates={academy.data?.certificates || []} onSaved={refreshAll} />}
+      {page === 'profile' && <ProfilePage account={account} onAccount={onAccount} />}
+      {page === 'explore' && catalog.data && <CatalogBrowser catalog={catalog.data} onChoose={course => show({ kind: 'course-info', course })} />}
       {data && page === 'sessions' && <Panel title="Course sessions">
         {!data.courses.some(course => course.sessions.length) && <Empty title="No sessions scheduled">PBS will publish session links here.</Empty>}
         {data.courses.flatMap(course => course.sessions.map(session => <article className="pbs-record-row" key={session.id}>
@@ -231,13 +246,13 @@ export function StudentWorkspace({ account, onAccount, onSignOut }: {
           <div><h3>{resource.title}</h3><p className="pbs-muted">{course.title}</p></div><ExternalLink href={resource.url}>Open resource</ExternalLink>
         </article>))}
       </Panel>}
-      {data && page === 'project' && <Panel title="Project submissions" action={data.courses.length > 0 && <Button onClick={() => show({ kind: 'assignment' })}>Submit project</Button>}>
+      {data && page === 'project' && <div className="pbs-live-stack"><TaskAssignments /><Panel title="Project submissions" action={data.courses.length > 0 && <Button onClick={() => show({ kind: 'assignment' })}>Submit project</Button>}>
         {!data.assignments.length && <Empty title="No projects submitted">Submit a project link for your instructor to review.</Empty>}
         {data.assignments.map(assignment => <article className="pbs-record-row" key={assignment.id}>
           <div><h3>{assignment.courseTitle}</h3><p className="pbs-muted">{dateLabel(assignment.submittedAt)}</p><ExternalLink href={assignment.url}>Open project</ExternalLink></div>
           <Status value={assignment.reviewedAt ? 'Reviewed' : 'Awaiting feedback'} />
         </article>)}
-      </Panel>}
+      </Panel></div>}
       {data && page === 'reviews' && <div className="pbs-live-stack">
         <Panel title="Project feedback">
           {!data.assignments.some(item => item.reviewedAt) && <Empty title="No feedback yet">Your instructor's published feedback will appear here.</Empty>}
@@ -264,12 +279,13 @@ export function StudentWorkspace({ account, onAccount, onSignOut }: {
       : <PortalDialog title="Explore BIM courses" onClose={close}><p className="pbs-muted">{catalog.error || 'Loading courses…'}</p></PortalDialog>)}
     {dialog?.kind === 'apply' && catalog.data && <EnrollmentForm course={dialog.course} catalog={catalog.data} account={account}
       onClose={close} onSuccess={async () => { navigate('courses'); await saved('Enrollment application submitted.'); }} />}
-    {dialog?.kind === 'classroom' && course && <Classroom course={course} completed={completed} onClose={close}
+    {dialog?.kind === 'course-info' && <PortalDialog title="Course information" className="pbs-dialog-catalog" onClose={close}><CourseInformation courseId={dialog.course.id} onApply={course => show({ kind: 'apply', course })} /></PortalDialog>}
+    {dialog?.kind === 'classroom' && course && <Classroom course={course} completed={completed} onClose={close} studentId={account.id}
       onCompletion={async (lesson, done) => {
         await send(`/student/lessons/${lesson.id}/completion`, { completed: done }); await refresh();
       }}
       onAssessment={() => show({ kind: 'assessment', courseId: course.id })} />}
-    {dialog?.kind === 'assessment' && course && <CourseAssessment course={course} onClose={close} onSaved={async () => { await refresh(); }} />}
+    {dialog?.kind === 'assessment' && course && <CourseAssessment course={course} onClose={close} onSaved={async () => { await refreshAll(); }} onCertificate={() => { close(); navigate('certificates'); }} />}
     {dialog?.kind === 'document' && <DocumentDialog document={dialog.document} onClose={close} />}
     {dialog?.kind === 'payment' && catalog.data && <StudentPaymentForm enrollment={dialog.enrollment} catalog={catalog.data}
       onClose={close} onSuccess={() => saved('Payment reference sent for review.')} />}

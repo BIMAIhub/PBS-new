@@ -20,7 +20,7 @@ export function Integrations({ courses, enrollments, onSaved }: { courses: Cours
   return <div className="pbs-live-stack">
     <FormError error={error || problem} />
     {result && <p className={result === 'connected' ? 'pbs-form-status' : 'pbs-form-error'} role="status">{result === 'connected' ? 'Microsoft connected. You can now map course folders and send reminders.' : result === 'declined' ? 'Microsoft connection cancelled. You can reconnect when ready.' : 'Microsoft could not connect. Check the app credentials, registered redirect URL and consent, then try again.'}<button className="pbs-text-button" onClick={() => setResult(null)}>Dismiss</button></p>}
-    <section className="pbs-integration-banner"><div className="pbs-integration-icon"><Cloud size={32} /></div><div><p className="pbs-eyebrow">CONNECTED LEARNING</p><h2>OneDrive, connected to enrollment.</h2><p>Approve a student in PBS and grant their email read access to the right course folder.</p></div><span className="pbs-integration-lock"><LockKeyhole size={19} /> Encrypted credentials</span></section>
+    <section className="pbs-integration-banner"><div className="pbs-integration-icon"><Cloud size={32} /></div><div><p className="pbs-eyebrow">Connected learning</p><h2>OneDrive, connected to enrollment.</h2><p>Approve a student in PBS and grant their email read access to the right course folder.</p></div><span className="pbs-integration-lock"><LockKeyhole size={19} /> Encrypted credentials</span></section>
     {data && <>
       <div className="pbs-academy-grid">
         <Panel title="Microsoft account" action={<Status value={data.connected ? 'Connected' : 'Not connected'} />}>

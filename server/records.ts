@@ -12,8 +12,11 @@ const courseFields = `id, title, description, category, instructor, schedule, fe
 const enrollmentFields = `e.id, e.account_id AS studentId, a.name AS studentName, a.email,
   e.course_id AS courseId, c.title AS courseTitle, e.status, e.total, e.requested_payment AS requestedPayment,
   e.reference, e.submitted_at AS submittedAt, e.approved_at AS approvedAt, e.notes,
+  COALESCE(ep.list_price, e.total) AS listPrice, COALESCE(ep.discount, 0) AS discount,
+  COALESCE(ep.promotion_title, '') AS promotionTitle, COALESCE(ep.code, '') AS promotionCode,
   COALESCE((SELECT SUM(r.amount) FROM receipts r WHERE r.enrollment_id = e.id), 0) AS paid`;
-const enrollmentJoin = `FROM enrollments e JOIN accounts a ON a.id = e.account_id JOIN courses c ON c.id = e.course_id`;
+const enrollmentJoin = `FROM enrollments e JOIN accounts a ON a.id = e.account_id JOIN courses c ON c.id = e.course_id
+  LEFT JOIN enrollment_prices ep ON ep.enrollment_id = e.id`;
 const receiptFields = `r.id, r.sequence, e.account_id AS studentId,
   COALESCE(NULLIF(r.student_name, ''), a.name) AS studentName, COALESCE(NULLIF(r.course_title, ''), c.title) AS courseTitle,
   r.enrollment_id AS enrollmentId, r.amount, r.method, r.reference, r.issued_at AS issuedAt`;

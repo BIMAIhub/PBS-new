@@ -1,10 +1,13 @@
 import type { Express } from 'express';
 import { findAccount, publicAccount, requireAccount, sessionAccount, startSession } from './auth.js';
 import { type WritableDatabase, makeId, makeStudentId, now, transaction } from './database.js';
-import { badRequest, conflict, emailAddress, field, limitAttempts, notFound, RequestError, route } from './http.js';
+import { badRequest, conflict, emailAddress, field, integer, limitAttempts, notFound, RequestError, route } from './http.js';
 import { httpsLink, paymentClaim, phoneNumber } from './inputs.js';
 import { hashPassword, validPassword } from './passwords.js';
 import { audit, paymentSettings } from './academy-data.js';
+import { availablePromotion, promotions, publicPrice, quotePrice, savePrice } from './commerce.js';
+import { portfolioSections, studentProfile } from './profiles.js';
+import { certificateRecords } from './academy-data.js';
 import {
   checkReference, courseById, courses, enrollmentById, getAssessment, hasCourseAccess,
   portfolio, requireCompletedLessons, studentWorkspace
@@ -12,10 +15,25 @@ import {
 
 export function mountStudent(app: Express, db: WritableDatabase, hosted: boolean) {
   app.get('/api/catalog', route(async (_req, res) => {
+    const [list, offers, payment] = await Promise.all([courses(db, true), promotions(db), paymentSettings(db)]);
     res.json({
-      courses: await courses(db, true),
-      ...await paymentSettings(db),
+      courses: list.map(course => ({ ...course, price: publicPrice(course, offers) })),
+      offers: offers.filter(item => item.kind === 'public' && !item.assignedEmail && list.some(course => availablePromotion(item, course.id)))
+        .map(({ id, title, description, percent, courseId, endsAt }) => ({ id, title, description, percent, courseId, endsAt })),
+      ...payment,
     });
+  }));
+
+  app.get('/api/catalog/:id', route(async (req, res) => {
+    const course = await courseById(db, req.params.id);
+    if (!course.published) throw notFound('This course is unavailable.');
+    const page = await db.prepare('SELECT level, duration, audience, outcomes, requirements FROM course_pages WHERE course_id = ?').get(course.id);
+    const modules = await db.prepare(`SELECT m.id, m.title, COALESCE(d.summary, '') AS summary, COALESCE(d.objectives, '[]') AS objectives
+      FROM modules m LEFT JOIN module_details d ON d.module_id = m.id WHERE m.course_id = ? ORDER BY m.position`).all(course.id);
+    res.json({ ...course, price: await quotePrice(db, course.id), page: page ? { ...page, outcomes: JSON.parse(String(page.outcomes)), requirements: JSON.parse(String(page.requirements)) } : { level: '', duration: '', audience: '', outcomes: [], requirements: [] },
+      modules: await Promise.all(modules.map(async module => ({ ...module, objectives: JSON.parse(String(module.objectives)),
+        lessons: await db.prepare('SELECT title, duration FROM lessons WHERE module_id = ? ORDER BY position').all(String(module.id)),
+      }))) });
   }));
 
   app.post('/api/enrollments/lookup', limitAttempts(16, hosted ? db : undefined), route(async (req, res) => {
@@ -67,12 +85,16 @@ export function mountStudent(app: Express, db: WritableDatabase, hosted: boolean
       if (previous?.status === 'approved') throw conflict('You are already enrolled in this course.');
       if (previous?.status === 'pending') throw conflict('You already have a pending application for this course.');
       const enrollmentId = previous?.id || makeId();
+      const quote = await quotePrice(tx, courseId, field(req.body?.code, 'offer code', 40, false), signedIn?.email || signup!.email, id);
+      if (req.body?.quotedTotal !== undefined && integer(req.body.quotedTotal, 'quoted fee') !== quote.total) throw conflict('The course offer changed. Refresh the price and try again.');
+      if (claim.amount > quote.total) throw badRequest('The reported payment cannot exceed the agreed course fee.');
       await checkReference(tx, claim.reference, enrollmentId);
       await tx.prepare(`INSERT INTO enrollments (id, account_id, course_id, total, status, requested_payment, reference, submitted_at)
         VALUES (?, ?, ?, ?, 'pending', ?, ?, ?) ON CONFLICT(account_id, course_id) DO UPDATE SET
         total = excluded.total, status = 'pending', requested_payment = excluded.requested_payment,
         reference = excluded.reference, submitted_at = excluded.submitted_at, notes = '', approved_at = ''`)
-        .run(enrollmentId, id, course.id, course.fee, claim.amount, claim.reference, now());
+        .run(enrollmentId, id, course.id, quote.total, claim.amount, claim.reference, now());
+      await savePrice(tx, enrollmentId, quote);
       await tx.prepare(`INSERT INTO enrollment_details (enrollment_id, source) VALUES (?, 'student')
         ON CONFLICT(enrollment_id) DO UPDATE SET source = 'student'`).run(enrollmentId);
       await audit(tx, id, 'Enrollment application submitted', enrollmentId, course.title);
@@ -227,6 +249,10 @@ export function mountStudent(app: Express, db: WritableDatabase, hosted: boolean
     const student = await findAccount(db, req.params.id);
     const profile = student ? await portfolio(db, student.id) : null;
     if (!student || student.role !== 'student' || !profile?.published) throw notFound('This portfolio is unavailable.');
-    res.json({ name: student.name, portfolio: profile });
+    const details = await studentProfile(db, student.id);
+    const certificates = (await certificateRecords(db, student.id)).filter(item => item.published && !item.revokedAt)
+      .map(({ id, courseTitle, issuedAt, publicToken, template }) => ({ id, courseTitle, issuedAt, publicToken, issuer: template.issuer }));
+    res.json({ name: student.name, portfolio: profile, sections: await portfolioSections(db, student.id),
+      profile: { headline: details.headline, location: details.location, about: details.about, skills: details.skills, cvAvailable: details.showCv && Boolean(details.cvName) }, certificates });
   }));
 }

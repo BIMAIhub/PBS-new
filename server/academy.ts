@@ -90,13 +90,14 @@ export function mountAcademy(app: Express, db: WritableDatabase, hosted: boolean
     await requireAccount(db, req, 'admin');
     const rows = await db.prepare(`SELECT a.name, a.email, c.title, e.status, COALESCE(d.source, 'unrecorded') AS source,
       e.submitted_at, e.total, COALESCE(SUM(r.amount), 0) AS paid, e.requested_payment,
-      COALESCE(d.due_date, '') AS due_date FROM enrollments e JOIN accounts a ON a.id = e.account_id
+      COALESCE(d.due_date, '') AS due_date, COALESCE(ep.list_price, e.total) AS list_price, COALESCE(ep.discount, 0) AS discount,
+      COALESCE(ep.promotion_title, '') AS offer, COALESCE(ep.code, '') AS offer_code FROM enrollments e JOIN accounts a ON a.id = e.account_id
       JOIN courses c ON c.id = e.course_id LEFT JOIN receipts r ON r.enrollment_id = e.id
-      LEFT JOIN enrollment_details d ON d.enrollment_id = e.id GROUP BY e.id ORDER BY e.submitted_at DESC`).all();
+      LEFT JOIN enrollment_details d ON d.enrollment_id = e.id LEFT JOIN enrollment_prices ep ON ep.enrollment_id = e.id GROUP BY e.id ORDER BY e.submitted_at DESC`).all();
     const safe = (item: unknown) => `"${String(item ?? '').replace(/^[=+@\-\t\r]/, "'$&").replaceAll('"', '""')}"`;
-    const header = ['Student', 'Email', 'Course', 'Status', 'Enrollment source', 'Applied at', 'Fee INR', 'Verified INR', 'Balance INR', 'Reported INR', 'Due date'];
+    const header = ['Student', 'Email', 'Course', 'Status', 'Enrollment source', 'Applied at', 'Fee INR', 'Verified INR', 'Balance INR', 'Reported INR', 'Due date', 'Listed fee INR', 'Discount INR', 'Offer', 'Offer code'];
     const csv = [header, ...rows.map(row => [row.name, row.email, row.title, row.status, row.source, row.submitted_at,
-      Number(row.total) / 100, Number(row.paid) / 100, (Number(row.total) - Number(row.paid)) / 100, Number(row.requested_payment) / 100, row.due_date])]
+      Number(row.total) / 100, Number(row.paid) / 100, (Number(row.total) - Number(row.paid)) / 100, Number(row.requested_payment) / 100, row.due_date, Number(row.list_price) / 100, Number(row.discount) / 100, row.offer, row.offer_code])]
       .map(row => row.map(safe).join(',')).join('\r\n');
     res.set('Content-Disposition', 'attachment; filename="PBS-payment-ledger.csv"').type('text/csv').send(`\uFEFF${csv}`);
   }));

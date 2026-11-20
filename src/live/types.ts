@@ -1,3 +1,4 @@
+import type { PriceQuote } from './experience-types';
 export type Role = 'admin' | 'student';
 export type EnrollmentStatus = 'pending' | 'approved' | 'rejected';
 
@@ -21,6 +22,7 @@ export interface CourseSummary {
   schedule: string;
   fee: number;
   published: boolean;
+  price?: PriceQuote;
 }
 
 export interface Lesson {
@@ -72,6 +74,10 @@ export interface Enrollment {
   submittedAt: string;
   approvedAt: string;
   notes: string;
+  listPrice?: number;
+  discount?: number;
+  promotionTitle?: string;
+  promotionCode?: string;
 }
 
 export interface Receipt {
@@ -169,4 +175,5 @@ export interface Catalog {
   courses: CourseSummary[];
   paymentUpiId: string;
   paymentName: string;
+  offers?: { id: string; title: string; description: string; percent: number; courseId: string; endsAt: string }[];
 }

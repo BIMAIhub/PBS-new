@@ -1,16 +1,17 @@
-import { useState } from 'react';
-import { ArrowRight, BookOpen, Check, ChevronDown, CircleHelp, Play, Search } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { ArrowRight, BookOpen, Check, ChevronDown, CircleHelp, Maximize, Minimize, PanelRightClose, PanelRightOpen, Play, Search } from 'lucide-react';
 import { PortalDialog } from '../components/student-dashboard/PortalUI';
 import { messageFrom, send } from './api';
 import type { Course, Lesson } from './types';
 import { Button, dateTimeLabel, Empty, ExternalLink, Field, FormError, Input, useApiResource, value } from './ui';
 
-export function Classroom({ course, completed, onClose, onCompletion, onAssessment }: {
+export function Classroom({ course, completed, onClose, onCompletion, onAssessment, studentId }: {
   course: Course;
   completed: Set<string>;
   onClose: () => void;
   onCompletion?: (lesson: Lesson, done: boolean) => Promise<void>;
   onAssessment?: () => void;
+  studentId?: string;
 }) {
   const all = course.modules.flatMap(module => module.lessons);
   const [activeId, setActiveId] = useState(() => all.find(lesson => !completed.has(lesson.id))?.id || all[0]?.id);
@@ -21,11 +22,35 @@ export function Classroom({ course, completed, onClose, onCompletion, onAssessme
   const [busy, setBusy] = useState(false);
   const [report, setReport] = useState(false);
   const [sent, setSent] = useState(false);
+  const [focusMode, setFocusMode] = useState(false), [fullscreen, setFullscreen] = useState(false);
+  const player = useRef<HTMLDivElement>(null), video = useRef<HTMLVideoElement>(null);
   const active = all.find(lesson => lesson.id === activeId) || all[0];
   const lessonDone = active ? completed.has(active.id) : false;
   const finished = all.filter(lesson => completed.has(lesson.id)).length;
   const next = active && all[all.findIndex(lesson => lesson.id === active.id) + 1];
   const term = query.toLowerCase().trim();
+  async function toggleFullscreen() {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else if (player.current?.requestFullscreen) await player.current.requestFullscreen();
+      else setError('Use the video player’s fullscreen control on this browser.');
+    } catch { setError('Fullscreen could not open. Try the video player’s own fullscreen control.'); }
+  }
+  useEffect(() => {
+    const change = () => setFullscreen(document.fullscreenElement === player.current);
+    document.addEventListener('fullscreenchange', change);
+    return () => { document.removeEventListener('fullscreenchange', change); };
+  }, []);
+  useEffect(() => {
+    const keyboard = (event: KeyboardEvent) => {
+      if (event.ctrlKey || event.metaKey || event.altKey || (event.target instanceof HTMLElement && event.target.closest('input,textarea,select,[contenteditable="true"]'))) return;
+      const key = event.key.toLowerCase();
+      if (key === 'f') { event.preventDefault(); void toggleFullscreen(); }
+      if (key === 'i') { event.preventDefault(); setFocusMode(current => !current); }
+      if (key === 'k' && video.current) { event.preventDefault(); if (video.current.paused) void video.current.play().catch(() => {}); else video.current.pause(); }
+    };
+    window.addEventListener('keydown', keyboard); return () => window.removeEventListener('keydown', keyboard);
+  }, []);
 
   async function toggleCompletion() {
     if (!active || !onCompletion || busy) return;
@@ -40,14 +65,16 @@ export function Classroom({ course, completed, onClose, onCompletion, onAssessme
     }
   }
 
-  return <PortalDialog title="Classroom" className="pbs-classroom-dialog" onClose={onClose}>
+  return <PortalDialog title="Classroom" className={`pbs-classroom-dialog ${focusMode ? 'pbs-focus-mode' : ''}`} onClose={onClose}>
     <p className="pbs-classroom-course">{course.title}</p>
     {all.length === 0 ? <Empty title="Lessons are being prepared">Published lessons appear here when PBS adds them to the course.</Empty> :
       <div className="pbs-classroom-layout">
         <section className="pbs-classroom-main" aria-label="Lesson player">
-          <div className="pbs-player">
+          <div className="pbs-player-toolbar"><span>{focusMode ? 'Focus mode' : 'Lesson player'}</span><div><Button quiet onClick={() => setFocusMode(current => !current)}>{focusMode ? <PanelRightOpen size={17} /> : <PanelRightClose size={17} />}{focusMode ? 'Exit focus' : 'Focus mode'}</Button><Button quiet onClick={() => void toggleFullscreen()}>{fullscreen ? <Minimize size={17} /> : <Maximize size={17} />}Fullscreen</Button></div></div>
+          <div className="pbs-player" ref={player}>
+            {studentId && <span className="pbs-player-watermark">PBS · {studentId}</span>}
             {active && failed === active.id ? <Empty title="Video unavailable">Open the source or report the playback issue to PBS.</Empty> :
-              active?.playback.kind === 'video' ? <video key={active.id} src={active.playback.url} controls playsInline preload="metadata"
+              active?.playback.kind === 'video' ? <video key={active.id} ref={video} src={active.playback.url} controls playsInline preload="metadata"
                 controlsList="nodownload noremoteplayback" disablePictureInPicture disableRemotePlayback onContextMenu={event => event.preventDefault()}
                 onError={() => setFailed(active.id)} aria-label={active.title} /> :
               active?.playback.kind === 'embed' ? <iframe key={active.id} src={active.playback.url} title={active.title}
@@ -58,6 +85,7 @@ export function Classroom({ course, completed, onClose, onCompletion, onAssessme
             <div><h3>{active.title}</h3>{active.duration && <p className="pbs-muted">{active.duration}</p>}</div>
           </div>}
           {active?.description && <p className="pbs-muted pbs-pre-wrap">{active.description}</p>}
+          <p className="pbs-player-shortcuts">Keyboard <kbd>F</kbd> fullscreen <kbd>I</kbd> focus mode <kbd>K</kbd> play / pause</p>
           <FormError error={error} />
           <div className="pbs-classroom-actions">
             {onCompletion && <Button disabled={busy} onClick={() => void toggleCompletion()}>

@@ -8,6 +8,60 @@ export const dataDirectory = path.resolve(process.env.PBS_DATA_DIR || 'data');
 export const videoDirectory = path.join(dataDirectory, 'videos');
 
 const schema = `
+    CREATE TABLE IF NOT EXISTS promotions (
+      id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
+      kind TEXT NOT NULL CHECK(kind IN ('public','coupon','referral')), code TEXT NOT NULL DEFAULT '',
+      percent INTEGER NOT NULL CHECK(percent BETWEEN 1 AND 90), course_id TEXT NOT NULL DEFAULT '',
+      owner_id TEXT NOT NULL DEFAULT '', assigned_email TEXT NOT NULL DEFAULT '', active INTEGER NOT NULL DEFAULT 0,
+      starts_at TEXT NOT NULL DEFAULT '', ends_at TEXT NOT NULL DEFAULT '', max_uses INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS promotion_codes ON promotions(code COLLATE NOCASE) WHERE code <> '';
+    CREATE TABLE IF NOT EXISTS enrollment_prices (
+      enrollment_id TEXT PRIMARY KEY REFERENCES enrollments(id), list_price INTEGER NOT NULL,
+      discount INTEGER NOT NULL, promotion_id TEXT NOT NULL DEFAULT '', promotion_title TEXT NOT NULL DEFAULT '',
+      code TEXT NOT NULL DEFAULT '', referrer_id TEXT NOT NULL DEFAULT ''
+    );
+    CREATE TABLE IF NOT EXISTS course_pages (
+      course_id TEXT PRIMARY KEY REFERENCES courses(id), level TEXT NOT NULL DEFAULT '', duration TEXT NOT NULL DEFAULT '',
+      audience TEXT NOT NULL DEFAULT '', outcomes TEXT NOT NULL DEFAULT '[]', requirements TEXT NOT NULL DEFAULT '[]'
+    );
+    CREATE TABLE IF NOT EXISTS module_details (
+      module_id TEXT PRIMARY KEY REFERENCES modules(id) ON DELETE CASCADE, summary TEXT NOT NULL,
+      objectives TEXT NOT NULL DEFAULT '[]'
+    );
+    CREATE TABLE IF NOT EXISTS learning_tasks (
+      id TEXT PRIMARY KEY, course_id TEXT NOT NULL REFERENCES courses(id), module_id TEXT NOT NULL DEFAULT '',
+      title TEXT NOT NULL, brief TEXT NOT NULL, deliverables TEXT NOT NULL DEFAULT '[]',
+      published INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS task_submissions (
+      id TEXT PRIMARY KEY, task_id TEXT NOT NULL REFERENCES learning_tasks(id),
+      account_id TEXT NOT NULL REFERENCES accounts(id), url TEXT NOT NULL, note TEXT NOT NULL,
+      feedback TEXT NOT NULL DEFAULT '', submitted_at TEXT NOT NULL, reviewed_at TEXT NOT NULL DEFAULT '',
+      UNIQUE(task_id, account_id)
+    );
+    CREATE TABLE IF NOT EXISTS curriculum_drafts (
+      id TEXT PRIMARY KEY, course_id TEXT NOT NULL REFERENCES courses(id), admin_id TEXT NOT NULL REFERENCES accounts(id),
+      brief TEXT NOT NULL, content TEXT NOT NULL, created_at TEXT NOT NULL, applied_at TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'drafting', model TEXT NOT NULL DEFAULT '', error TEXT NOT NULL DEFAULT ''
+    );
+    CREATE TABLE IF NOT EXISTS notifications (
+      id TEXT PRIMARY KEY, account_id TEXT NOT NULL REFERENCES accounts(id), title TEXT NOT NULL, body TEXT NOT NULL,
+      kind TEXT NOT NULL, page TEXT NOT NULL, created_at TEXT NOT NULL,
+      read_at TEXT NOT NULL DEFAULT '', shown_at TEXT NOT NULL DEFAULT ''
+    );
+    CREATE INDEX IF NOT EXISTS notification_inbox ON notifications(account_id, created_at);
+    CREATE TABLE IF NOT EXISTS student_profiles (
+      account_id TEXT PRIMARY KEY REFERENCES accounts(id), headline TEXT NOT NULL DEFAULT '', location TEXT NOT NULL DEFAULT '',
+      about TEXT NOT NULL DEFAULT '', skills TEXT NOT NULL DEFAULT '[]', cv_path TEXT NOT NULL DEFAULT '',
+      cv_name TEXT NOT NULL DEFAULT '', cv_size INTEGER NOT NULL DEFAULT 0, show_cv INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS portfolio_sections (
+      account_id TEXT PRIMARY KEY REFERENCES accounts(id), layout TEXT NOT NULL DEFAULT 'studio',
+      accent_color TEXT NOT NULL DEFAULT '#176BB7', projects TEXT NOT NULL DEFAULT '[]',
+      experience TEXT NOT NULL DEFAULT '[]', education TEXT NOT NULL DEFAULT '[]'
+    );
     CREATE TABLE IF NOT EXISTS academy_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS enrollment_details (
       enrollment_id TEXT PRIMARY KEY REFERENCES enrollments(id), due_date TEXT NOT NULL DEFAULT '',

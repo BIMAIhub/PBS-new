@@ -1,20 +1,19 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ArrowRight, BookOpen, CreditCard } from 'lucide-react';
 import { PortalDialog } from '../components/student-dashboard/PortalUI';
-import { send } from './api';
+import { send, messageFrom } from './api';
+import { CatalogBrowser } from './Catalog';
+import { CourseInformation } from './CourseInformation';
+import type { PriceQuote } from './experience-types';
 import type { Account, Catalog, CourseSummary, Enrollment } from './types';
-import { DialogForm, Empty, Field, Input, money, paise, PasswordInput, value } from './ui';
+import { Button, DialogForm, Empty, Field, Input, money, paise, PasswordInput, value } from './ui';
 
 export function CatalogDialog({ catalog, onChoose, onClose }: {
   catalog: Catalog; onChoose: (course: CourseSummary) => void; onClose: () => void;
 }) {
-  return <PortalDialog title="Explore BIM courses" onClose={onClose}>
-    {catalog.courses.length === 0 && <Empty title="No published courses">Check back when PBS opens enrollment.</Empty>}
-    {catalog.courses.map(course => <button className="pbs-action-row" type="button" key={course.id} onClick={() => onChoose(course)}>
-      <span className="pbs-row-icon"><BookOpen /></span>
-      <span><strong>{course.title}</strong><small>{course.category} · {money(course.fee)}</small></span>
-      <ArrowRight className="pbs-row-end" />
-    </button>)}
+  const [selected, setSelected] = useState<CourseSummary>();
+  return <PortalDialog title={selected ? 'Course information' : 'Explore BIM courses'} onClose={onClose} className="pbs-dialog-catalog">
+    {selected ? <><button className="pbs-text-button" type="button" onClick={() => setSelected(undefined)}>All courses</button><CourseInformation courseId={selected.id} onApply={onChoose} /></> : <CatalogBrowser catalog={catalog} onChoose={setSelected} compact />}
   </PortalDialog>;
 }
 
@@ -48,20 +47,33 @@ function PaymentFields({ catalog, balance, optional }: { catalog: Catalog; balan
   </div>;
 }
 
-export function EnrollmentForm({ course, catalog, account, onClose, onSuccess }: {
+export function EnrollmentForm({ course, catalog, account, onClose, onSuccess, initialCode = '' }: {
   course: CourseSummary; catalog: Catalog; account?: Account; onClose: () => void;
   onSuccess: (account: Account) => void | Promise<void>;
+  initialCode?: string;
 }) {
+  const fallback: PriceQuote = course.price || { listPrice: course.fee, total: course.fee, discount: 0, promotionId: '', promotionTitle: '', code: '', percent: 0 };
+  const [quote, setQuote] = useState<PriceQuote>(fallback), [code, setCode] = useState(initialCode), [appliedCode, setAppliedCode] = useState(''), [offerMessage, setOfferMessage] = useState(''), [checking, setChecking] = useState(false);
+  const formRef = useRef<HTMLDivElement>(null);
+  async function checkOffer() {
+    setChecking(true); setOfferMessage('');
+    try {
+      const form = formRef.current?.closest('form');
+      const email = account?.email || (form ? value(new FormData(form), 'email') : '');
+      const result = await send<PriceQuote>('/enrollments/quote', { courseId: course.id, code, email });
+      setQuote(result); setAppliedCode(code.trim().toUpperCase()); setOfferMessage(result.promotionTitle ? `${result.promotionTitle} applied. Your course fee is ${money(result.total)}.` : 'The standard course fee applies.');
+    } catch (error) { setOfferMessage(messageFrom(error)); } finally { setChecking(false); }
+  }
   return <DialogForm title="Request enrollment" detail={course.title} submit="Submit application" onClose={onClose}
     onSubmit={async form => {
       const response = await send<{ account: Account; enrollment: Enrollment }>('/enrollments', {
         courseId: course.id,
         name: value(form, 'name'), email: value(form, 'email'), phone: value(form, 'phone'),
-        password: String(form.get('password') || ''), amount: paise(form, 'amount'), reference: value(form, 'reference'),
+        password: String(form.get('password') || ''), amount: paise(form, 'amount'), reference: value(form, 'reference'), code: appliedCode, quotedTotal: quote.total,
       });
       await onSuccess(response.account);
     }}>
-    <div className="pbs-inset"><span className="pbs-muted">Course fee</span><strong className="pbs-fee-value">{money(course.fee)}</strong></div>
+    <div className="pbs-inset"><span className="pbs-muted">Course fee</span><strong className="pbs-fee-value">{money(quote.total)}</strong>{quote.discount > 0 && <p className="pbs-muted"><del>{money(quote.listPrice)}</del> · {quote.promotionTitle} · Save {money(quote.discount)}</p>}</div>
     {course.description && <p className="pbs-muted">{course.description}</p>}
     {!account && <>
       <div className="pbs-form-grid">
@@ -71,7 +83,9 @@ export function EnrollmentForm({ course, catalog, account, onClose, onSuccess }:
       <Input label="Phone" name="phone" type="tel" autoComplete="tel" />
       <PasswordInput label="Create password" name="password" autoComplete="new-password" minLength={12} maxLength={128} required />
     </>}
-    <PaymentFields catalog={catalog} balance={course.fee} optional />
+    <div className="pbs-offer-code-field" ref={formRef}><Input label="Offer or referral code" value={code} onChange={event => setCode(event.target.value)} maxLength={40} /><Button quiet disabled={checking} onClick={() => void checkOffer()}>{checking ? 'Checking…' : 'Apply code'}</Button></div>{offerMessage && <p className="pbs-muted" role="status">{offerMessage}</p>}
+    <p className="pbs-muted pbs-small">The best eligible offer applies. Offers do not stack. A code is applied only after you select Apply code.</p>
+    <PaymentFields key={quote.total} catalog={catalog} balance={quote.total} optional />
   </DialogForm>;
 }
 

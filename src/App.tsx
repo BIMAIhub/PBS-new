@@ -7,6 +7,8 @@ import type { Account, Portfolio } from './live/types';
 import { Button, ExternalLink, FormError, useApiResource } from './live/ui';
 import { PublicCertificate } from './live/Certificates';
 
+const PublicExplore = lazy(() => import('./live/Explore').then(module => ({ default: module.PublicExplore })));
+const PublicPortfolio = lazy(() => import('./live/PublicPortfolio').then(module => ({ default: module.PublicPortfolioPage })));
 const AdminWorkspace = lazy(() => import('./live/AdminWorkspace').then(module => ({ default: module.AdminWorkspace })));
 const StudentWorkspace = lazy(() => import('./live/StudentWorkspace').then(module => ({ default: module.StudentWorkspace })));
 
@@ -15,23 +17,6 @@ function portfolioId() {
   const id = pathname.startsWith('/portfolio/') ? pathname.slice('/portfolio/'.length) :
     new URLSearchParams(search).get('portfolio') || (hash.startsWith('#/portfolio/') ? hash.slice('#/portfolio/'.length) : '');
   try { return id ? decodeURIComponent(id) : ''; } catch { return ''; }
-}
-
-function PublicPortfolio({ id }: { id: string }) {
-  const { data, error } = useApiResource<{ name: string; portfolio: Portfolio }>(`/portfolios/${encodeURIComponent(id)}`);
-  return <main className="pbs-public-paper">
-    <PortalBrand subtitle="BIM portfolios" />
-    {error && <FormError error={error} />}
-    {!data && !error && <p className="pbs-muted">Loading portfolio…</p>}
-    {data && <>
-      <h1>{data.name}</h1>
-      <h2>{data.portfolio.headline}</h2>
-      <p className="pbs-muted pbs-pre-wrap">{data.portfolio.bio}</p>
-      {data.portfolio.projectUrl && <ExternalLink href={data.portfolio.projectUrl}>Open BIM project</ExternalLink>}
-      <div className="pbs-actions">{data.portfolio.linkedin && <ExternalLink href={data.portfolio.linkedin}>LinkedIn</ExternalLink>}{data.portfolio.github && <ExternalLink href={data.portfolio.github}>GitHub</ExternalLink>}{data.portfolio.website && <ExternalLink href={data.portfolio.website}>Website</ExternalLink>}</div>
-    </>}
-    <a className="pbs-text-button" href="/">Back to PBS</a>
-  </main>;
 }
 
 function Portal() {
@@ -76,8 +61,10 @@ function Portal() {
 }
 
 export default function App() {
+  const courseId = window.location.pathname.match(/^\/courses\/([\w-]+)\/?$/)?.[1];
+  if (courseId || window.location.pathname === '/explore' || window.location.pathname === '/explore/') return <Suspense fallback={<p className="pbs-route-loading" role="status">Opening courses…</p>}><PublicExplore courseId={courseId} /></Suspense>;
   const certificateToken = window.location.pathname.match(/^\/verify\/certificate\/([\w-]+)$/)?.[1];
   if (certificateToken) return <PublicCertificate token={certificateToken} />;
   const id = portfolioId();
-  return id ? <PublicPortfolio id={id} /> : <Portal />;
+  return id ? <Suspense fallback={<p className="pbs-route-loading" role="status">Opening portfolio…</p>}><PublicPortfolio id={id} /></Suspense> : <Portal />;
 }

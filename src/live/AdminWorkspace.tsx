@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   ArrowDownToLine, ArrowRight, BookOpen, BriefcaseBusiness, CircleHelp, ClipboardList,
-  Activity, Award, Cloud, LayoutDashboard, CreditCard, FileText, IndianRupee, KeyRound, LogOut, MessageSquare, Plus, Search, UserRound, Users, Video
+  Activity, Award, Cloud, FilePenLine, Tag, LayoutDashboard, CreditCard, FileText, IndianRupee, KeyRound, LogOut, MessageSquare, Plus, Search, UserRound, Users, Video
 } from 'lucide-react';
 import { PortalDialog } from '../components/student-dashboard/PortalUI';
 import { WorkspaceChrome, type WorkspaceNavGroup } from '../components/student-dashboard/WorkspaceChrome';
@@ -16,16 +16,21 @@ import { send } from './api';
 import { ActivityLog, AdminOverview, GrantAccessButton, PaymentLedger } from './AcademyAdmin';
 import { CertificateStudio } from './Certificates';
 import { Integrations } from './Integrations';
+import { OffersAdmin } from './OffersAdmin';
+import { CurriculumAdmin } from './CurriculumAdmin';
+import { NotificationCenter } from './Notifications';
 import type { AdminAcademyData } from './academy-types';
 import type { Account, AdminWorkspaceData, Assignment, Course, Enrollment, Lesson, Receipt, StudentRecord } from './types';
 import { Button, dateLabel, dateTimeLabel, DialogForm, Empty, ExternalLink, Field, FormError, Input, money, Panel, Status, useApiResource, value } from './ui';
 
-type Page = 'overview' | 'students' | 'courses' | 'enrollments' | 'payments' | 'projects' | 'placements' | 'messages' | 'certificates' | 'integrations' | 'activity';
+type Page = 'overview' | 'students' | 'courses' | 'enrollments' | 'payments' | 'projects' | 'placements' | 'messages' | 'certificates' | 'integrations' | 'activity' | 'offers' | 'curriculum';
 const groups: WorkspaceNavGroup<Page>[] = [
   { label: 'Administration', pages: [
     { id: 'overview', label: 'Academy overview', icon: LayoutDashboard },
     { id: 'students', label: 'Students', icon: Users },
     { id: 'courses', label: 'Courses & videos', icon: BookOpen },
+    { id: 'curriculum', label: 'Curriculum & assignments', icon: FilePenLine },
+    { id: 'offers', label: 'Offers & referrals', icon: Tag },
     { id: 'enrollments', label: 'Enrollments', icon: ClipboardList },
     { id: 'payments', label: 'Payments & receipts', icon: CreditCard },
   ] },
@@ -111,6 +116,7 @@ function CourseManager({ courses, open }: { courses: Course[]; open: (dialog: Di
         <Button quiet onClick={() => open({ kind: 'course', course })}>Edit course</Button>
         <Button quiet onClick={() => open({ kind: 'module', course })}>Add module</Button>
         <Button disabled={!course.modules.length} onClick={() => open({ kind: 'video', course })}><Video size={18} /> Add video</Button>
+        {course.published && <a className="pbs-button pbs-button-outline" href={`/courses/${encodeURIComponent(course.id)}`} target="_blank" rel="noopener noreferrer">View public course page</a>}
       </div>
       <details className="pbs-course-details">
         <summary>Curriculum and materials</summary>
@@ -224,9 +230,11 @@ export function AdminWorkspace({ account, onAccount, onSignOut }: {
     setPage(next);
     setNotice('');
     window.scrollTo({ top: 0, behavior: 'instant' });
+    void refreshAll();
   }
   return <>
     <WorkspaceChrome groups={groups} activePage={page} onNavigate={navigate} userName={account.name} workspaceLabel="Administration"
+      notifications={<NotificationCenter onNavigate={target => { if (groups.some(group => group.pages.some(item => item.id === target))) navigate(target as Page); }} />}
       onHelp={() => show({ kind: 'help' })}
       searchActions={[
         { label: 'Create course', icon: Plus, run: () => show({ kind: 'course' }) },
@@ -245,6 +253,8 @@ export function AdminWorkspace({ account, onAccount, onSignOut }: {
       {data && page === 'overview' && <AdminOverview data={data} academy={academy.data} navigate={navigate} onEnroll={() => data.courses.length ? show({ kind: 'enroll' }) : show({ kind: 'course' })} />}
       {data && page === 'students' && <Roster data={data} open={show} onCreateCourse={() => show({ kind: 'course' })} />}
       {data && page === 'courses' && <CourseManager courses={data.courses} open={show} />}
+      {data && page === 'curriculum' && <CurriculumAdmin courses={data.courses} onSaved={refreshAll} />}
+      {data && page === 'offers' && <OffersAdmin courses={data.courses} students={data.students} />}
       {data && page === 'enrollments' && <EnrollmentList enrollments={data.enrollments} open={show} />}
       {data && page === 'payments' && <div className="pbs-live-stack">
         {academy.data && <PaymentLedger data={data} academy={academy.data} open={(kind, enrollment) => show({ kind, enrollment })} onSaved={refreshAll} />}

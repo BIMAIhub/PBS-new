@@ -1,5 +1,4 @@
 import express from 'express';
-import { GoogleGenAI } from '@google/genai';
 import { openDatabase } from './database.js';
 import { provisionInitialAdministrator } from './administrators.js';
 import { mountAuth, requireAccount } from './auth.js';
@@ -8,6 +7,11 @@ import { mountStudent } from './student.js';
 import { mountMedia } from './media.js';
 import { mountAcademy } from './academy.js';
 import { mountMicrosoft } from './microsoft.js';
+import { mountCommerce, provisionReferenceCatalog } from './commerce.js';
+import { mountProfiles } from './profiles.js';
+import { mountNotifications } from './notifications.js';
+import { mountCurriculum } from './curriculum.js';
+import { generateLearningText } from './ai.js';
 import { apiError, field, limitAttempts, RequestError, route } from './http.js';
 
 export async function createPortalApp(hosted = false) {
@@ -17,6 +21,7 @@ export async function createPortalApp(hosted = false) {
   app.locals.portalDatabase = db;
   try {
     await provisionInitialAdministrator(db);
+    await provisionReferenceCatalog(db);
   } catch (error) {
     db.close();
     throw error;
@@ -51,18 +56,15 @@ export async function createPortalApp(hosted = false) {
   mountMedia(app, db, hosted);
   mountAcademy(app, db, hosted);
   mountMicrosoft(app, db, hosted);
+  mountCommerce(app, db, hosted);
+  mountProfiles(app, db, hosted);
+  mountNotifications(app, db);
+  mountCurriculum(app, db, hosted);
 
   app.post('/api/ask-pbs', limitAttempts(12, hosted ? db : undefined), route(async (req, res) => {
     await requireAccount(db, req);
-    const key = process.env.GEMINI_API_KEY;
-    if (!key) throw new RequestError(503, 'The BIM assistant is unavailable. You can message PBS from your workspace.');
     const question = field(req.body?.question, 'BIM question', 1500);
-    const client = new GoogleGenAI({ apiKey: key });
-    const response = await client.models.generateContent({
-      model: process.env.PBS_GEMINI_MODEL || 'gemini-2.5-flash',
-      contents: question,
-      config: { systemInstruction: 'You are the Pragmatic BIM Solution learning assistant. Explain BIM and Revit workflows clearly and concisely.' },
-    });
+    const response = await generateLearningText('You are the Pragmatic BIM Solution learning assistant. Explain BIM and Revit workflows clearly and concisely. Do not invent PBS course schedules, prices, instructor details or student records.', question);
     res.json({ reply: response.text || 'Ask a more specific BIM question.' });
   }));
 

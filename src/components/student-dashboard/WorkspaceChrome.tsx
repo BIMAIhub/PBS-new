@@ -32,6 +32,7 @@ interface WorkspaceChromeProps<Page extends string> {
   onHelp: () => void;
   userName: string;
   workspaceLabel?: string;
+  notifications?: ReactNode;
   children: ReactNode;
 }
 
@@ -64,7 +65,7 @@ export function WorkspaceActionRow({ action }: { action: WorkspaceAction }) {
 }
 
 export function WorkspaceChrome<Page extends string>({
-  groups, activePage, onNavigate, searchActions, accountActions, onHelp, userName, workspaceLabel, children
+  groups, activePage, onNavigate, searchActions, accountActions, onHelp, userName, workspaceLabel, notifications, children
 }: WorkspaceChromeProps<Page>) {
   const [dialog, setDialog] = useState<'navigation' | 'search' | 'account' | null>(null);
   const [query, setQuery] = useState('');
@@ -116,6 +117,7 @@ export function WorkspaceChrome<Page extends string>({
             <strong>{pageName}</strong>
           </div>
           <div className="pbs-topbar-controls">
+            {notifications}
             <button type="button" className="pbs-search-trigger" aria-label="Search workspace" onClick={() => {
               setQuery('');
               setDialog('search');

@@ -1,19 +1,16 @@
 import { useState, type FormEvent } from 'react';
 import { ArrowDownRight, ArrowRight, ArrowUpRight, GraduationCap, ShieldCheck } from 'lucide-react';
 import { PortalBrand } from '../components/student-dashboard/PortalUI';
-import { CatalogDialog, EnrollmentForm } from './EnrollmentForm';
-import { DialogForm, FormError, Input, PasswordInput, supportEmail, useApiResource, value } from './ui';
+import { DialogForm, FormError, Input, PasswordInput, supportEmail, value } from './ui';
 import { messageFrom, send } from './api';
-import type { Account, Catalog, CourseSummary, EnrollmentStatus, Role } from './types';
+import type { Account, EnrollmentStatus, Role } from './types';
 
 export function SignIn({ onSignedIn }: { onSignedIn: (account: Account) => void }) {
   const [role, setRole] = useState<Role>('student');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [dialog, setDialog] = useState<'catalog' | 'lookup' | null>(null);
-  const [course, setCourse] = useState<CourseSummary>();
+  const [dialog, setDialog] = useState<'lookup' | null>(null);
   const [status, setStatus] = useState<EnrollmentStatus>();
-  const catalog = useApiResource<Catalog>('/catalog');
   const student = role === 'student';
 
   async function signIn(event: FormEvent<HTMLFormElement>) {
@@ -70,7 +67,7 @@ export function SignIn({ onSignedIn }: { onSignedIn: (account: Account) => void 
           </button>
         </form>
         <div className="pbs-login-admissions"><span>New to Pragmatic BIM Solution?</span>
-          <button className="pbs-text-button" type="button" onClick={() => setDialog('catalog')}>Explore courses <ArrowRight /></button>
+          <a className="pbs-text-button" href="/explore">Explore courses</a>
         </div>
       </div>
       <footer className="pbs-login-footer"><span>Pragmatic BIM Solution</span>
@@ -89,8 +86,5 @@ export function SignIn({ onSignedIn }: { onSignedIn: (account: Account) => void 
       {status && <p className="pbs-form-status" role="status">{status === 'approved' ? 'Enrollment approved. Sign in to open your course.' :
         status === 'pending' ? 'Your application is awaiting review.' : 'This application was declined. Contact PBS for details.'}</p>}
     </DialogForm>}
-    {dialog === 'catalog' && <CatalogDialog catalog={catalog.data || { courses: [], paymentName: '', paymentUpiId: '' }}
-      onClose={() => setDialog(null)} onChoose={selected => { setCourse(selected); setDialog(null); }} />}
-    {course && catalog.data && <EnrollmentForm course={course} catalog={catalog.data} onClose={() => setCourse(undefined)} onSuccess={onSignedIn} />}
   </div>;
 }

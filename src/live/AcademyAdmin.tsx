@@ -25,7 +25,7 @@ export function AdminOverview({ data, academy, navigate, onEnroll }: {
   const max = Math.max(...months.map(item => item.amount), 1);
   return <div className="pbs-live-stack">
     <section className="pbs-academy-welcome">
-      <div><p className="pbs-eyebrow">PBS ACADEMY / ADMINISTRATION</p><h2>A clear view of your academy.</h2><p>Manage learning, follow up on fees, and keep every student moving forward.</p>
+      <div><p className="pbs-eyebrow">PBS academy · Administration</p><h2>A clear view of your academy.</h2><p>Manage learning, follow up on fees, and keep every student moving forward.</p>
         <div className="pbs-actions"><Button onClick={onEnroll}><Users size={17} /> Enroll a student</Button><Button quiet onClick={() => navigate('enrollments')}>Review applications <ArrowRight size={17} /></Button></div>
       </div><div className="pbs-academy-emblem" aria-hidden="true"><img src="/pbs-logo.svg" width="100" height="100" /><span>PRAGMATIC BIM SOLUTION</span></div>
     </section>
@@ -98,6 +98,7 @@ export function PaymentLedger({ data, academy, open, onSaved }: {
           <div className="pbs-ledger-amounts"><div><small>Agreed fee</small><strong>{money(item.total)}</strong></div><div><small>Verified paid</small><strong>{money(item.paid)}</strong></div><div><small>Outstanding</small><strong>{money(balance(item))}</strong></div><div><small>Awaiting verification</small><strong>{money(item.requestedPayment)}</strong></div></div>
           <p className="pbs-muted">{detail?.source === 'admin' ? 'Enrolled by admin' : detail?.source === 'student' ? 'Student application' : 'Enrollment recorded'} · {dateLabel(item.submittedAt)}{detail?.dueDate ? ` · Due ${dateLabel(detail.dueDate)}` : ''}</p>
           {item.reference && <p className="pbs-reference">Bank reference <code>{item.reference}</code></p>}
+          {Boolean(item.discount) && <p className="pbs-muted">Offer: {item.promotionTitle} · {money(item.discount!)} saved{item.promotionCode ? ` · Code ${item.promotionCode}` : ''} · Listed fee {money(item.listPrice || item.total)}</p>}
           <div className="pbs-actions">
             {item.status === 'pending' && <Button onClick={() => open('review', item)}>Review application</Button>}
             {item.status === 'approved' && balance(item) > 0 && <><Button onClick={() => open('payment', item)}>{item.requestedPayment ? 'Verify payment' : 'Record payment'}</Button><Button quiet onClick={() => setDialog({ kind: 'reminder', enrollment: item })}><Bell size={16} /> Send reminder</Button></>}

@@ -5,8 +5,25 @@
   "buildCommand": "npm run build:web",
   "outputDirectory": "dist",
   "rewrites": [
-    { "source": "/api/:path(.*)", "destination": "/api/pbs?__pbs_route=:path" },
-    { "source": "/portfolio/:id", "destination": "/index.html" },
-    { "source": "/verify/certificate/:token", "destination": "/index.html" }
+    {
+      "source": "/api/:path(.*)",
+      "destination": "/api/pbs?__pbs_route=:path"
+    },
+    {
+      "source": "/portfolio/:id",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/verify/certificate/:token",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/explore",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/courses/:id",
+      "destination": "/index.html"
+    }
   ]
 }

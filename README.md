@@ -89,6 +89,32 @@ Students unlock **My certificates** after completing every lesson and passing th
 
 **My portfolio** lets students edit a headline, project summary, project URL, LinkedIn, GitHub and website links. Publishing is optional. Students can copy the public portfolio link or share it to LinkedIn. Fee records, internal notes and contact information do not appear on the public page.
 
+## Course discovery, offers and notifications
+
+The public catalog is available at `/explore`, with a separate page at `/courses/COURSE_ID`. Only published courses are public. In **Courses & videos**, edit a course and enable **Show in the enrollment catalog**. **Curriculum & assignments → Edit public course information** adds the level, intended audience, learning outcomes and requirements. Public course responses contain curriculum information and lesson titles, without private playback URLs.
+
+`PBS_BOOTSTRAP_CATALOG=1` performs a one-time restore when the course database is empty: the Revit MEP Masterclass from the supplied PBS reference, listed at ₹14,999, two curriculum outlines, and a 20% public course offer. It creates no student, video or assessment records. The connected production project has this setting enabled. Later admin edits are preserved; the restore does not run repeatedly or replace an existing catalog. Review the course price, content and application availability in the admin workspace.
+
+In **Offers & referrals**, create public discounts, private offer codes or referral codes assigned to students. Restrict offers by course, email, date or application count. The server selects the best eligible offer; discounts do not stack. It checks the price again when an application is submitted and saves the fee and offer with that enrollment. Editing an offer does not alter existing agreed fees. Referral owners cannot redeem their own codes. Rejected applications release their reserved usage.
+
+The notification bell includes messages, fee reminders, enrollment decisions, receipts, assignments and certificate-ready updates. In-portal popups require no permission. Read and popup acknowledgement persist per account. While the portal is visible, notifications refresh every 30 seconds and on window focus. Optional desktop alerts require browser permission and keep checking while the tab is open. This is not an offline push or SMS service. Email reminders still use the separate Microsoft connection.
+
+## Student profiles, CVs and portfolio building
+
+**My profile & CV** lets students update their name, phone, professional headline, location, summary and skills. PDF CV uploads are limited to 3 MB and validated before storage. Hosted CVs use private Blob storage; local CVs use the private PBS data directory. A CV is downloadable publicly only when both the portfolio is published and the student enables CV sharing. Turning off sharing, unpublishing the portfolio or removing the CV disables the public download endpoint. Private storage locations do not appear in public profile responses.
+
+**My portfolio** provides Studio, Resume and Gallery layouts, an accent color, editable projects with ordering, experience and education sections, and a live preview. The builder saves the page and its sections together. Public pages include only professional profile fields, selected links, projects, and credentials whose public verification the student has enabled. LinkedIn sharing opens its composer for the student to review; PBS does not post automatically.
+
+The classroom includes **Focus mode**, a fullscreen player, and keyboard shortcuts **I**, **F**, and **K** for focus, fullscreen, and native-video play/pause. Embedded providers retain their own playback behavior. Certificate milestones show actual lesson and assessment requirements. Claiming an eligible credential records it permanently and displays a brief celebration that respects reduced-motion preferences.
+
+## AI curriculum drafts and module assignments
+
+From **Curriculum & assignments**, choose a course and describe the topics, audience and expected project. The AI drafting tool prepares a course summary, learning outcomes, module objectives, practical assignments and a capstone. An administrator must review the editable draft and choose **Apply reviewed curriculum**. Applying adds modules and assignment briefs once, preserves existing recordings, and publishes assignments only if the admin selects that option. It does not manufacture recordings, instructors, schedules, prices or accreditation claims.
+
+On Vercel, the server uses request-scoped OIDC for AI Gateway. The project account needs Gateway access, verification and sufficient credits. The default curriculum model is `google/gemini-2.5-flash-lite`, selected from the Gateway catalog during implementation; `PBS_CURRICULUM_MODEL` can override it with another supported model. Outside Vercel, set a private `AI_GATEWAY_API_KEY`, or use the existing optional `GEMINI_API_KEY` integration. No provider key is returned to the client. Requests are limited to four per minute per address and 20 per day per admin; failed attempts also count toward the daily limit.
+
+Students see published module assignments and course capstones only after enrollment approval, submit project links, and receive instructor feedback in their workspace and notification history. AI output is validated before review and again before applying it. Provider failures leave the course unchanged. Manual assignment editing works without AI configuration.
+
 ## Verify changes
 
 ```sh
@@ -97,7 +123,7 @@ npm test
 npm run build
 ```
 
-The tests create and delete an isolated temporary SQLite database, override remote connection settings, and never seed production students. They check enrollment, payment verification, receipt idempotency, reminder privacy, credential eligibility, public sharing, design validation and mocked Microsoft permission boundaries. Real Microsoft consent and delivery must be checked after connecting the owner's account.
+The tests create and delete an isolated temporary SQLite database, override remote connection settings, and never seed production students. They check enrollment, payment verification, receipt idempotency, reminder privacy, credential eligibility, public sharing, design validation, discount and referral rules, CV privacy, notification ownership, module assignments, AI draft review and mocked Microsoft permission boundaries. AI tests mock provider responses; a live generation must be verified after the account has Gateway access and credits. Real Microsoft consent and delivery must be checked after connecting the owner's account.
 
 ### Bring over existing records
 
