@@ -7,6 +7,7 @@ import { type Database, makeId, now } from './database.js';
 import { conflict, notFound, badRequest } from './http.js';
 import { videoPlayback } from './video.js';
 import { audit } from './academy-data.js';
+import { studentLiveData } from './live-classes.js';
 
 const courseFields = `id, title, description, category, instructor, schedule, fee, published`;
 const enrollmentFields = `e.id, e.account_id AS studentId, a.name AS studentName, a.email,
@@ -52,7 +53,7 @@ export async function courseDetails(db: Database, course: CourseSummary): Promis
         })),
     }))),
     resources: links.filter(link => link.kind === 'resource').map(({ id, title, url }) => ({ id, title, url })),
-    sessions: links.filter(link => link.kind === 'session').map(({ id, title, url, startsAt }) => ({ id, title, url, startsAt })),
+    sessions: [],
     assessmentAvailable: Boolean(await db.prepare('SELECT 1 FROM assessments WHERE course_id = ?').get(course.id)),
   };
 }
@@ -136,6 +137,7 @@ export async function studentWorkspace(db: Database, account: Account) {
   const list = await enrollments(db, account.id);
   return {
     enrollments: list,
+    live: await studentLiveData(db, account.id),
     courses: await Promise.all(list.filter(enrollment => enrollment.status === 'approved')
       .map(async enrollment => courseDetails(db, await courseById(db, enrollment.courseId)))),
     receipts: await receipts(db, account.id),
@@ -154,6 +156,7 @@ export async function studentWorkspace(db: Database, account: Account) {
 export async function adminWorkspace(db: Database) {
   const enrollmentList = await enrollments(db);
   const receiptList = await receipts(db);
+  const liveTotals = await db.prepare("SELECT account_id, SUM(awarded_points) AS points, SUM(CASE WHEN status = 'present' THEN 1 ELSE 0 END) AS attended FROM live_attendance GROUP BY account_id").all();
   const accountRows = await db.prepare(`SELECT ${accountFields} FROM accounts WHERE role = 'student' ORDER BY created_at DESC`).all();
   const students: StudentRecord[] = await Promise.all(accountRows.map(async raw => {
     const account = publicAccount(raw as unknown as Parameters<typeof publicAccount>[0]);
@@ -165,6 +168,8 @@ export async function adminWorkspace(db: Database) {
       enrollments: enrollmentList.filter(enrollment => enrollment.studentId === account.id),
       receipts: receiptList.filter(receipt => receipt.studentId === account.id),
       completedLessons: Number(progress?.count ?? 0),
+      livePoints: Number(liveTotals.find(item => item.account_id === account.id)?.points || 0),
+      attendedSessions: Number(liveTotals.find(item => item.account_id === account.id)?.attended || 0),
       placement,
     };
   }));

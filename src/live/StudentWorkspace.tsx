@@ -19,6 +19,7 @@ import { NotificationCenter } from './Notifications';
 import { CatalogBrowser } from './Catalog';
 import { TaskAssignments } from './TaskAssignments';
 import { CourseInformation } from './CourseInformation';
+import { LiveClassesStudent, NextLiveSession } from './LiveClassesStudent';
 import type { AcademyData } from './academy-types';
 import type { Account, AssessmentQuestion, AssessmentResult, Catalog, Course, CourseSummary, Enrollment, StudentWorkspaceData } from './types';
 import { Button, dateLabel, dateTimeLabel, DialogForm, Empty, ExternalLink, Field, FormError, Input, money, Panel, Status, useApiResource, value } from './ui';
@@ -62,8 +63,6 @@ function StudentOverview({ data, completed, open, navigate }: {
   const lessons = course?.modules.flatMap(module => module.lessons) ?? [];
   const done = lessons.filter(lesson => completed.has(lesson.id)).length;
   const percent = lessons.length ? Math.round(done / lessons.length * 100) : 0;
-  const next = data.courses.flatMap(course => course.sessions)
-    .filter(session => Date.parse(session.startsAt) >= Date.now()).sort((a, b) => a.startsAt.localeCompare(b.startsAt))[0];
   return <div className="pbs-overview">
     <div className="pbs-overview-main">
       <section className="pbs-course-feature">
@@ -90,10 +89,11 @@ function StudentOverview({ data, completed, open, navigate }: {
         <WorkspaceActionRow action={{ label: 'Portfolio & LinkedIn', detail: 'Show your professional work', icon: Share2, run: () => navigate('portfolio') }} />
       </Panel>
     </div>
-    <dl className="pbs-learning-stats">
+    <dl className="pbs-learning-stats pbs-student-stats">
       <div><dt><BookOpen /> Enrolled courses</dt><dd>{data.courses.length}</dd></div>
       <div><dt><Layers /> Lessons complete</dt><dd>{completed.size}</dd></div>
       <div><dt><CreditCard /> Payments recorded</dt><dd>{money(data.receipts.reduce((sum, receipt) => sum + receipt.amount, 0))}</dd></div>
+      <div><dt><Award /> Attendance points</dt><dd>{data.live.points}</dd></div>
     </dl>
     <div className="pbs-overview-secondary">
       <Panel title="Enrollment activity" action={<button className="pbs-text-button" type="button" onClick={() => navigate('courses')}>View courses <ArrowRight /></button>}>
@@ -102,11 +102,7 @@ function StudentOverview({ data, completed, open, navigate }: {
           <strong>{enrollment.courseTitle}</strong><Status value={enrollment.status} />
         </div>)}
       </Panel>
-      <Panel title="Next live session">
-        {next ? <div className="pbs-inset">
-          <strong>{next.title}</strong><p className="pbs-muted">{dateTimeLabel(next.startsAt)} IST</p><ExternalLink href={next.url}>Join session</ExternalLink>
-        </div> : <Empty title="No upcoming sessions">Scheduled sessions from your courses will appear here.</Empty>}
-      </Panel>
+      <NextLiveSession data={data.live} onOpen={() => navigate('sessions')} />
     </div>
   </div>;
 }
@@ -187,7 +183,7 @@ function CourseAssessment({ course, onClose, onSaved, onCertificate }: { course:
 export function StudentWorkspace({ account, onAccount, onSignOut }: {
   account: Account; onAccount: (account: Account) => void; onSignOut: () => void;
 }) {
-  const [page, setPage] = useState<Page>('overview');
+  const [page, setPage] = useState<Page>(() => new URLSearchParams(location.search).get('page') === 'sessions' ? 'sessions' : 'overview');
   const [dialog, setDialog] = useState<Dialog>();
   const [notice, setNotice] = useState('');
   const { data, error, refresh } = useApiResource<StudentWorkspaceData>('/student/workspace');
@@ -233,13 +229,7 @@ export function StudentWorkspace({ account, onAccount, onSignOut }: {
       {data && page === 'portfolio' && <PortfolioBuilder account={account} portfolio={data.portfolio} certificates={academy.data?.certificates || []} onSaved={refreshAll} />}
       {page === 'profile' && <ProfilePage account={account} onAccount={onAccount} />}
       {page === 'explore' && catalog.data && <CatalogBrowser catalog={catalog.data} onChoose={course => show({ kind: 'course-info', course })} />}
-      {data && page === 'sessions' && <Panel title="Course sessions">
-        {!data.courses.some(course => course.sessions.length) && <Empty title="No sessions scheduled">PBS will publish session links here.</Empty>}
-        {data.courses.flatMap(course => course.sessions.map(session => <article className="pbs-record-row" key={session.id}>
-          <div><h3>{session.title}</h3><p className="pbs-muted">{course.title} · {dateTimeLabel(session.startsAt)} IST</p></div>
-          <ExternalLink href={session.url}>Open session</ExternalLink>
-        </article>))}
-      </Panel>}
+      {page === 'sessions' && <LiveClassesStudent />}
       {data && page === 'downloads' && <Panel title="Course resources">
         {!data.courses.some(course => course.resources.length) && <Empty title="No resources yet">Course files and practice materials will appear here.</Empty>}
         {data.courses.flatMap(course => course.resources.map(resource => <article className="pbs-record-row" key={resource.id}>

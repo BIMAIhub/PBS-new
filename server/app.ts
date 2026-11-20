@@ -13,6 +13,7 @@ import { mountNotifications } from './notifications.js';
 import { mountCurriculum } from './curriculum.js';
 import { generateLearningText } from './ai.js';
 import { mountBranding } from './branding.js';
+import { migrateLegacyLiveClasses, mountLiveClasses } from './live-classes.js';
 import { apiError, field, limitAttempts, RequestError, route } from './http.js';
 
 export async function createPortalApp(hosted = false) {
@@ -23,6 +24,7 @@ export async function createPortalApp(hosted = false) {
   try {
     await provisionInitialAdministrator(db);
     await provisionReferenceCatalog(db);
+    await migrateLegacyLiveClasses(db);
   } catch (error) {
     db.close();
     throw error;
@@ -53,6 +55,7 @@ export async function createPortalApp(hosted = false) {
   }));
   mountAuth(app, db, hosted);
   mountBranding(app, db, hosted);
+  mountLiveClasses(app, db, hosted);
   mountAdmin(app, db, hosted);
   mountStudent(app, db, hosted);
   mountMedia(app, db, hosted);

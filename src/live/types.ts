@@ -1,4 +1,5 @@
 import type { PriceQuote } from './experience-types';
+import type { StudentLiveData } from './live-session-types';
 export type Role = 'admin' | 'student';
 export type EnrollmentStatus = 'pending' | 'approved' | 'rejected';
 
@@ -94,6 +95,8 @@ export interface Receipt {
 }
 
 export interface StudentRecord extends Account {
+  livePoints: number;
+  attendedSessions: number;
   enrollments: Enrollment[];
   receipts: Receipt[];
   completedLessons: number;
@@ -152,6 +155,7 @@ export interface Portfolio {
 }
 
 export interface StudentWorkspaceData {
+  live: StudentLiveData;
   enrollments: Enrollment[];
   receipts: Receipt[];
   courses: Course[];

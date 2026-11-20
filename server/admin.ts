@@ -7,6 +7,7 @@ import { hashPassword, temporaryPassword, verifyPassword } from './passwords.js'
 import { adminWorkspace, courseById, courseDetails, enrollmentById, getAssessment, issueReceipt } from './records.js';
 import { academyWorkspace, audit } from './academy-data.js';
 import { grantCourseAccess } from './microsoft.js';
+import { saveLiveClass } from './live-classes.js';
 
 export function mountAdmin(app: Express, db: WritableDatabase, hosted: boolean) {
   app.patch('/api/admin/profile', limitAttempts(10, hosted ? db : undefined), route(async (req, res) => {
@@ -70,18 +71,19 @@ export function mountAdmin(app: Express, db: WritableDatabase, hosted: boolean) 
   }));
 
   app.post('/api/admin/courses/:id/links', route(async (req, res) => {
-    await requireAccount(db, req, 'admin');
+    const admin = await requireAccount(db, req, 'admin');
     await courseById(db, req.params.id);
     const kind = req.body?.kind;
     if (kind !== 'resource' && kind !== 'session') throw badRequest('Choose a resource or live session.');
+    if (kind === 'session') {
+      const start = Date.parse(field(req.body?.startsAt, 'session date', 50));
+      const session = await saveLiveClass(db, admin.id, { ...req.body, courseId: req.params.id, meetUrl: req.body?.url,
+        endsAt: req.body?.endsAt || (Number.isFinite(start) ? new Date(start + 60 * 60_000).toISOString() : ''), published: req.body?.published === true, accessConfirmed: req.body?.accessConfirmed === true });
+      res.status(201).json({ id: session.id }); return;
+    }
     const title = field(req.body?.title, 'title');
     const url = httpsLink(req.body?.url, 'link');
     let startsAt = '';
-    if (kind === 'session') {
-      const parsed = new Date(field(req.body?.startsAt, 'session date', 50));
-      if (Number.isNaN(parsed.getTime())) throw badRequest('Enter a valid session date and time.');
-      startsAt = parsed.toISOString();
-    }
     const id = makeId();
     await db.prepare('INSERT INTO course_links VALUES (?, ?, ?, ?, ?, ?)')
       .run(id, req.params.id, kind, title, url, startsAt);

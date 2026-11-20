@@ -18,6 +18,22 @@ export async function syncNotifications(db: Database, account: { id: string; rol
     await db.prepare(`${insert} SELECT 'task-submission:' || s.id || ':' || s.submitted_at || ':' || ?, ?, 'Assignment submitted', a.name || ' submitted ' || t.title,
       'assignment', 'curriculum', s.submitted_at FROM task_submissions s JOIN learning_tasks t ON t.id = s.task_id JOIN accounts a ON a.id = s.account_id WHERE s.reviewed_at = ''`).run(account.id, account.id);
   } else {
+    const knownLive = new Set((await db.prepare("SELECT id FROM notifications WHERE account_id = ? AND id LIKE 'live-%'").all(account.id)).map(item => String(item.id)));
+    const liveClasses = await db.prepare(`SELECT l.id, l.title, l.starts_at, l.ends_at, l.join_before, l.status, l.access_confirmed, l.revision
+      FROM live_classes l JOIN enrollments e ON e.course_id = l.course_id WHERE e.account_id = ? AND e.status = 'approved'
+      AND l.published = 1 AND (l.ends_at >= ? OR l.status = 'cancelled') ORDER BY l.starts_at LIMIT 100`).all(account.id, new Date(Date.now() - 24 * 60 * 60_000).toISOString());
+    for (const session of liveClasses) {
+      const time = new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kolkata' }).format(new Date(String(session.starts_at)));
+      const updateId = `live-update:${session.id}:${session.revision}:${account.id}`;
+      if (!knownLive.has(updateId)) await db.prepare(`${insert} VALUES (?, ?, ?, ?, 'session', 'sessions', ?)`)
+        .run(updateId, account.id, session.status === 'cancelled' ? 'Live session cancelled' : 'Live session scheduled or updated', `${session.title} — ${time} IST`, now());
+      const opens = Date.parse(String(session.starts_at)) - Number(session.join_before) * 60_000;
+      if (session.status === 'scheduled' && session.access_confirmed && Date.now() >= opens && Date.now() < Date.parse(String(session.ends_at))) {
+        const openId = `live-open:${session.id}:${session.revision}:${account.id}`;
+        if (!knownLive.has(openId)) await db.prepare(`${insert} VALUES (?, ?, 'Your live session is open', ?, 'session', 'sessions', ?)`)
+          .run(openId, account.id, `${session.title} — join from your live sessions page`, now());
+      }
+    }
     await db.prepare(`${insert} SELECT 'decision:' || e.id || ':' || e.status, ?, CASE WHEN e.status = 'approved' THEN 'Your course access is ready' ELSE 'Enrollment update' END,
       c.title || CASE WHEN e.status = 'approved' THEN ' — enrollment approved' ELSE ' — application declined' END,
       'enrollment', 'courses', CASE WHEN e.approved_at <> '' THEN e.approved_at ELSE e.submitted_at END

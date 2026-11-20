@@ -8,6 +8,24 @@ export const dataDirectory = path.resolve(process.env.PBS_DATA_DIR || 'data');
 export const videoDirectory = path.join(dataDirectory, 'videos');
 
 const schema = `
+    CREATE TABLE IF NOT EXISTS live_classes (
+      id TEXT PRIMARY KEY, course_id TEXT NOT NULL REFERENCES courses(id), title TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '', meet_url TEXT NOT NULL, starts_at TEXT NOT NULL, ends_at TEXT NOT NULL,
+      join_before INTEGER NOT NULL DEFAULT 10, points INTEGER NOT NULL DEFAULT 20, minimum_minutes INTEGER NOT NULL DEFAULT 15,
+      status TEXT NOT NULL DEFAULT 'scheduled' CHECK(status IN ('scheduled','cancelled')),
+      published INTEGER NOT NULL DEFAULT 0, access_confirmed INTEGER NOT NULL DEFAULT 0,
+      revision TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS live_classes_course_start ON live_classes(course_id, starts_at);
+    CREATE TABLE IF NOT EXISTS live_attendance (
+      class_id TEXT NOT NULL REFERENCES live_classes(id), account_id TEXT NOT NULL REFERENCES accounts(id),
+      first_joined_at TEXT NOT NULL DEFAULT '', last_joined_at TEXT NOT NULL DEFAULT '', join_count INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','present','partial','absent','excused')),
+      minutes INTEGER NOT NULL DEFAULT 0, awarded_points INTEGER NOT NULL DEFAULT 0,
+      verified_at TEXT NOT NULL DEFAULT '', verified_by TEXT NOT NULL DEFAULT '', source TEXT NOT NULL DEFAULT '',
+      PRIMARY KEY(class_id, account_id)
+    );
+    CREATE INDEX IF NOT EXISTS live_attendance_account ON live_attendance(account_id);
     CREATE TABLE IF NOT EXISTS promotions (
       id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
       kind TEXT NOT NULL CHECK(kind IN ('public','coupon','referral')), code TEXT NOT NULL DEFAULT '',

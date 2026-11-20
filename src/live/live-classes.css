@@ -1,0 +1,130 @@
+/* Gold-tinted glass reading surfaces, including the older standalone cards. */
+:root {
+  --pbs-glass: color-mix(in srgb, var(--studio-gold) 25%, color-mix(in srgb, var(--studio-paper) 87%, transparent));
+  --pbs-glass-raised: color-mix(in srgb, var(--studio-gold) 17%, color-mix(in srgb, var(--studio-paper) 95%, transparent));
+  --pbs-glass-border: color-mix(in srgb, var(--studio-gold) 54%, rgb(255 255 255 / .5));
+  --pbs-field-surface: color-mix(in srgb, var(--studio-gold) 8%, var(--studio-paper));
+}
+.pbs-topbar .pbs-account-name { color: #F4F7FA; }
+.pbs-topbar .pbs-account-trigger:hover .pbs-account-name { color: #fff4d9; }
+.pbs-offers-intro, .pbs-curriculum-intro, .pbs-profile-intro, .pbs-catalog-course, .pbs-course-apply-card,
+.pbs-curriculum-module, .pbs-cv-upload, .pbs-certificate-preview, .pbs-portfolio-hero, .pbs-draft-module,
+.pbs-learning-stats, .pbs-panel, .pbs-live-panel, .pbs-live-class-card {
+  background: var(--pbs-glass); border-color: var(--pbs-glass-border);
+  backdrop-filter: blur(18px) saturate(115%);
+  box-shadow: 0 8px 28px rgb(1 16 32 / .11), inset 0 1px 0 rgb(255 250 231 / .55);
+}
+.pbs-offers-intro, .pbs-curriculum-intro { border-left: 3px solid var(--studio-gold); border-radius: 18px; }
+.pbs-live-field :is(input:not([type='checkbox']), select, textarea), .pbs-catalog-filter, .pbs-live-search, .pbs-cv-upload {
+  background: var(--pbs-field-surface); border-color: #bdc6c9;
+}
+.pbs-live-field :is(input, select, textarea):focus { background: #fff9e9; }
+.pbs-inset, .pbs-appearance-toggle, .pbs-ledger-amounts > div, .pbs-drive-browser, .pbs-notification-unread {
+  background: color-mix(in srgb, var(--studio-gold) 14%, var(--studio-paper)); border-color: #d4c7a6;
+}
+.pbs-table thead th { background: #e9dfc5; color: #3f4e5b; }
+.pbs-table tbody tr:hover { background: rgb(212 169 77 / .1); }
+.pbs-button-outline, .pbs-role-control button[aria-pressed='true'] { background: #f7f0de; }
+.pbs-dialog, .pbs-notification-toast { background: var(--pbs-glass-raised); }
+.pbs-dialog-header .pbs-icon-button { background: #e6dcc2; }
+.pbs-live-status { background: #ece2c8; }
+.pbs-status-success { background: #dce8dd; }
+.pbs-portfolio-builder-heading, .pbs-studio-intro { padding: 24px; border: 1px solid var(--pbs-glass-border); border-radius: 18px; background: var(--pbs-glass); color: var(--studio-ink); }
+.pbs-brand-preview-glass { background: #efe7d5; }
+.pbs-classroom-dialog { background: #0a1d30; }
+.pbs-classroom-dialog .pbs-dialog-header .pbs-icon-button { background: rgb(255 255 255 / .1); }
+
+.pbs-live-session-banner { display: flex; align-items: center; gap: 24px; padding: 32px; border: 1px solid rgb(212 169 77 / .48); border-radius: 20px; background: linear-gradient(115deg, #0a2947, #13456f); color: #F4F7FA; }
+.pbs-live-session-banner > svg { color: var(--studio-gold); flex-shrink: 0; stroke-width: 1.5; }
+.pbs-live-session-banner > div > p { color: var(--studio-gold); font-size: 13px; margin-bottom: 12px; }
+.pbs-live-session-banner h2 { font-size: clamp(26px, 2.6vw, 36px); font-weight: 500; letter-spacing: -.03em; line-height: 1.15; }
+.pbs-live-session-banner > div > span { display: block; max-width: 660px; color: #c4d6e5; font-size: 15px; line-height: 1.6; margin-top: 12px; }
+.pbs-live-session-banner > .pbs-button { margin-left: auto; flex-shrink: 0; background: var(--studio-gold); color: #142d44; font-weight: 500; }
+.pbs-live-points { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin-left: auto; min-width: 180px; padding-left: 28px; border-left: 1px solid rgb(212 169 77 / .4); }
+.pbs-live-points svg { color: var(--studio-gold); align-self: center; }
+.pbs-live-points strong { color: var(--studio-gold); font-size: 40px; font-weight: 500; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.pbs-live-session-banner .pbs-live-points > span { grid-column: 1 / -1; font-size: 13px; margin-top: 4px; color: #d8e4ed; }
+.pbs-live-points small { grid-column: 1 / -1; font-size: 12px; color: #a6bfd3; margin-top: 4px; }
+.pbs-live-tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; background: #e5dbc3; border: 1px solid #d0c2a2; border-radius: 10px; }
+.pbs-live-tabs button { padding: 8px 12px; border-radius: 7px; font-size: 13px; color: #4a6073; transition: background-color 160ms ease, color 160ms ease; }
+.pbs-live-tabs button[aria-pressed='true'] { background: #f6efdD; color: var(--studio-accent); box-shadow: 0 1px 4px rgb(23 37 50 / .08); }
+.pbs-live-class-list { display: grid; gap: 20px; }
+.pbs-live-class-card { display: grid; gap: 24px; padding: 24px; border: 1px solid var(--pbs-glass-border); border-radius: 16px; }
+.pbs-panel .pbs-live-class-card { background: rgb(251 245 228 / .48); box-shadow: inset 0 1px 0 rgb(255 250 231 / .6); }
+.pbs-live-class-card.pbs-live-class-open { border-color: var(--studio-gold); box-shadow: inset 3px 0 0 var(--studio-gold), inset 0 1px 0 rgb(255 250 231 / .6); }
+.pbs-live-class-top { display: flex; align-items: center; gap: 16px; }
+.pbs-live-class-icon { display: grid; place-items: center; flex: 0 0 48px; height: 48px; border: 1px solid #d7c08c; border-radius: 12px; background: #e9d7af; color: #5d4b24; }
+.pbs-live-class-top > div { flex: 1; min-width: 0; }
+.pbs-live-class-top p { color: var(--studio-muted); font-size: 13px; line-height: 1.5; margin-bottom: 8px; }
+.pbs-live-class-top h3 { font-size: 23px; line-height: 1.25; letter-spacing: -.02em; font-weight: 500; overflow-wrap: anywhere; }
+.pbs-live-class-top > .pbs-live-status { flex-shrink: 0; }
+.pbs-live-class-description { color: #425a6d; font-size: 15px; line-height: 1.7; }
+.pbs-live-class-facts { display: flex; flex-wrap: wrap; gap: 16px 24px; color: #4d6172; font-size: 14px; }
+.pbs-live-class-facts > span { display: flex; align-items: center; gap: 8px; }
+.pbs-live-class-facts svg { flex-shrink: 0; color: #816227; }
+.pbs-live-class-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 16px 24px; }
+.pbs-live-class-actions small { color: #5c6b71; font-size: 13px; }
+.pbs-live-class-actions .pbs-button:disabled { opacity: 1; background: #ddd3b9; color: #5b604e; border-color: #c9bc9c; cursor: default; }
+.pbs-live-attendance-note { display: flex; gap: 12px; align-items: center; color: #59685e; font-size: 13px; line-height: 1.6; border-top: 1px solid #d7c8a7; padding-top: 20px; }
+.pbs-live-attendance-note svg { flex-shrink: 0; color: #89703d; }
+.pbs-live-attendance-note strong { font-weight: 500; }
+.pbs-live-attendance-earned { color: #235a43; }
+.pbs-live-attendance-earned svg { color: #2d7151; }
+.pbs-session-footnote { color: #c3d4df; font-size: 14px; line-height: 1.7; max-width: 1040px; padding: 4px 0; }
+.pbs-student-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.pbs-next-live { display: flex; gap: 16px; align-items: flex-start; padding-top: 8px; }
+.pbs-next-live > span { display: grid; place-items: center; flex: 0 0 48px; height: 48px; background: #e8d4a6; border: 1px solid #d2b477; border-radius: 12px; color: #756032; }
+.pbs-next-live h3 { font-size: 20px; font-weight: 500; margin-bottom: 12px; }
+.pbs-next-live .pbs-button { margin-top: 20px; }
+.pbs-live-session-filters { display: grid; grid-template-columns: minmax(0, 1fr) 240px; gap: 20px; margin-bottom: 24px; }
+.pbs-meet-access-guide { display: flex; gap: 16px; align-items: flex-start; padding: 20px; border: 1px solid #d3bb85; border-radius: 12px; background: #ece1c7; }
+.pbs-meet-access-guide > svg { color: #806124; flex-shrink: 0; }
+.pbs-meet-access-guide h3 { font-size: 17px; font-weight: 500; margin-bottom: 12px; }
+.pbs-meet-access-guide p { color: #495e6c; font-size: 14px; line-height: 1.7; }
+.pbs-meet-access-guide .pbs-actions, .pbs-meet-access-guide .pbs-text-button { margin-top: 16px; }
+.pbs-meet-access-guide .pbs-actions .pbs-text-button { margin-top: 0; }
+.pbs-dialog-live-attendance { width: min(1180px, calc(100% - 32px)); max-height: calc(100svh - 40px); }
+.pbs-attendance-session { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 20px; }
+.pbs-attendance-session h3 { font-size: 23px; font-weight: 500; margin-bottom: 12px; }
+.pbs-attendance-session > span { display: flex; align-items: center; gap: 8px; color: #755b26; font-size: 14px; }
+.pbs-attendance-table { min-width: 960px; }
+.pbs-attendance-table td:first-child { min-width: 200px; }
+.pbs-attendance-table td:nth-child(2), .pbs-attendance-table td:nth-child(3) { min-width: 180px; }
+.pbs-attendance-edit { display: flex; align-items: center; gap: 8px; min-width: 290px; }
+.pbs-attendance-edit :is(input, select) { min-height: 40px; border: 1px solid #bfc8c9; border-radius: 8px; background: #f6efde; color: #193b54; padding: 8px; font-size: 14px; }
+.pbs-attendance-edit select { width: 106px; }
+.pbs-attendance-edit input { width: 64px; }
+.pbs-attendance-edit .pbs-button { min-height: 40px; }
+.pbs-attendance-table .pbs-form-error { margin-top: 12px; font-size: 12px; }
+.pbs-attendance-import { display: grid; gap: 20px; border-top: 1px solid #cfc2a4; padding-top: 28px; }
+.pbs-attendance-import > div:first-child { display: flex; align-items: center; gap: 12px; color: #876930; }
+.pbs-attendance-import h3 { font-size: 22px; font-weight: 500; color: var(--studio-ink); }
+.pbs-attendance-import > .pbs-button { justify-self: start; }
+@supports not (backdrop-filter: blur(1px)) { :is(.pbs-curriculum-intro, .pbs-offers-intro, .pbs-live-class-card) { background: #e8dfc7; } }
+@media (max-width: 1000px) {
+  .pbs-student-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pbs-live-session-banner { flex-wrap: wrap; }
+  .pbs-live-session-banner > .pbs-button { margin-left: 60px; }
+  .pbs-live-points { border-left: 0; padding-left: 60px; margin-left: 0; }
+}
+@media (max-width: 650px) {
+  .pbs-live-session-banner { padding: 24px 20px; gap: 20px; }
+  .pbs-live-session-banner > svg { width: 28px; height: 28px; }
+  .pbs-live-session-banner > div:not(.pbs-live-points) { flex: 1; min-width: 200px; }
+  .pbs-live-session-banner > .pbs-button, .pbs-live-points { margin-left: 0; padding-left: 0; }
+  .pbs-live-class-card { padding: 20px 16px; gap: 20px; }
+  .pbs-live-class-top { flex-wrap: wrap; gap: 12px; }
+  .pbs-live-class-top h3 { font-size: 21px; }
+  .pbs-live-class-top > .pbs-live-status { margin-left: 60px; }
+  .pbs-live-class-facts { flex-direction: column; gap: 16px; }
+  .pbs-live-class-actions { align-items: stretch; gap: 16px; }
+  .pbs-live-class-actions > .pbs-button { flex: 1 1 100%; }
+  .pbs-live-session-filters { grid-template-columns: 1fr; gap: 16px; }
+  .pbs-meet-access-guide { padding: 16px; gap: 12px; }
+  .pbs-next-live { gap: 12px; }
+  .pbs-dialog-live-attendance { width: calc(100% - 16px); }
+  .pbs-live-tabs { width: 100%; }
+  .pbs-live-tabs button { flex: 1; }
+  .pbs-student-stats > div + div { border-left: none; }
+}
+@media print { .pbs-print-document, .pbs-certificate-paper { background: #fff !important; box-shadow: none !important; } }

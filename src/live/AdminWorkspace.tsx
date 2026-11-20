@@ -20,16 +20,18 @@ import { OffersAdmin } from './OffersAdmin';
 import { CurriculumAdmin } from './CurriculumAdmin';
 import { NotificationCenter } from './Notifications';
 import { BrandingAdmin } from './BrandingAdmin';
+import { LiveClassesAdmin } from './LiveClassesAdmin';
 import type { AdminAcademyData } from './academy-types';
 import type { Account, AdminWorkspaceData, Assignment, Course, Enrollment, Lesson, Receipt, StudentRecord } from './types';
 import { Button, dateLabel, dateTimeLabel, DialogForm, Empty, ExternalLink, Field, FormError, Input, money, Panel, Status, useApiResource, value } from './ui';
 
-type Page = 'overview' | 'students' | 'courses' | 'enrollments' | 'payments' | 'projects' | 'placements' | 'messages' | 'certificates' | 'integrations' | 'activity' | 'offers' | 'curriculum' | 'branding';
+type Page = 'overview' | 'students' | 'courses' | 'sessions' | 'enrollments' | 'payments' | 'projects' | 'placements' | 'messages' | 'certificates' | 'integrations' | 'activity' | 'offers' | 'curriculum' | 'branding';
 const groups: WorkspaceNavGroup<Page>[] = [
   { label: 'Administration', pages: [
     { id: 'overview', label: 'Academy overview', icon: LayoutDashboard },
     { id: 'students', label: 'Students', icon: Users },
     { id: 'courses', label: 'Courses & videos', icon: BookOpen },
+    { id: 'sessions', label: 'Live sessions & attendance', icon: Video },
     { id: 'curriculum', label: 'Curriculum & assignments', icon: FilePenLine },
     { id: 'offers', label: 'Offers & referrals', icon: Tag },
     { id: 'enrollments', label: 'Enrollments', icon: ClipboardList },
@@ -88,13 +90,13 @@ function Roster({ data, open, onCreateCourse }: { data: AdminWorkspaceData; open
         placeholder="Find by name, email or student ID" value={query} onChange={event => setQuery(event.target.value)} /></label>
       {students.length ? <div className="pbs-table-scroll">
         <table className="pbs-table">
-          <thead><tr><th>Student</th><th>Student ID</th><th>Courses</th><th>Balance</th><th><span className="sr-only">Actions</span></th></tr></thead>
+          <thead><tr><th>Student</th><th>Student ID</th><th>Courses</th><th>Live attendance</th><th>Balance</th><th><span className="sr-only">Actions</span></th></tr></thead>
           <tbody>{students.map(student => {
             const active = student.enrollments.filter(enrollment => enrollment.status === 'approved');
             const balance = active.reduce((sum, enrollment) => sum + enrollment.total - enrollment.paid, 0);
             return <tr key={student.id}>
               <td><strong>{student.name}</strong><small>{student.email}</small></td>
-              <td>{student.id}</td><td>{active.length}</td><td>{money(balance)}</td>
+              <td>{student.id}</td><td>{active.length}</td><td><strong>{student.livePoints} points</strong><small>{student.attendedSessions} sessions confirmed</small></td><td>{money(balance)}</td>
               <td><button className="pbs-text-button" type="button" onClick={() => open({ kind: 'record', student })}>Open record <ArrowRight /></button></td>
             </tr>;
           })}</tbody>
@@ -106,7 +108,7 @@ function Roster({ data, open, onCreateCourse }: { data: AdminWorkspaceData; open
   </div>;
 }
 
-function CourseManager({ courses, open }: { courses: Course[]; open: (dialog: Dialog) => void }) {
+function CourseManager({ courses, open, onSessions }: { courses: Course[]; open: (dialog: Dialog) => void; onSessions: (courseId: string, create: boolean) => void }) {
   return <Panel title="Course library" action={<Button onClick={() => open({ kind: 'course' })}><Plus size={18} /> Create course</Button>}>
     {!courses.length && <Empty title="Create your first course">Add a course, create a module and upload a lesson.</Empty>}
     {courses.map(course => <article className="pbs-course-admin" key={course.id}>
@@ -135,13 +137,13 @@ function CourseManager({ courses, open }: { courses: Course[]; open: (dialog: Di
           </div>)}
           <div className="pbs-actions">
             <Button quiet onClick={() => open({ kind: 'link', course, type: 'resource' })}>Add resource</Button>
-            <Button quiet onClick={() => open({ kind: 'link', course, type: 'session' })}>Schedule session</Button>
+            <Button quiet onClick={() => onSessions(course.id, true)}>Schedule live session</Button>
+            <Button quiet onClick={() => onSessions(course.id, false)}>Live attendance</Button>
             <Button quiet onClick={() => open({ kind: 'assessment', course })}>{course.assessmentAvailable ? 'Edit assessment' : 'Add assessment'}</Button>
             <Button quiet disabled={!course.modules.some(module => module.lessons.length)} onClick={() => open({ kind: 'preview', course })}>Preview classroom</Button>
           </div>
           {(course.resources.length > 0 || course.sessions.length > 0) && <div className="pbs-inset">
             {course.resources.map(resource => <p key={resource.id}><ExternalLink href={resource.url}>{resource.title}</ExternalLink></p>)}
-            {course.sessions.map(session => <p key={session.id}><ExternalLink href={session.url}>{session.title} · {dateTimeLabel(session.startsAt)}</ExternalLink></p>)}
           </div>}
         </div>
       </details>
@@ -207,9 +209,13 @@ function StudentRecordPanel({ student, open, onClose, onSaved }: { student: Stud
 export function AdminWorkspace({ account, onAccount, onSignOut }: {
   account: Account; onAccount: (account: Account) => void; onSignOut: () => void;
 }) {
-  const [page, setPage] = useState<Page>(() => new URLSearchParams(location.search).has('integration') ? 'integrations' : 'overview');
+  const [page, setPage] = useState<Page>(() => {
+    const query = new URLSearchParams(location.search);
+    return query.has('integration') ? 'integrations' : query.get('page') === 'sessions' ? 'sessions' : 'overview';
+  });
   const [dialog, setDialog] = useState<Dialog>();
   const [notice, setNotice] = useState('');
+  const [liveCourse, setLiveCourse] = useState(''), [createLive, setCreateLive] = useState(false);
   const { data, error, refresh } = useApiResource<AdminWorkspaceData>('/admin/workspace');
   const academy = useApiResource<AdminAcademyData>('/admin/academy');
   async function refreshAll() { await Promise.all([refresh(), academy.refresh()]); }
@@ -229,6 +235,7 @@ export function AdminWorkspace({ account, onAccount, onSignOut }: {
     else { close(); setNotice('Student enrolled.'); }
   }
   function navigate(next: Page) {
+    if (next !== 'sessions') { setLiveCourse(''); setCreateLive(false); }
     setPage(next);
     setNotice('');
     window.scrollTo({ top: 0, behavior: 'instant' });
@@ -254,7 +261,8 @@ export function AdminWorkspace({ account, onAccount, onSignOut }: {
       {!data && !error && <p className="pbs-muted" role="status">Loading records…</p>}
       {data && page === 'overview' && <AdminOverview data={data} academy={academy.data} navigate={navigate} onEnroll={() => data.courses.length ? show({ kind: 'enroll' }) : show({ kind: 'course' })} />}
       {data && page === 'students' && <Roster data={data} open={show} onCreateCourse={() => show({ kind: 'course' })} />}
-      {data && page === 'courses' && <CourseManager courses={data.courses} open={show} />}
+      {data && page === 'courses' && <CourseManager courses={data.courses} open={show} onSessions={(courseId, create) => { navigate('sessions'); setLiveCourse(courseId); setCreateLive(create); }} />}
+      {data && page === 'sessions' && <LiveClassesAdmin courses={data.courses} initialCourseId={liveCourse} createOnOpen={createLive} onChanged={refreshAll} />}
       {data && page === 'curriculum' && <CurriculumAdmin courses={data.courses} onSaved={refreshAll} />}
       {data && page === 'offers' && <OffersAdmin courses={data.courses} students={data.students} />}
       {page === 'branding' && <BrandingAdmin />}
