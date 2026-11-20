@@ -6,6 +6,7 @@ import { accountFields, publicAccount } from './auth.js';
 import { type Database, makeId, now } from './database.js';
 import { conflict, notFound, badRequest } from './http.js';
 import { videoPlayback } from './video.js';
+import { audit } from './academy-data.js';
 
 const courseFields = `id, title, description, category, instructor, schedule, fee, published`;
 const enrollmentFields = `e.id, e.account_id AS studentId, a.name AS studentName, a.email,
@@ -101,6 +102,7 @@ export async function issueReceipt(db: Database, enrollmentId: string, amount: n
   await db.prepare(`INSERT INTO receipts (id, enrollment_id, amount, method, reference, issued_at, issued_by, student_name, course_title)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(id, enrollmentId, amount, method, reference, issuedAt, adminId, enrollment.studentName, enrollment.courseTitle);
+  await audit(db, adminId || 'PBS', 'Payment verified', enrollmentId, `${enrollment.studentName} · INR ${(amount / 100).toFixed(2)} · ${method}`);
   return receiptNumber(await db.prepare(`SELECT ${receiptFields} ${receiptJoin} WHERE r.id = ?`).get(id) as unknown as ReceiptRow);
 }
 
@@ -122,7 +124,9 @@ export async function messages(db: Database, studentId?: string): Promise<Messag
 export async function portfolio(db: Database, studentId: string): Promise<Portfolio> {
   const row = await db.prepare('SELECT headline, bio, project_url AS projectUrl, published FROM portfolios WHERE account_id = ?')
     .get(studentId) as unknown as Portfolio | undefined;
-  return row ? { ...row, published: Boolean(row.published) } : { headline: '', bio: '', projectUrl: '', published: false };
+  const links = await db.prepare('SELECT linkedin, github, website FROM portfolio_links WHERE account_id = ?').get(studentId);
+  return { ...(row ? { ...row, published: Boolean(row.published) } : { headline: '', bio: '', projectUrl: '', published: false }),
+    linkedin: String(links?.linkedin || ''), github: String(links?.github || ''), website: String(links?.website || '') };
 }
 
 export async function studentWorkspace(db: Database, account: Account) {

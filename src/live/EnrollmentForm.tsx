@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ArrowRight, BookOpen, CreditCard } from 'lucide-react';
 import { PortalDialog } from '../components/student-dashboard/PortalUI';
 import { send } from './api';
@@ -20,7 +20,7 @@ export function CatalogDialog({ catalog, onChoose, onClose }: {
 
 function PaymentFields({ catalog, balance, optional }: { catalog: Catalog; balance: number; optional?: boolean }) {
   const [amount, setAmount] = useState(optional ? '' : String(balance / 100));
-  if (!catalog.paymentUpiId || balance === 0) return null;
+  const [qrCode, setQrCode] = useState('');
   const amountNumber = Number(amount);
   const paymentUrl = `upi://pay?${new URLSearchParams({
     pa: catalog.paymentUpiId,
@@ -28,6 +28,14 @@ function PaymentFields({ catalog, balance, optional }: { catalog: Catalog; balan
     cu: 'INR',
     ...(amountNumber > 0 ? { am: amountNumber.toFixed(2) } : {}),
   })}`;
+  const validAmount = amountNumber > 0 && amountNumber * 100 <= balance;
+  useEffect(() => {
+    let active = true;
+    setQrCode('');
+    if (catalog.paymentUpiId && validAmount) void import('qrcode').then(qr => qr.toDataURL(paymentUrl, { width: 220, margin: 1, color: { dark: '#152C42', light: '#FFFFFF' } })).then(url => { if (active) setQrCode(url); }).catch(() => {});
+    return () => { active = false; };
+  }, [paymentUrl, catalog.paymentUpiId, validAmount]);
+  if (!catalog.paymentUpiId || balance === 0) return null;
   return <div className="pbs-inset pbs-payment-fields">
     <div className="pbs-inline-label"><CreditCard size={18} /><strong>UPI payment{optional ? ' (optional)' : ''}</strong></div>
     <p className="pbs-muted">Pay {catalog.paymentName} at <strong>{catalog.paymentUpiId}</strong> and enter the bank UTR. PBS issues a receipt after verifying payment.</p>
@@ -36,7 +44,7 @@ function PaymentFields({ catalog, balance, optional }: { catalog: Catalog; balan
         value={amount} onChange={event => setAmount(event.target.value)} required={!optional} />
       <Input label="Bank UTR" name="reference" maxLength={80} required={amountNumber > 0} />
     </div>
-    <a className="pbs-text-button" href={paymentUrl}>Open UPI payment <ArrowRight /></a>
+    {validAmount && <div className="pbs-payment-qr">{qrCode && <img src={qrCode} width="180" height="180" alt={`UPI payment QR for ${catalog.paymentName}`} />}<div><strong>Scan to pay {money(Math.round(amountNumber * 100))}</strong><p className="pbs-muted">Use any UPI app. Check the payee name before completing payment.</p><a className="pbs-button pbs-button-primary" href={paymentUrl}>Pay with UPI <ArrowRight size={17} /></a></div></div>}
   </div>;
 }
 

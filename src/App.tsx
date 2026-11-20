@@ -5,6 +5,7 @@ import { api, messageFrom, send } from './live/api';
 import { SignIn } from './live/SignIn';
 import type { Account, Portfolio } from './live/types';
 import { Button, ExternalLink, FormError, useApiResource } from './live/ui';
+import { PublicCertificate } from './live/Certificates';
 
 const AdminWorkspace = lazy(() => import('./live/AdminWorkspace').then(module => ({ default: module.AdminWorkspace })));
 const StudentWorkspace = lazy(() => import('./live/StudentWorkspace').then(module => ({ default: module.StudentWorkspace })));
@@ -27,6 +28,7 @@ function PublicPortfolio({ id }: { id: string }) {
       <h2>{data.portfolio.headline}</h2>
       <p className="pbs-muted pbs-pre-wrap">{data.portfolio.bio}</p>
       {data.portfolio.projectUrl && <ExternalLink href={data.portfolio.projectUrl}>Open BIM project</ExternalLink>}
+      <div className="pbs-actions">{data.portfolio.linkedin && <ExternalLink href={data.portfolio.linkedin}>LinkedIn</ExternalLink>}{data.portfolio.github && <ExternalLink href={data.portfolio.github}>GitHub</ExternalLink>}{data.portfolio.website && <ExternalLink href={data.portfolio.website}>Website</ExternalLink>}</div>
     </>}
     <a className="pbs-text-button" href="/">Back to PBS</a>
   </main>;
@@ -74,6 +76,8 @@ function Portal() {
 }
 
 export default function App() {
+  const certificateToken = window.location.pathname.match(/^\/verify\/certificate\/([\w-]+)$/)?.[1];
+  if (certificateToken) return <PublicCertificate token={certificateToken} />;
   const id = portfolioId();
   return id ? <PublicPortfolio id={id} /> : <Portal />;
 }

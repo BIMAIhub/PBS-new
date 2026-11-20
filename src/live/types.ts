@@ -140,6 +140,9 @@ export interface Portfolio {
   bio: string;
   projectUrl: string;
   published: boolean;
+  linkedin?: string;
+  github?: string;
+  website?: string;
 }
 
 export interface StudentWorkspaceData {

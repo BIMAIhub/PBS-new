@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Pragmatic BIM Solution">
-  <rect width="64" height="64" rx="13" fill="#203d30"/>
-  <path d="M13 24 32 13 51 24v17L32 52 13 41Z" fill="none" stroke="#d8e9d5" stroke-width="2.5" stroke-linejoin="round"/>
-  <path d="M13 24 32 35l19-11M32 35v17M13 33l19 11 19-11M23 18l19 11v8" fill="none" stroke="#d8e9d5" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M32 13v9" fill="none" stroke="#a8c79d" stroke-width="2.5" stroke-linecap="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="Pragmatic BIM Solution">
+  <rect width="64" height="64" rx="13" fill="#176BB7"/>
+  <path d="M13 24 32 13 51 24v17L32 52 13 41Z" fill="none" stroke="#F4F7FA" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M13 24 32 35l19-11M32 35v17M13 33l19 11 19-11M23 18l19 11v8" fill="none" stroke="#F4F7FA" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M32 13v9" fill="none" stroke="#D4A94D" stroke-width="2.5" stroke-linecap="round"/>
 </svg>

@@ -66,12 +66,15 @@ export function PortfolioForm({ account, portfolio, onClose, onSaved }: {
     onSubmit={async form => {
       await send('/student/portfolio', {
         headline: value(form, 'headline'), bio: value(form, 'bio'), projectUrl: value(form, 'url'), published: form.has('published'),
+        linkedin: value(form, 'linkedin'), github: value(form, 'github'), website: value(form, 'website'),
       }, 'PATCH');
       await onSaved();
     }}>
     <Input label="Headline" name="headline" defaultValue={portfolio.headline} maxLength={160} />
     <Field label="Project summary"><textarea name="bio" rows={5} maxLength={5000} defaultValue={portfolio.bio} /></Field>
     <Input label="Project link" name="url" type="url" defaultValue={portfolio.projectUrl} />
+    <Input label="LinkedIn profile" name="linkedin" type="url" defaultValue={portfolio.linkedin} placeholder="https://www.linkedin.com/in/your-profile" />
+    <div className="pbs-form-grid"><Input label="GitHub profile" name="github" type="url" defaultValue={portfolio.github} /><Input label="Personal website" name="website" type="url" defaultValue={portfolio.website} /></div>
     <label className="pbs-check"><input type="checkbox" name="published" defaultChecked={portfolio.published} /> Publish my portfolio link</label>
     {portfolio.published && <a className="pbs-text-button" href={`/portfolio/${encodeURIComponent(account.id)}`} target="_blank" rel="noreferrer">View public portfolio <ArrowUpRight /></a>}
   </DialogForm>;

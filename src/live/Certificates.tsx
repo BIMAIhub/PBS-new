@@ -1,0 +1,161 @@
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { Award, Check, Copy, Download, ExternalLink as LinkIcon, LockKeyhole, Share2, ShieldCheck } from 'lucide-react';
+import { PortalDialog } from '../components/student-dashboard/PortalUI';
+import { api, messageFrom, send } from './api';
+import type { AcademyData, CertificateRecord, CertificateTemplate } from './academy-types';
+import type { Course, StudentWorkspaceData } from './types';
+import { Button, dateLabel, DialogForm, Empty, Field, FormError, Input, Panel, Status, useApiResource, value } from './ui';
+
+const initialTemplate: CertificateTemplate = { courseId: '', title: 'Certificate of completion', issuer: 'Pragmatic BIM Solution', signer: 'Academic Director', signerRole: 'Authorized signatory', design: 'architectural', primaryColor: '#176BB7', accentColor: '#D4A94D' };
+export type CertificateView = Pick<CertificateRecord, 'id' | 'studentName' | 'courseTitle' | 'issuedAt' | 'revokedAt' | 'template'>;
+export const verificationUrl = (record: CertificateRecord) => `${location.origin}/verify/certificate/${encodeURIComponent(record.publicToken)}`;
+export const linkedInShareUrl = (url: string) => `https://www.linkedin.com/sharing/share-offsite/?${new URLSearchParams({ url })}`;
+
+export function CertificatePaper({ record, preview = false }: { record: CertificateView; preview?: boolean }) {
+  const template = record.template;
+  return <article className={`pbs-certificate-paper pbs-certificate-${template.design}`} style={{ '--cert-primary': template.primaryColor, '--cert-accent': template.accentColor } as CSSProperties}>
+    <div className="pbs-cert-header"><img src="/pbs-logo.svg" width="48" height="48" alt="PBS" /><span>{template.issuer}<small>PROFESSIONAL BIM EDUCATION</small></span><span className="pbs-cert-seal"><Award size={31} /></span></div>
+    <div className="pbs-cert-content"><p className="pbs-cert-eyebrow">LEARNING. APPLIED.</p><h2>{template.title}</h2><p>This is to certify that</p><h3>{record.studentName}</h3><p>has successfully completed the learning requirements and assessment for</p><h4>{record.courseTitle}</h4><div className="pbs-cert-line" /></div>
+    <div className="pbs-cert-bottom"><div><strong>{template.signer}</strong><small>{template.signerRole}</small></div><div><strong>{preview ? 'Issue date' : dateLabel(record.issuedAt)}</strong><small>{preview ? 'Certificate ID assigned on completion' : record.id}</small></div></div>
+    {record.revokedAt && <div className="pbs-cert-revoked">Revoked</div>}
+  </article>;
+}
+
+export async function downloadCertificate(record: CertificateRecord) {
+  const [{ jsPDF }, qr] = await Promise.all([import('jspdf'), import('qrcode')]);
+  const pdf = new jsPDF({ orientation: 'landscape', format: 'a4', unit: 'mm', compress: true });
+  const t = record.template;
+  const fitText = (text: string, width: number, size: number, minSize: number, maxLines = 2) => {
+    pdf.setFontSize(size);
+    let lines: string[] = pdf.splitTextToSize(text, width);
+    while (lines.length > maxLines && size > minSize) { pdf.setFontSize(--size); lines = pdf.splitTextToSize(text, width); }
+    return lines;
+  };
+  pdf.setFillColor('#ffffff'); pdf.rect(0, 0, 297, 210, 'F');
+  pdf.setDrawColor(t.primaryColor); pdf.setLineWidth(t.design === 'classic' ? 1 : 0.5); pdf.rect(10, 10, 277, 190);
+  pdf.setDrawColor(t.accentColor); pdf.setLineWidth(1); pdf.line(18, 17, 279, 17);
+  if (t.design === 'architectural') { pdf.setFillColor(t.primaryColor); pdf.rect(10, 10, 5, 190, 'F'); pdf.setFillColor(t.accentColor); pdf.triangle(260, 10, 287, 10, 287, 37, 'F'); }
+  if (t.design === 'classic') { pdf.setDrawColor(t.accentColor); pdf.setLineWidth(0.3); pdf.rect(14, 14, 269, 182); }
+  pdf.setFillColor(t.primaryColor); pdf.roundedRect(26, 25, 15, 15, 2.5, 2.5, 'F');
+  pdf.setDrawColor('#ffffff'); pdf.setLineWidth(0.45);
+  const cube = [[29, 30, 33.5, 27.4], [33.5, 27.4, 38, 30], [38, 30, 38, 34], [38, 34, 33.5, 36.6], [33.5, 36.6, 29, 34], [29, 34, 29, 30], [29, 30, 33.5, 32.6], [33.5, 32.6, 38, 30], [33.5, 32.6, 33.5, 36.6], [29, 32.3, 33.5, 34.9], [33.5, 34.9, 38, 32.3]];
+  for (const [x1, y1, x2, y2] of cube) pdf.line(x1, y1, x2, y2);
+  pdf.setTextColor(t.primaryColor); pdf.setFont('helvetica', 'bold'); pdf.setFontSize(15);
+  pdf.text(fitText(t.issuer, 190, 15, 11), 148.5, 32, { align: 'center' });
+  pdf.setFontSize(8); pdf.setFont('helvetica', 'normal'); pdf.text('PROFESSIONAL BIM EDUCATION', 148.5, 40, { align: 'center' });
+  pdf.setFont('helvetica', 'bold'); pdf.text(fitText(t.title, 245, 27, 16), 148.5, 59, { align: 'center' });
+  pdf.setTextColor('#5e6c7b'); pdf.setFont('helvetica', 'normal'); pdf.setFontSize(11); pdf.text('This is to certify that', 148.5, 79, { align: 'center' });
+  pdf.setTextColor('#152c42'); pdf.setFont('helvetica', 'bold'); pdf.text(fitText(record.studentName, 240, 26, 14), 148.5, 94, { align: 'center' });
+  pdf.setFont('helvetica', 'normal'); pdf.setFontSize(10); pdf.setTextColor('#5e6c7b'); pdf.text('has successfully completed the learning requirements and assessment for', 148.5, 115, { align: 'center' });
+  pdf.setTextColor(t.primaryColor); pdf.setFont('helvetica', 'bold'); pdf.text(fitText(record.courseTitle, 225, 17, 12), 148.5, 129, { align: 'center' });
+  pdf.setDrawColor(t.accentColor); pdf.line(115, 151, 182, 151);
+  pdf.setTextColor('#152c42'); pdf.text(fitText(t.signer, 85, 11, 8), 28, 167);
+  pdf.setFont('helvetica', 'normal'); pdf.text(fitText(t.signerRole, 85, 9, 7), 28, 182);
+  pdf.setFontSize(9); pdf.text(`Issued ${dateLabel(record.issuedAt)}`, 210, 166); pdf.setFontSize(7); pdf.text(record.id, 210, 176);
+  if (record.published && !record.revokedAt) {
+    const url = verificationUrl(record);
+    pdf.addImage(await qr.toDataURL(url, { margin: 1, width: 160, errorCorrectionLevel: 'M' }), 'PNG', 131, 158, 27, 27);
+    pdf.link(131, 158, 27, 27, { url }); pdf.text('Verify credential', 144.5, 190, { align: 'center' });
+  } else { pdf.setFontSize(8); pdf.text('Private credential | Verification can be enabled in your PBS workspace.', 148.5, 190, { align: 'center' }); }
+  if (record.revokedAt) { pdf.setTextColor('#b83b34'); pdf.setFontSize(46); pdf.text('REVOKED', 148.5, 108, { align: 'center' }); }
+  pdf.save(`${record.id}.pdf`);
+}
+
+export function CertificateDialog({ record, onClose }: { record: CertificateRecord; onClose: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  return <PortalDialog title="Your course certificate" className="pbs-dialog-wide pbs-certificate-dialog" onClose={onClose}>
+    <CertificatePaper record={record} /><FormError error={error} />
+    <footer className="pbs-dialog-actions"><Button disabled={busy || Boolean(record.revokedAt)} onClick={async () => {
+      setBusy(true); setError(''); try { await downloadCertificate(record); } catch (error) { setError(messageFrom(error)); } finally { setBusy(false); }
+    }}><Download size={17} /> {busy ? 'Preparing PDF…' : 'Download certificate'}</Button></footer>
+  </PortalDialog>;
+}
+
+export function StudentCertificates({ data, academy, onSaved }: { data: StudentWorkspaceData; academy: AcademyData; onSaved: () => Promise<unknown> }) {
+  const [selected, setSelected] = useState<CertificateRecord>();
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState('');
+  const [copied, setCopied] = useState('');
+  const completed = new Set(data.completions.map(item => item.lessonId));
+  return <div className="pbs-live-stack">
+    <section className="pbs-achievement-banner"><span className="pbs-achievement-icon"><Award size={39} /></span><div><p className="pbs-eyebrow">YOUR WORK, RECOGNIZED</p><h2>Turn your learning into a credential.</h2><p>Complete your lessons, pass the assessment, and share what you have earned.</p></div><strong>{academy.certificates.filter(item => !item.revokedAt).length}<small>certificates earned</small></strong></section>
+    <FormError error={error} />
+    {!data.courses.length && <Panel title="Course achievements"><Empty title="Your next achievement starts here">Enroll in a course to begin working toward a PBS certificate.</Empty></Panel>}
+    <div className="pbs-certificate-grid">{data.courses.map(course => {
+      const record = academy.certificates.find(item => item.courseId === course.id);
+      const lessons = course.modules.flatMap(module => module.lessons);
+      const done = lessons.filter(lesson => completed.has(lesson.id)).length;
+      const passed = data.assessmentResults.find(item => item.courseId === course.id)?.passed;
+      const eligible = lessons.length > 0 && done === lessons.length && passed;
+      return <Panel key={course.id} title={course.title} className="pbs-achievement-card">
+        <span className="pbs-achievement-card-icon"><Award size={32} /></span>
+        <Status value={record?.revokedAt ? 'Revoked' : record ? 'Earned' : eligible ? 'Ready to claim' : 'In progress'} />
+        <p className="pbs-muted">{done} of {lessons.length} lessons complete · {passed ? 'Assessment passed' : 'Assessment required'}</p>
+        <progress max={Math.max(lessons.length, 1)} value={done} aria-label={`${course.title} certificate progress`} />
+        {record && !record.revokedAt ? <>
+          <p className="pbs-reference">{record.id}</p><div className="pbs-actions"><Button onClick={() => setSelected(record)}><Download size={16} /> View & download</Button></div>
+          <label className="pbs-check"><input type="checkbox" checked={record.published} disabled={busy === record.id} onChange={async event => {
+            const published = event.target.checked; setBusy(record.id); setError('');
+            try { await send(`/student/certificates/${record.id}`, { published }, 'PATCH'); await onSaved(); } catch (error) { setError(messageFrom(error)); } finally { setBusy(''); }
+          }} /> Enable public verification</label><p className="pbs-muted pbs-small">Publishes your name, course and credential details. Your email and payment records stay private.</p>
+          {record.published && <div className="pbs-actions"><a className="pbs-button pbs-button-outline" href={linkedInShareUrl(verificationUrl(record))} target="_blank" rel="noopener noreferrer"><Share2 size={16} /> Share to LinkedIn</a><a className="pbs-text-button" href={`https://www.linkedin.com/profile/add?${new URLSearchParams({ startTask: 'CERTIFICATION_NAME', name: course.title, organizationName: record.template.issuer, issueYear: String(new Date(record.issuedAt).getFullYear()), issueMonth: String(new Date(record.issuedAt).getMonth() + 1), certId: record.id, certUrl: verificationUrl(record) })}`} target="_blank" rel="noopener noreferrer">Add credential <LinkIcon size={15} /></a><Button quiet onClick={async () => { try { await navigator.clipboard.writeText(verificationUrl(record)); setCopied(record.id); } catch { setError('Copy the verification URL from View certificate.'); } }}>{copied === record.id ? <Check size={16} /> : <Copy size={16} />} {copied === record.id ? 'Copied' : 'Copy link'}</Button><a className="pbs-text-button" href={verificationUrl(record)} target="_blank" rel="noreferrer">Verify <LinkIcon size={15} /></a></div>}
+        </> : <Button disabled={!eligible || Boolean(record?.revokedAt) || busy === course.id} onClick={async () => {
+          setBusy(course.id); setError('');
+          try { const record = await send<CertificateRecord>(`/student/courses/${course.id}/certificate`); await onSaved(); setSelected(record); }
+          catch (error) { setError(messageFrom(error)); } finally { setBusy(''); }
+        }}>{eligible ? <Award size={16} /> : <LockKeyhole size={16} />} {busy === course.id ? 'Issuing…' : 'Claim certificate'}</Button>}
+      </Panel>;
+    })}</div>
+    {selected && <CertificateDialog record={selected} onClose={() => setSelected(undefined)} />}
+  </div>;
+}
+
+export function CertificateStudio({ courses, records, onSaved }: { courses: Course[]; records: CertificateRecord[]; onSaved: () => Promise<unknown> }) {
+  const [courseId, setCourseId] = useState('');
+  const [draft, setDraft] = useState<CertificateTemplate>(initialTemplate);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const requestVersion = useRef(0);
+  const [selected, setSelected] = useState<CertificateRecord>();
+  const [revoking, setRevoking] = useState<CertificateRecord>();
+  async function load(id: string) {
+    const version = ++requestVersion.current; setCourseId(id); setLoading(true); setError(''); setNotice('');
+    try { const result = await api<CertificateTemplate>(`/admin/certificate-template?courseId=${encodeURIComponent(id)}`); if (version === requestVersion.current) setDraft({ ...result, courseId: id }); }
+    catch (error) { if (version === requestVersion.current) setError(messageFrom(error)); } finally { if (version === requestVersion.current) setLoading(false); }
+  }
+  useEffect(() => { void load(''); }, []);
+  return <div className="pbs-live-stack">
+    <div className="pbs-studio-intro"><span className="pbs-eyebrow">PBS CREDENTIAL STUDIO</span><h2>Make every achievement feel earned.</h2><p className="pbs-muted">Set your academy style, or customize a certificate for a specific course.</p></div>
+    <div className="pbs-certificate-editor">
+      <Panel title="Design settings"><form className="pbs-live-form" onSubmit={async event => {
+        event.preventDefault(); if (loading) return; setLoading(true); setError(''); setNotice('');
+        try { await send('/admin/certificate-template', { ...draft, courseId }, 'PUT'); await onSaved(); setNotice('Certificate design saved.'); }
+        catch (error) { setError(messageFrom(error)); } finally { setLoading(false); }
+      }}><Field label="Apply design to"><select value={courseId} onChange={event => void load(event.target.value)}><option value="">All courses (default)</option>{courses.map(course => <option value={course.id} key={course.id}>{course.title}</option>)}</select></Field>
+        <Field label="Certificate design"><select value={draft.design} onChange={event => setDraft(current => ({ ...current, design: event.target.value as CertificateTemplate['design'] }))}><option value="architectural">Architectural</option><option value="classic">Classic frame</option><option value="minimal">Minimal</option></select></Field>
+        <Input label="Certificate title" value={draft.title} maxLength={120} required onChange={event => setDraft(current => ({ ...current, title: event.target.value }))} />
+        <Input label="Issuer" value={draft.issuer} maxLength={120} required onChange={event => setDraft(current => ({ ...current, issuer: event.target.value }))} />
+        <div className="pbs-form-grid"><Input label="Primary color" type="color" value={draft.primaryColor} onChange={event => setDraft(current => ({ ...current, primaryColor: event.target.value }))} /><Input label="Accent color" type="color" value={draft.accentColor} onChange={event => setDraft(current => ({ ...current, accentColor: event.target.value }))} /></div>
+        <Input label="Signatory name" value={draft.signer} maxLength={120} required onChange={event => setDraft(current => ({ ...current, signer: event.target.value }))} />
+        <Input label="Signatory role" value={draft.signerRole} maxLength={120} required onChange={event => setDraft(current => ({ ...current, signerRole: event.target.value }))} />
+        <FormError error={error} />{notice && <p className="pbs-form-status" role="status">{notice}</p>}<button className="pbs-button pbs-button-primary" disabled={loading}>{loading ? 'Saving…' : 'Save design'}</button>
+      </form></Panel>
+      <div className="pbs-certificate-preview"><p className="pbs-eyebrow">LIVE PREVIEW</p><CertificatePaper preview record={{ id: '', studentName: 'Recipient name', courseTitle: courses.find(item => item.id === courseId)?.title || 'Course title', issuedAt: '', revokedAt: '', template: draft }} /><p className="pbs-muted pbs-small">Recipient details and credential IDs come from actual completed enrollments. Design changes also update certificate downloads.</p></div>
+    </div>
+    <Panel title="Issued credentials">{!records.length && <Empty title="No credentials issued yet">Students earn certificates by completing every lesson and passing the assessment.</Empty>}{records.map(record => <article className="pbs-record-row" key={record.id}><div><h3>{record.studentName}</h3><p className="pbs-muted">{record.courseTitle} · {dateLabel(record.issuedAt)}</p><p className="pbs-reference">{record.id}</p></div><div className="pbs-actions"><Status value={record.revokedAt ? 'Revoked' : 'Earned'} /><Button quiet onClick={() => setSelected(record)}>View credential</Button>{!record.revokedAt && <Button quiet onClick={() => setRevoking(record)}>Revoke</Button>}</div></article>)}</Panel>
+    {selected && <CertificateDialog record={selected} onClose={() => setSelected(undefined)} />}
+    {revoking && <DialogForm title="Revoke this credential" detail={`${revoking.studentName} · ${revoking.courseTitle}`} submit="Revoke credential" onClose={() => setRevoking(undefined)} onSubmit={async form => {
+      await send(`/admin/certificates/${revoking.id}/revoke`, { reason: value(form, 'reason') }); setRevoking(undefined); await onSaved();
+    }}><p className="pbs-muted">This permanently marks the credential as revoked and updates its public verification page.</p><Field label="Reason for revocation"><textarea name="reason" rows={3} maxLength={1000} required /></Field></DialogForm>}
+  </div>;
+}
+
+export function PublicCertificate({ token }: { token: string }) {
+  const { data, error } = useApiResource<CertificateView>(`/certificates/verify/${encodeURIComponent(token)}`);
+  return <main className="pbs-public-certificate"><a href="/" className="pbs-text-button"><img src="/pbs-logo.svg" width="32" height="32" alt="PBS" /> Pragmatic BIM Solution</a><FormError error={error} />
+    {!data && !error && <p className="pbs-muted" role="status">Verifying credential…</p>}
+    {data && <><div className={`pbs-verification-status ${data.revokedAt ? 'pbs-is-revoked' : ''}`}><ShieldCheck size={24} /><div><h1>{data.revokedAt ? 'Credential revoked' : 'Verified PBS credential'}</h1><p>{data.revokedAt ? `Revoked ${dateLabel(data.revokedAt)}` : `${data.studentName} earned this course certificate on ${dateLabel(data.issuedAt)}.`}</p></div></div><CertificatePaper record={data} /></>}
+  </main>;
+}

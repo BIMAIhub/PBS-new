@@ -5,6 +5,8 @@ import { badRequest, conflict, emailAddress, field, integer, limitAttempts, notF
 import { httpsLink, paymentClaim, paymentReference, phoneNumber } from './inputs.js';
 import { hashPassword, temporaryPassword, verifyPassword } from './passwords.js';
 import { adminWorkspace, courseById, courseDetails, enrollmentById, getAssessment, issueReceipt } from './records.js';
+import { academyWorkspace, audit } from './academy-data.js';
+import { grantCourseAccess } from './microsoft.js';
 
 export function mountAdmin(app: Express, db: WritableDatabase, hosted: boolean) {
   app.patch('/api/admin/profile', limitAttempts(10, hosted ? db : undefined), route(async (req, res) => {
@@ -33,7 +35,9 @@ export function mountAdmin(app: Express, db: WritableDatabase, hosted: boolean) 
 
   app.get('/api/admin/export', route(async (req, res) => {
     await requireAccount(db, req, 'admin');
-    res.attachment('PBS-records.json').json({ exportedAt: now(), ...await adminWorkspace(db) });
+    res.attachment('PBS-records.json').json({ exportedAt: now(), ...await adminWorkspace(db), academy: await academyWorkspace(db),
+      certificateTemplates: await db.prepare('SELECT * FROM certificate_templates').all(),
+      events: await db.prepare('SELECT * FROM academy_events ORDER BY created_at DESC').all() });
   }));
 
   app.post('/api/admin/courses', route(async (req, res) => {
@@ -144,9 +148,13 @@ export function mountAdmin(app: Express, db: WritableDatabase, hosted: boolean) 
         requested_payment = 0, reference = ''`).run(enrollmentId, id, course.id, total, date, date);
       const receipt = claim.amount ? await issueReceipt(tx, enrollmentId, claim.amount,
         field(req.body?.method, 'payment method', 60), claim.reference, admin.id) : undefined;
+      await tx.prepare(`INSERT INTO enrollment_details (enrollment_id, source) VALUES (?, 'admin')
+        ON CONFLICT(enrollment_id) DO UPDATE SET source = 'admin'`).run(enrollmentId);
+      await audit(tx, admin.id, 'Student enrolled by admin', enrollmentId, course.title);
       return { student: publicAccount((await findAccount(tx, id))!), enrollment: await enrollmentById(tx, enrollmentId), receipt };
     });
-    res.status(201).json({ ...result, temporaryPassword: password });
+    const courseAccess = await grantCourseAccess(db, result.enrollment.id, admin.id, true).catch(() => ({ status: 'failed' }));
+    res.status(201).json({ ...result, temporaryPassword: password, courseAccess });
   }));
 
   app.post('/api/admin/students/:id/reset-password', route(async (req, res) => {
@@ -200,9 +208,11 @@ export function mountAdmin(app: Express, db: WritableDatabase, hosted: boolean) 
       if (receipt || decision === 'rejected') {
         await tx.prepare("UPDATE enrollments SET requested_payment = 0, reference = '' WHERE id = ?").run(enrollment.id);
       }
+      await audit(tx, admin.id, `Enrollment ${decision}`, enrollment.id, enrollment.studentName);
       return { enrollment: await enrollmentById(tx, enrollment.id), receipt };
     });
-    res.json(result);
+    const courseAccess = decision === 'approved' ? await grantCourseAccess(db, result.enrollment.id, admin.id, true).catch(() => ({ status: 'failed' })) : undefined;
+    res.json({ ...result, courseAccess });
   }));
 
   app.post('/api/admin/enrollments/:id/payment', route(async (req, res) => {

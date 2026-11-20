@@ -8,8 +8,7 @@ import { messageFrom } from './api';
 export type DocumentInfo =
   | { kind: 'receipt'; receipt: Receipt }
   | { kind: 'id'; account: Account; enrollments: Enrollment[] }
-  | { kind: 'letter'; account: Account; enrollment: Enrollment }
-  | { kind: 'certificate'; account: Account; course: CourseSummary; result: AssessmentResult };
+  | { kind: 'letter'; account: Account; enrollment: Enrollment };
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return <div><dt>{label}</dt><dd>{children}</dd></div>;
@@ -64,16 +63,7 @@ function DocumentContent({ document }: { document: DocumentInfo }) {
       <p className="pbs-doc-note">Issued at the student's request for enrollment verification.</p>
     </>;
   }
-  return <>
-    <p className="pbs-doc-kicker">Course completion</p>
-    <h3>Certificate of completion</h3>
-    <p className="pbs-doc-body">Pragmatic BIM Solution certifies that <strong>{account.name}</strong> completed <strong>{document.course.title}</strong> and passed the course assessment.</p>
-    <dl className="pbs-document-fields">
-      <Row label="Student ID">{account.id}</Row>
-      <Row label="Assessment score">{document.result.score}%</Row>
-      <Row label="Completed">{dateLabel(document.result.submittedAt)}</Row>
-    </dl>
-  </>;
+  return null;
 }
 
 const titles = { receipt: 'Payment receipt', id: 'Student ID', letter: 'Bonafide letter', certificate: 'Course certificate' };

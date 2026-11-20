@@ -4,6 +4,7 @@ import { type WritableDatabase, makeId, makeStudentId, now, transaction } from '
 import { badRequest, conflict, emailAddress, field, limitAttempts, notFound, RequestError, route } from './http.js';
 import { httpsLink, paymentClaim, phoneNumber } from './inputs.js';
 import { hashPassword, validPassword } from './passwords.js';
+import { audit, paymentSettings } from './academy-data.js';
 import {
   checkReference, courseById, courses, enrollmentById, getAssessment, hasCourseAccess,
   portfolio, requireCompletedLessons, studentWorkspace
@@ -13,8 +14,7 @@ export function mountStudent(app: Express, db: WritableDatabase, hosted: boolean
   app.get('/api/catalog', route(async (_req, res) => {
     res.json({
       courses: await courses(db, true),
-      paymentUpiId: process.env.PBS_PAYMENT_UPI_ID?.trim() || '',
-      paymentName: process.env.PBS_PAYMENT_NAME?.trim() || 'Pragmatic BIM Solution',
+      ...await paymentSettings(db),
     });
   }));
 
@@ -33,7 +33,7 @@ export function mountStudent(app: Express, db: WritableDatabase, hosted: boolean
     const course = await courseById(db, courseId);
     if (!course.published) throw notFound('This course is unavailable for enrollment.');
     const claim = paymentClaim(req.body, course.fee);
-    if (claim.amount && !process.env.PBS_PAYMENT_UPI_ID?.trim()) {
+    if (claim.amount && !(await paymentSettings(db)).paymentUpiId) {
       throw badRequest('Contact PBS to arrange payment for this course.');
     }
     const signedIn = await sessionAccount(db, req);
@@ -73,6 +73,9 @@ export function mountStudent(app: Express, db: WritableDatabase, hosted: boolean
         total = excluded.total, status = 'pending', requested_payment = excluded.requested_payment,
         reference = excluded.reference, submitted_at = excluded.submitted_at, notes = '', approved_at = ''`)
         .run(enrollmentId, id, course.id, course.fee, claim.amount, claim.reference, now());
+      await tx.prepare(`INSERT INTO enrollment_details (enrollment_id, source) VALUES (?, 'student')
+        ON CONFLICT(enrollment_id) DO UPDATE SET source = 'student'`).run(enrollmentId);
+      await audit(tx, id, 'Enrollment application submitted', enrollmentId, course.title);
       return await enrollmentById(tx, enrollmentId);
     });
     if (signup) await startSession(db, req, res, id, false);
@@ -86,7 +89,7 @@ export function mountStudent(app: Express, db: WritableDatabase, hosted: boolean
 
   app.post('/api/student/enrollments/:id/payment', route(async (req, res) => {
     const account = await requireAccount(db, req, 'student');
-    if (!process.env.PBS_PAYMENT_UPI_ID?.trim()) throw badRequest('Contact PBS to arrange payment.');
+    if (!(await paymentSettings(db)).paymentUpiId) throw badRequest('Contact PBS to arrange payment.');
     const enrollment = await transaction(db, async tx => {
       const current = await enrollmentById(tx, req.params.id);
       if (current.studentId !== account.id || current.status !== 'approved') throw notFound('This enrollment is unavailable.');
@@ -99,6 +102,7 @@ export function mountStudent(app: Express, db: WritableDatabase, hosted: boolean
       }
       await tx.prepare('UPDATE enrollments SET requested_payment = ?, reference = ?, notes = ? WHERE id = ?')
         .run(claim.amount, claim.reference, '', current.id);
+      await audit(tx, account.id, 'Payment reference submitted', current.id, `INR ${(claim.amount / 100).toFixed(2)} awaiting verification`);
       return await enrollmentById(tx, current.id);
     });
     res.json({ enrollment });
@@ -205,10 +209,17 @@ export function mountStudent(app: Express, db: WritableDatabase, hosted: boolean
     const headline = field(req.body?.headline, 'portfolio headline', 160, published);
     const bio = field(req.body?.bio, 'portfolio summary', 5000, false);
     const url = httpsLink(req.body?.projectUrl, 'project link', false);
-    await db.prepare(`INSERT INTO portfolios VALUES (?, ?, ?, ?, ?)
+    const linkedin = httpsLink(req.body?.linkedin, 'LinkedIn profile', false);
+    const github = httpsLink(req.body?.github, 'GitHub profile', false);
+    const website = httpsLink(req.body?.website, 'website', false);
+    await transaction(db, async tx => {
+    await tx.prepare(`INSERT INTO portfolios VALUES (?, ?, ?, ?, ?)
       ON CONFLICT(account_id) DO UPDATE SET headline = excluded.headline, bio = excluded.bio,
       project_url = excluded.project_url, published = excluded.published`)
       .run(account.id, headline, bio, url, Number(published));
+    await tx.prepare(`INSERT INTO portfolio_links VALUES (?, ?, ?, ?) ON CONFLICT(account_id) DO UPDATE SET
+      linkedin = excluded.linkedin, github = excluded.github, website = excluded.website`).run(account.id, linkedin, github, website);
+    });
     res.json({ portfolio: await portfolio(db, account.id) });
   }));
 

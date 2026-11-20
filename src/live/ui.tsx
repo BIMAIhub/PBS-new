@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useState, type FormEvent, type InputHTMLAttributes, type ReactNode } from 'react';
+import { cloneElement, isValidElement, useCallback, useEffect, useId, useState, type FormEvent, type InputHTMLAttributes, type ReactElement, type ReactNode } from 'react';
 import { ArrowUpRight, CircleAlert, Eye, EyeOff, FileText, LoaderCircle } from 'lucide-react';
 import { PortalDialog } from '../components/student-dashboard/PortalUI';
 import { api, messageFrom } from './api';
@@ -15,7 +15,10 @@ export const value = (form: FormData, name: string) => String(form.get(name) ?? 
 export const paise = (form: FormData, name: string) => Math.round(Number(value(form, name)) * 100);
 
 export function Field({ label, children, note }: { label: string; children: ReactNode; note?: string }) {
-  return <label className="pbs-live-field"><span>{label}</span>{children}{note && <small>{note}</small>}</label>;
+  const labelId = useId();
+  const control = isValidElement(children) && ['input', 'textarea', 'select'].includes(String(children.type))
+    ? cloneElement(children as ReactElement<{ 'aria-labelledby'?: string }>, { 'aria-labelledby': labelId }) : children;
+  return <label className="pbs-live-field"><span id={labelId}>{label}</span>{control}{note && <small>{note}</small>}</label>;
 }
 
 export function Input({ label, note, ...props }: InputHTMLAttributes<HTMLInputElement> & { label: string; note?: string }) {

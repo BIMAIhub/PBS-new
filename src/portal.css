@@ -13,16 +13,16 @@
 }
 
 :root {
-  --studio-ink: #1b2821;
-  --studio-secondary: #46564d;
-  --studio-muted: #5a6a60;
-  --studio-paper: #f5f6f1;
+  --studio-ink: #152c42;
+  --studio-secondary: #41586e;
+  --studio-muted: #5b6e80;
+  --studio-paper: #F4F7FA;
   --studio-surface: #fff;
-  --studio-border: #dce3da;
-  --studio-wash: #eef1eb;
-  --studio-accent: #24563f;
-  --studio-accent-hover: #193f2e;
-  --studio-dark: #1a2c24;
+  --studio-border: #dce5ed;
+  --studio-wash: #edf3f8;
+  --studio-accent: #176BB7;
+  --studio-accent-hover: #125695;
+  --studio-dark: #103c66;
   --studio-radius: 8px;
   --studio-panel-radius: 16px;
   --studio-ease: cubic-bezier(.22, 1, .36, 1);
@@ -131,16 +131,16 @@
 }
 
 .pbs-button-light {
-  background: #f7faf6;
+  background: #f2f7fc;
   color: var(--studio-dark);
 }
 
 .pbs-button-light:hover {
-  background: #e3eee5;
+  background: #e4eff9;
 }
 
 .pbs-button-light:focus-visible {
-  outline-color: #ecf7ed;
+  outline-color: #e7f2ff;
 }
 
 .pbs-text-button {
@@ -189,7 +189,7 @@
   padding: clamp(32px, 4vw, 64px);
   overflow: hidden;
   background: var(--studio-dark);
-  color: #f7f9f3;
+  color: #f4f7fa;
 }
 
 .pbs-login-image,
@@ -208,12 +208,12 @@
 
 .pbs-login-art::after {
   z-index: -1;
-  background: linear-gradient(180deg, rgb(18 33 26 / .36), transparent 48%, transparent 76%, rgb(18 33 26 / .78));
+  background: linear-gradient(180deg, rgb(12 40 68 / .36), transparent 48%, transparent 76%, rgb(12 40 68 / .78));
   content: "";
 }
 
 .pbs-login-art .pbs-brand small {
-  color: #c4d0c6;
+  color: #d0dfec;
 }
 
 .pbs-login-intro {
@@ -235,7 +235,7 @@
   position: absolute;
   top: 4px;
   left: calc(100% + 12px);
-  color: #b4c7b9;
+  color: #D4A94D;
 }
 
 .pbs-drawing-mark svg {
@@ -250,7 +250,7 @@
   gap: 12px;
   padding-top: 12px;
   border-top: 1px solid rgb(255 255 255 / .34);
-  color: #e8eee8;
+  color: #e5eff8;
   font-size: 12px;
   line-height: 1.4;
 }
@@ -365,7 +365,7 @@
   gap: 8px;
   min-height: 48px;
   padding: 0 12px;
-  border: 1px solid #bfcac1;
+  border: 1px solid #bacbd9;
   border-radius: var(--studio-radius);
   color: var(--studio-muted);
 }
@@ -434,7 +434,7 @@
 }
 
 .pbs-form-status {
-  background: #edf5ed;
+  background: #edf4fb;
   color: var(--studio-accent);
 }
 
@@ -506,7 +506,7 @@
   padding: 24px 16px 16px;
   overflow-y: auto;
   border-right: 1px solid var(--studio-border);
-  background: #fcfcf9;
+  background: #ffffff;
 }
 
 .pbs-sidebar .pbs-brand {
@@ -554,7 +554,7 @@
 }
 
 .pbs-nav-group button[aria-current="page"] {
-  background: #e7eee6;
+  background: #e6f0fa;
   color: var(--studio-accent);
   font-weight: 600;
 }
@@ -579,7 +579,7 @@
   min-height: 68px;
   padding: 8px 32px;
   border-bottom: 1px solid var(--studio-border);
-  background: #fcfcf9;
+  background: #ffffff;
 }
 
 .pbs-breadcrumb,
@@ -648,7 +648,7 @@
   height: 28px;
   place-items: center;
   border-radius: 6px;
-  background: #e7eee6;
+  background: #e6f0fa;
   color: var(--studio-accent);
   font-size: 11px;
   font-weight: 600;
@@ -699,7 +699,7 @@
   overflow: hidden;
   border-radius: var(--studio-panel-radius);
   background: var(--studio-dark);
-  color: #f4f8f3;
+  color: #f4f7fa;
 }
 
 .pbs-course-feature-content {
@@ -714,7 +714,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #d9e4db;
+  color: #dbe8f3;
   font-size: 13px;
 }
 
@@ -731,14 +731,14 @@
   z-index: -1;
   inset: 0 0 0 40%;
   background:
-    linear-gradient(90deg, var(--studio-dark) 5%, rgb(26 44 36 / .78) 38%, rgb(26 44 36 / .22) 67%, transparent),
+    linear-gradient(90deg, var(--studio-dark) 5%, rgb(16 60 102 / .78) 38%, rgb(16 60 102 / .22) 67%, transparent),
     url("/bim-study-model.webp") center 65% / cover;
 }
 
 .pbs-course-progress {
   width: 100%;
   max-width: 272px;
-  color: #d9e4db;
+  color: #dbe8f3;
   font-size: 13px;
   font-variant-numeric: tabular-nums;
 }
@@ -761,21 +761,21 @@
   overflow: hidden;
   border: 0;
   border-radius: 4px;
-  background: #52665a;
-  color: #d5e9d5;
+  background: #3d6183;
+  color: #D4A94D;
   appearance: none;
 }
 
 .pbs-course-progress progress::-webkit-progress-bar {
-  background: #52665a;
+  background: #3d6183;
 }
 
 .pbs-course-progress progress::-webkit-progress-value {
-  background: #d5e9d5;
+  background: #D4A94D;
 }
 
 .pbs-course-progress progress::-moz-progress-bar {
-  background: #d5e9d5;
+  background: #D4A94D;
 }
 
 .pbs-panel {
@@ -1082,7 +1082,7 @@ html:has(.pbs-dialog[open]) {
   }
 
   .pbs-login-art::after {
-    background: linear-gradient(90deg, var(--studio-dark) 32%, rgb(26 44 36 / .16) 76%, transparent);
+    background: linear-gradient(90deg, var(--studio-dark) 32%, rgb(16 60 102 / .16) 76%, transparent);
   }
 
   .pbs-login-intro {
@@ -1159,7 +1159,7 @@ html:has(.pbs-dialog[open]) {
   .pbs-course-feature-image {
     inset-inline-start: 27%;
     background-image:
-      linear-gradient(90deg, var(--studio-dark), rgb(26 44 36 / .86) 52%, rgb(26 44 36 / .22)),
+      linear-gradient(90deg, var(--studio-dark), rgb(16 60 102 / .86) 52%, rgb(16 60 102 / .22)),
       url("/bim-study-model.webp");
   }
 

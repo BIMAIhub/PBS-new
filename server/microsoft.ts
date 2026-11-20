@@ -1,0 +1,241 @@
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
+import { ConfidentialClientApplication } from '@azure/msal-node';
+import type { Express, Request } from 'express';
+import { requireAccount } from './auth.js';
+import { type Database, type WritableDatabase, now, transaction } from './database.js';
+import { audit, saveSetting, setting } from './academy-data.js';
+import { badRequest, conflict, field, limitAttempts, notFound, RequestError, route } from './http.js';
+import { verifyPassword } from './passwords.js';
+import { courseById, enrollmentById } from './records.js';
+
+const scopes = ['User.Read', 'Files.ReadWrite', 'Mail.Send'];
+const digest = (value: string) => createHash('sha256').update(value).digest('hex');
+const encryptionReady = () => /^[a-f0-9]{64}$/i.test(process.env.PBS_INTEGRATION_KEY || '');
+
+function seal(value: string) {
+  if (!encryptionReady()) throw new RequestError(503, 'Configure PBS_INTEGRATION_KEY before connecting Microsoft.');
+  const iv = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', Buffer.from(process.env.PBS_INTEGRATION_KEY!, 'hex'), iv);
+  const content = Buffer.concat([cipher.update(value, 'utf8'), cipher.final()]);
+  return Buffer.concat([iv, cipher.getAuthTag(), content]).toString('base64url');
+}
+
+function unseal(value: string) {
+  if (!encryptionReady()) throw new RequestError(503, 'Microsoft encryption is unavailable. Contact PBS administration.');
+  const bytes = Buffer.from(value, 'base64url');
+  const decipher = createDecipheriv('aes-256-gcm', Buffer.from(process.env.PBS_INTEGRATION_KEY!, 'hex'), bytes.subarray(0, 12));
+  decipher.setAuthTag(bytes.subarray(12, 28));
+  return Buffer.concat([decipher.update(bytes.subarray(28)), decipher.final()]).toString('utf8');
+}
+
+async function config(db: Database) {
+  const saved = await setting(db, 'microsoft');
+  return saved ? JSON.parse(saved) as { clientId: string; tenant: string; secret: string } : { clientId: '', tenant: 'common', secret: '' };
+}
+
+async function client(db: Database, adminId?: string) {
+  const cfg = await config(db);
+  if (!cfg.clientId || !cfg.secret) throw conflict('Save Microsoft app settings and connect your account first.');
+  const app = new ConfidentialClientApplication({
+    auth: { clientId: cfg.clientId, authority: `https://login.microsoftonline.com/${cfg.tenant}`, clientSecret: unseal(cfg.secret) },
+    system: { loggerOptions: { piiLoggingEnabled: false, loggerCallback: () => {} } },
+  });
+  if (adminId) {
+    const row = await db.prepare('SELECT token_cache FROM microsoft_connections WHERE admin_id = ?').get(adminId);
+    if (!row) throw conflict('Connect the Microsoft account that owns this course folder.');
+    app.getTokenCache().deserialize(unseal(String(row.token_cache)));
+  }
+  return app;
+}
+
+async function accessToken(db: Database, adminId: string) {
+  const app = await client(db, adminId);
+  const account = (await app.getTokenCache().getAllAccounts())[0];
+  if (!account) throw conflict('Reconnect your Microsoft account.');
+  let result;
+  try { result = await app.acquireTokenSilent({ scopes, account }); }
+  catch { throw conflict('Microsoft consent expired. Reconnect the course owner account.'); }
+  if (!result) throw conflict('Reconnect your Microsoft account.');
+  await db.prepare('UPDATE microsoft_connections SET token_cache = ? WHERE admin_id = ?').run(seal(app.getTokenCache().serialize()), adminId);
+  return result.accessToken;
+}
+
+async function graphToken(token: string, path: string, init: RequestInit = {}) {
+  const response = await fetch(`https://graph.microsoft.com/v1.0${path}`, {
+    ...init, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(20_000),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({})) as { error?: { code?: string } };
+    const code = /^[\w.]{1,100}$/.test(body.error?.code || '') ? body.error!.code : String(response.status);
+    throw new RequestError(502, `Microsoft could not complete this action (${code}). Check account permissions and sharing policy.`);
+  }
+  return response.status === 204 || response.status === 202 ? {} : response.json();
+}
+
+export async function graph(db: Database, adminId: string, path: string, init: RequestInit = {}) {
+  return graphToken(await accessToken(db, adminId), path, init);
+}
+
+const part = (value: string) => encodeURIComponent(value);
+const itemPath = (driveId: string, itemId: string) => `/drives/${part(driveId)}/items/${part(itemId)}`;
+export function portalOrigin(req: Request) {
+  return process.env.PBS_PUBLIC_ORIGIN ? new URL(process.env.PBS_PUBLIC_ORIGIN).origin : `${process.env.VERCEL ? 'https' : req.protocol}://${req.get('host')}`;
+}
+
+export async function sendMicrosoftMail(db: Database, adminId: string, email: string, subject: string, body: string) {
+  await graph(db, adminId, '/me/sendMail', { method: 'POST', body: JSON.stringify({
+    message: { subject, body: { contentType: 'Text', content: body }, toRecipients: [{ emailAddress: { address: email } }] },
+    saveToSentItems: true,
+  }) });
+}
+
+export async function grantCourseAccess(db: WritableDatabase, enrollmentId: string, actorId: string, automatic = false, request: typeof graph = graph) {
+  const enrollment = await enrollmentById(db, enrollmentId);
+  if (enrollment.status !== 'approved') throw conflict('Approve enrollment before granting course access.');
+  const storage = await db.prepare('SELECT * FROM course_storage WHERE course_id = ?').get(enrollment.courseId);
+  if (!storage || (automatic && !storage.automatic)) return { status: 'unconfigured' };
+  const claimed = await transaction(db, async tx => {
+    const prior = await tx.prepare('SELECT * FROM course_access_grants WHERE enrollment_id = ?').get(enrollmentId);
+    if (prior?.status === 'granted' && prior.email === enrollment.email) return false;
+    if (prior?.status === 'granting' && Date.now() - Date.parse(String(prior.updated_at)) < 60_000) throw conflict('Access is being granted. Refresh shortly.');
+    if (prior?.email && prior.email !== enrollment.email) throw conflict('The student email changed. Remove the previous permission in OneDrive before updating this access record.');
+    await tx.prepare(`INSERT INTO course_access_grants (enrollment_id, email, status, updated_at)
+      VALUES (?, ?, 'granting', ?) ON CONFLICT(enrollment_id) DO UPDATE SET status = 'granting', error = '', updated_at = excluded.updated_at`)
+      .run(enrollmentId, enrollment.email, now());
+    return true;
+  });
+  if (!claimed) return { status: 'granted' };
+  try {
+    const result = await request(db, String(storage.admin_id), `${itemPath(String(storage.drive_id), String(storage.item_id))}/invite`, {
+      method: 'POST', body: JSON.stringify({ recipients: [{ email: enrollment.email }], roles: ['read'],
+        requireSignIn: true, sendInvitation: true, message: `Your PBS enrollment in ${enrollment.courseTitle} is approved.` }),
+    }) as { value?: { id?: string; error?: unknown }[] };
+    const permissions = result.value?.filter(permission => permission.id && !permission.error) || [];
+    if (!permissions.length || result.value?.some(permission => permission.error)) throw new Error('Microsoft did not confirm the student invitation. Check the folder permissions before retrying.');
+    await db.prepare(`UPDATE course_access_grants SET status = 'granted', permission_ids = ?, error = '', updated_at = ? WHERE enrollment_id = ?`)
+      .run(JSON.stringify(permissions.map(permission => permission.id)), now(), enrollmentId);
+    await audit(db, actorId, 'OneDrive access granted', enrollmentId, enrollment.email);
+    return { status: 'granted' };
+  } catch (error) {
+    const detail = error instanceof RequestError ? error.message : 'Microsoft access could not be confirmed. Check OneDrive permissions and retry.';
+    await db.prepare("UPDATE course_access_grants SET status = 'failed', error = ?, updated_at = ? WHERE enrollment_id = ?").run(detail, now(), enrollmentId);
+    await audit(db, actorId, 'OneDrive access needs attention', enrollmentId, detail);
+    return { status: 'failed', error: detail };
+  }
+}
+
+export function mountMicrosoft(app: Express, db: WritableDatabase, hosted: boolean) {
+  app.get('/api/admin/integrations/microsoft', route(async (req, res) => {
+    const admin = await requireAccount(db, req, 'admin');
+    const cfg = await config(db);
+    const connected = await db.prepare(`SELECT profile_email AS email, profile_name AS name, connected_at AS connectedAt
+      FROM microsoft_connections WHERE admin_id = ?`).get(admin.id);
+    const storage = await db.prepare(`SELECT s.course_id AS courseId, s.drive_id AS driveId, s.item_id AS itemId,
+      s.item_name AS itemName, s.web_url AS webUrl, s.automatic, (c.admin_id IS NOT NULL) AS connected
+      FROM course_storage s LEFT JOIN microsoft_connections c ON s.admin_id = c.admin_id`).all();
+    res.json({ encryptionReady: encryptionReady(), configured: Boolean(cfg.clientId && cfg.secret), clientId: cfg.clientId,
+      tenant: cfg.tenant, secretSaved: Boolean(cfg.secret), redirectUri: `${portalOrigin(req)}/api/integrations/microsoft/callback`,
+      connected, storage: storage.map(row => ({ ...row, automatic: Boolean(row.automatic), connected: Boolean(row.connected) })) });
+  }));
+
+  app.put('/api/admin/integrations/microsoft/config', limitAttempts(6, hosted ? db : undefined), route(async (req, res) => {
+    const admin = await requireAccount(db, req, 'admin');
+    if (!await verifyPassword(String(req.body?.current || ''), admin.passwordHash)) throw badRequest('The current password is incorrect.');
+    const clientId = field(req.body?.clientId, 'Microsoft client ID', 36);
+    const tenant = field(req.body?.tenant, 'Microsoft tenant', 100);
+    if (!/^[a-f0-9-]{36}$/i.test(clientId) || !/^(common|organizations|consumers|[a-f0-9-]{36}|[a-z0-9.-]+\.onmicrosoft\.com)$/i.test(tenant)) throw badRequest('Enter a valid Microsoft application and tenant ID.');
+    const prior = await config(db);
+    const secret = field(req.body?.secret, 'client secret', 1000, false);
+    if (!secret && (!prior.secret || prior.clientId !== clientId)) throw badRequest('Enter the application client secret.');
+    await transaction(db, async tx => {
+      await saveSetting(tx, 'microsoft', JSON.stringify({ clientId, tenant, secret: secret ? seal(secret) : prior.secret }));
+      if (prior.clientId !== clientId || prior.tenant !== tenant) {
+        await tx.prepare('DELETE FROM microsoft_connections').run();
+        await tx.prepare('DELETE FROM microsoft_oauth').run();
+      }
+      await audit(tx, admin.id, 'Microsoft application settings saved', '', 'Application credentials updated.');
+    });
+    res.status(204).end();
+  }));
+
+  app.post('/api/admin/integrations/microsoft/connect', route(async (req, res) => {
+    const admin = await requireAccount(db, req, 'admin');
+    const app = await client(db);
+    const state = randomBytes(32).toString('base64url');
+    const verifier = randomBytes(48).toString('base64url');
+    const redirectUri = `${portalOrigin(req)}/api/integrations/microsoft/callback`;
+    await db.prepare('DELETE FROM microsoft_oauth WHERE expires_at < ? OR admin_id = ?').run(Date.now(), admin.id);
+    await db.prepare('INSERT INTO microsoft_oauth VALUES (?, ?, ?, ?, ?)').run(digest(state), admin.id, seal(verifier), redirectUri, Date.now() + 10 * 60_000);
+    const url = await app.getAuthCodeUrl({ scopes, redirectUri, state, codeChallenge: createHash('sha256').update(verifier).digest('base64url'), codeChallengeMethod: 'S256', prompt: 'select_account' });
+    res.json({ url });
+  }));
+
+  app.get('/api/integrations/microsoft/callback', route(async (req, res) => {
+    const admin = await requireAccount(db, req, 'admin');
+    const state = field(req.query.state, 'authorization state', 100);
+    const row = await transaction(db, async tx => {
+      const row = await tx.prepare('SELECT * FROM microsoft_oauth WHERE state_hash = ? AND admin_id = ? AND expires_at > ?').get(digest(state), admin.id, Date.now());
+      if (!row) throw badRequest('This Microsoft connection request expired. Start again from Integrations.');
+      await tx.prepare('DELETE FROM microsoft_oauth WHERE state_hash = ?').run(digest(state));
+      return row;
+    });
+    if (req.query.error) return res.redirect('/?integration=declined');
+    try {
+      const app = await client(db);
+      const result = await app.acquireTokenByCode({ code: field(req.query.code, 'authorization code', 8000), scopes,
+        redirectUri: String(row.redirect_uri), codeVerifier: unseal(String(row.verifier)) });
+      if (!result?.account) throw new Error('Missing Microsoft account.');
+      const profile = await graphToken(result.accessToken, '/me?$select=displayName,mail,userPrincipalName');
+      await db.prepare(`INSERT INTO microsoft_connections VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(admin_id) DO UPDATE SET profile_email = excluded.profile_email, profile_name = excluded.profile_name,
+        token_cache = excluded.token_cache, connected_at = excluded.connected_at`)
+        .run(admin.id, profile.mail || profile.userPrincipalName || result.account.username, profile.displayName || 'Microsoft account', seal(app.getTokenCache().serialize()), now());
+      await audit(db, admin.id, 'Microsoft account connected', admin.id, profile.displayName || 'Microsoft account');
+      res.redirect('/?integration=connected');
+    } catch { res.redirect('/?integration=failed'); }
+  }));
+
+  app.delete('/api/admin/integrations/microsoft', route(async (req, res) => {
+    const admin = await requireAccount(db, req, 'admin');
+    await db.prepare('DELETE FROM microsoft_connections WHERE admin_id = ?').run(admin.id);
+    await audit(db, admin.id, 'Microsoft account disconnected', admin.id, 'Previously granted OneDrive permissions remain in Microsoft.');
+    res.status(204).end();
+  }));
+
+  app.get('/api/admin/integrations/microsoft/items', route(async (req, res) => {
+    const admin = await requireAccount(db, req, 'admin');
+    const driveId = field(req.query.driveId, 'drive ID', 250, false);
+    const itemId = field(req.query.itemId, 'folder ID', 250, false);
+    const path = driveId && itemId ? itemPath(driveId, itemId) : '/me/drive/root';
+    const skip = field(req.query.skip, 'continuation', 8000, false);
+    const result = await graph(db, admin.id, `${path}/children?${new URLSearchParams({ '$select': 'id,name,folder,video,parentReference,webUrl', '$top': '100', ...(skip ? { '$skiptoken': skip } : {}) })}`);
+    const next = result['@odata.nextLink'] ? new URL(result['@odata.nextLink']).searchParams.get('$skiptoken') || '' : '';
+    res.json({ items: result.value || [], next });
+  }));
+
+  app.put('/api/admin/courses/:id/storage', route(async (req, res) => {
+    const admin = await requireAccount(db, req, 'admin');
+    await courseById(db, req.params.id);
+    const driveId = field(req.body?.driveId, 'OneDrive drive ID', 250);
+    const itemId = field(req.body?.itemId, 'OneDrive item ID', 250);
+    const existing = await db.prepare('SELECT drive_id, item_id FROM course_storage WHERE course_id = ?').get(req.params.id);
+    if (existing && (existing.drive_id !== driveId || existing.item_id !== itemId) && await db.prepare("SELECT 1 FROM course_access_grants g JOIN enrollments e ON e.id = g.enrollment_id WHERE e.course_id = ? AND g.status = 'granted'").get(req.params.id)) {
+      throw conflict('This course already has grants. Remove the old permissions in Microsoft before changing its folder.');
+    }
+    const item = await graph(db, admin.id, `${itemPath(driveId, itemId)}?$select=id,name,webUrl,folder,video`);
+    if (!item.folder && !item.video) throw badRequest('Choose a course folder or video from OneDrive.');
+    await db.prepare(`INSERT INTO course_storage VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(course_id) DO UPDATE SET admin_id = excluded.admin_id, drive_id = excluded.drive_id,
+      item_id = excluded.item_id, item_name = excluded.item_name, web_url = excluded.web_url, automatic = excluded.automatic`)
+      .run(req.params.id, admin.id, driveId, itemId, item.name, item.webUrl || '', Number(req.body?.automatic === true));
+    await audit(db, admin.id, 'Course OneDrive folder saved', req.params.id, item.name);
+    res.status(204).end();
+  }));
+
+  app.post('/api/admin/enrollments/:id/access', route(async (req, res) => {
+    const admin = await requireAccount(db, req, 'admin');
+    const result = await grantCourseAccess(db, req.params.id, admin.id);
+    if (result.status === 'unconfigured') throw conflict('Map a OneDrive folder to this course in Integrations.');
+    res.json(result);
+  }));
+}

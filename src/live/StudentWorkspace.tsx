@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   ArrowRight, Award, BookOpen, Bot, CalendarDays, Clock, CreditCard, Download, FileText, IdCard,
-  KeyRound, Layers, LayoutDashboard, LogOut, MessageSquare, Play, Plus, Settings
+  KeyRound, Layers, LayoutDashboard, LogOut, MessageSquare, Play, Plus, Settings, Share2
 } from 'lucide-react';
 import { PortalDialog } from '../components/student-dashboard/PortalUI';
 import { WorkspaceActionRow, WorkspaceChrome, type WorkspaceNavGroup } from '../components/student-dashboard/WorkspaceChrome';
@@ -11,10 +11,13 @@ import { DocumentDialog, ReceiptList, type DocumentInfo } from './Documents';
 import { CatalogDialog, EnrollmentForm, StudentPaymentForm } from './EnrollmentForm';
 import { StudyTimer } from './StudyTools';
 import { send } from './api';
+import { StudentCertificates } from './Certificates';
+import { PortfolioHub } from './PortfolioHub';
+import type { AcademyData } from './academy-types';
 import type { Account, AssessmentQuestion, AssessmentResult, Catalog, Course, CourseSummary, Enrollment, StudentWorkspaceData } from './types';
 import { Button, dateLabel, dateTimeLabel, DialogForm, Empty, ExternalLink, Field, FormError, Input, money, Panel, Status, useApiResource, value } from './ui';
 
-type Page = 'overview' | 'courses' | 'sessions' | 'project' | 'downloads' | 'fees' | 'reviews' | 'messages';
+type Page = 'overview' | 'courses' | 'sessions' | 'project' | 'downloads' | 'fees' | 'reviews' | 'messages' | 'certificates' | 'portfolio';
 const groups: WorkspaceNavGroup<Page>[] = [
   { label: 'Learning', pages: [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
@@ -24,7 +27,9 @@ const groups: WorkspaceNavGroup<Page>[] = [
   ] },
   { label: 'Resources', pages: [
     { id: 'downloads', label: 'Downloads', icon: Download },
-    { id: 'fees', label: 'Fees & receipts', icon: CreditCard },
+    { id: 'fees', label: 'Fees & payments', icon: CreditCard },
+    { id: 'certificates', label: 'My certificates', icon: Award },
+    { id: 'portfolio', label: 'My portfolio', icon: Share2 },
     { id: 'reviews', label: 'Feedback & reviews', icon: FileText },
     { id: 'messages', label: 'Messages', icon: MessageSquare },
   ] },
@@ -72,6 +77,8 @@ function StudentOverview({ data, completed, open, navigate }: {
         <WorkspaceActionRow action={{ label: 'Capstone project', detail: 'Submit or review your project', icon: Layers, run: () => navigate('project') }} />
         <WorkspaceActionRow action={{ label: 'BIM assistant', detail: 'Ask about a BIM workflow', icon: Bot, run: () => open({ kind: 'assistant' }) }} />
         <WorkspaceActionRow action={{ label: 'Student documents', detail: 'View and print your student ID', icon: IdCard, run: () => navigate('courses') }} />
+        <WorkspaceActionRow action={{ label: 'My certificates', detail: 'Earn and share your course credentials', icon: Award, run: () => navigate('certificates') }} />
+        <WorkspaceActionRow action={{ label: 'Portfolio & LinkedIn', detail: 'Show your professional work', icon: Share2, run: () => navigate('portfolio') }} />
       </Panel>
     </div>
     <dl className="pbs-learning-stats">
@@ -95,7 +102,7 @@ function StudentOverview({ data, completed, open, navigate }: {
   </div>;
 }
 
-function StudentCourses({ data, account, open }: { data: StudentWorkspaceData; account: Account; open: (dialog: Dialog) => void }) {
+function StudentCourses({ data, account, open, academy }: { data: StudentWorkspaceData; account: Account; open: (dialog: Dialog) => void; academy?: AcademyData }) {
   return <div className="pbs-live-stack">
     <Panel title="My enrollments" action={<Button onClick={() => open({ kind: 'catalog' })}><Plus size={18} /> Explore courses</Button>}>
       {!data.enrollments.length && <Empty title="No courses yet">Choose a published course to apply.</Empty>}
@@ -107,6 +114,10 @@ function StudentCourses({ data, account, open }: { data: StudentWorkspaceData; a
           {enrollment.status === 'approved' && <Button onClick={() => open({ kind: 'classroom', courseId: enrollment.courseId })}>Open classroom</Button>}</div>
       </article>)}
     </Panel>
+    {academy?.grants.some(item => item.status === 'granted' && item.webUrl) && <Panel title="OneDrive course access">
+      <p className="pbs-muted">Sign in to Microsoft using {account.email} to open your shared course files.</p>
+      {academy.grants.filter(item => item.status === 'granted' && item.webUrl).map(item => <article className="pbs-record-row" key={item.enrollmentId}><strong>{data.enrollments.find(enrollment => enrollment.id === item.enrollmentId)?.courseTitle}</strong><ExternalLink href={item.webUrl}>Open course in OneDrive</ExternalLink></article>)}
+    </Panel>}
     <Panel title="Student documents">
       <WorkspaceActionRow action={{ label: 'Student ID', icon: IdCard, run: () => open({ kind: 'document', document: { kind: 'id', account, enrollments: data.enrollments } }) }} />
       {data.enrollments.filter(enrollment => enrollment.status === 'approved').map(enrollment => <WorkspaceActionRow key={enrollment.id}
@@ -116,20 +127,23 @@ function StudentCourses({ data, account, open }: { data: StudentWorkspaceData; a
   </div>;
 }
 
-function StudentFees({ data, catalog, open }: { data: StudentWorkspaceData; catalog?: Catalog; open: (dialog: Dialog) => void }) {
+function StudentFees({ data, catalog, open, academy }: { data: StudentWorkspaceData; catalog?: Catalog; open: (dialog: Dialog) => void; academy?: AcademyData }) {
   const approved = data.enrollments.filter(enrollment => enrollment.status === 'approved');
   return <div className="pbs-live-stack">
+    <dl className="pbs-learning-stats"><div><dt>Verified payments</dt><dd>{money(data.receipts.reduce((sum, receipt) => sum + receipt.amount, 0))}</dd></div><div><dt>Remaining course fees</dt><dd>{money(approved.reduce((sum, item) => sum + item.total - item.paid, 0))}</dd></div><div><dt>References in review</dt><dd>{data.enrollments.filter(item => item.requestedPayment > 0).length}</dd></div></dl>
     <Panel title="Course fees">
       {!approved.length && <Empty title="No fees yet">Approved enrollments appear here with their balances.</Empty>}
       {approved.map(enrollment => <article className="pbs-record-row" key={enrollment.id}>
         <div><h3>{enrollment.courseTitle}</h3><p className="pbs-muted">{money(enrollment.paid)} paid · {money(enrollment.total)} total</p>
           {enrollment.requestedPayment > 0 && <p className="pbs-muted">{money(enrollment.requestedPayment)} awaiting verification</p>}
           {enrollment.notes && <p className="pbs-muted pbs-pre-wrap">{enrollment.notes}</p>}
+          {academy?.details.find(item => item.enrollmentId === enrollment.id)?.dueDate && <p className="pbs-muted">Due {dateLabel(academy.details.find(item => item.enrollmentId === enrollment.id)!.dueDate)}</p>}
         </div>
         <div className="pbs-actions">
           <strong>{money(enrollment.total - enrollment.paid)} due</strong>
           {catalog?.paymentUpiId && enrollment.total > enrollment.paid && !enrollment.requestedPayment &&
-            <Button onClick={() => open({ kind: 'payment', enrollment })}>Submit payment reference</Button>}
+            <Button onClick={() => open({ kind: 'payment', enrollment })}><CreditCard size={17} /> Pay course fees</Button>}
+          {!catalog?.paymentUpiId && enrollment.total > enrollment.paid && <Button quiet onClick={() => open({ kind: 'message' })}>Arrange payment with PBS</Button>}
         </div>
       </article>)}
     </Panel>
@@ -167,6 +181,8 @@ export function StudentWorkspace({ account, onAccount, onSignOut }: {
   const [notice, setNotice] = useState('');
   const { data, error, refresh } = useApiResource<StudentWorkspaceData>('/student/workspace');
   const catalog = useApiResource<Catalog>('/catalog');
+  const academy = useApiResource<AcademyData>('/student/academy');
+  async function refreshAll() { await Promise.all([refresh(), academy.refresh(), catalog.refresh()]); }
   const completed = new Set(data?.completions.map(completion => completion.lessonId));
   const course = dialog && 'courseId' in dialog ? data?.courses.find(course => course.id === dialog.courseId) : undefined;
   const close = () => setDialog(undefined);
@@ -175,7 +191,7 @@ export function StudentWorkspace({ account, onAccount, onSignOut }: {
     setPage(next); setNotice(''); window.scrollTo({ top: 0, behavior: 'instant' });
   }
   async function saved(message: string) {
-    await refresh(); close(); setNotice(message);
+    await refreshAll(); close(); setNotice(message);
   }
   const enrollment = data && activeEnrollment(data.enrollments);
   return <>
@@ -194,12 +210,14 @@ export function StudentWorkspace({ account, onAccount, onSignOut }: {
         { label: 'BIM portfolio', icon: Layers, run: () => show({ kind: 'portfolio' }) },
         { label: 'Sign out', icon: LogOut, run: onSignOut },
       ]}>
-      <FormError error={error} />
+      <FormError error={error || academy.error} />
       {!data && !error && <p className="pbs-muted" role="status">Loading your workspace…</p>}
       {notice && <p className="pbs-form-status pbs-notice" role="status">{notice}</p>}
       {data && page === 'overview' && <StudentOverview data={data} completed={completed} open={show} navigate={navigate} />}
-      {data && page === 'courses' && <StudentCourses data={data} account={account} open={show} />}
-      {data && page === 'fees' && <StudentFees data={data} catalog={catalog.data} open={show} />}
+      {data && page === 'courses' && <StudentCourses data={data} account={account} open={show} academy={academy.data} />}
+      {data && page === 'fees' && <StudentFees data={data} catalog={catalog.data} open={show} academy={academy.data} />}
+      {data && academy.data && page === 'certificates' && <StudentCertificates data={data} academy={academy.data} onSaved={refreshAll} />}
+      {data && page === 'portfolio' && <PortfolioHub account={account} data={data} onEdit={() => show({ kind: 'portfolio' })} />}
       {data && page === 'sessions' && <Panel title="Course sessions">
         {!data.courses.some(course => course.sessions.length) && <Empty title="No sessions scheduled">PBS will publish session links here.</Empty>}
         {data.courses.flatMap(course => course.sessions.map(session => <article className="pbs-record-row" key={session.id}>
@@ -233,7 +251,7 @@ export function StudentWorkspace({ account, onAccount, onSignOut }: {
             const result = data.assessmentResults.find(result => result.courseId === course.id);
             return <article className="pbs-record-row" key={course.id}>
               <div><h3>{course.title}</h3>{result && <p className="pbs-muted">Score {result.score}%</p>}</div>
-              {result?.passed ? <Button quiet onClick={() => show({ kind: 'document', document: { kind: 'certificate', account, course, result } })}><Award size={18} /> Certificate</Button>
+              {result?.passed ? <Button quiet onClick={() => navigate('certificates')}><Award size={18} /> My certificates</Button>
                 : <Button quiet onClick={() => show({ kind: 'assessment', courseId: course.id })}>Open assessment</Button>}
             </article>;
           })}

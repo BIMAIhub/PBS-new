@@ -41,7 +41,7 @@
   min-width: 0;
   min-height: 44px;
   padding: 10px 12px;
-  border: 1px solid #becabf;
+  border: 1px solid #bacbd9;
   border-radius: var(--studio-radius);
   background: var(--studio-surface);
   color: var(--studio-ink);
@@ -133,7 +133,7 @@
 }
 
 .pbs-button-outline {
-  border: 1px solid #c7d2c8;
+  border: 1px solid #c6d4e0;
   background: var(--studio-surface);
   color: var(--studio-accent);
 }
@@ -246,7 +246,7 @@
 }
 
 .pbs-status-success {
-  background: #e9f1e7;
+  background: #eaf3fc;
   color: var(--studio-accent);
 }
 
@@ -268,7 +268,7 @@
   gap: 8px;
   min-height: 42px;
   padding: 0 10px;
-  border: 1px solid #c7d2c8;
+  border: 1px solid #c6d4e0;
   border-radius: var(--studio-radius);
   background: white;
   color: var(--studio-muted);
@@ -325,7 +325,7 @@
 }
 
 .pbs-table tbody tr:hover {
-  background: #fafbf8;
+  background: #f8fafc;
 }
 
 .pbs-table td small {
@@ -542,7 +542,7 @@
 .pbs-player .pbs-live-empty,
 .pbs-player .pbs-live-empty p,
 .pbs-player a {
-  color: #e9f0e8;
+  color: #eaf3fb;
 }
 
 .pbs-lesson-meta {
@@ -633,7 +633,7 @@
 
 .pbs-lesson-row:hover,
 .pbs-lesson-row[aria-current="true"] {
-  background: #e8eee6;
+  background: #e6eff8;
   color: var(--studio-accent);
 }
 
@@ -672,11 +672,11 @@
   width: 100%;
   gap: 16px;
   padding: clamp(16px, 4vw, 32px);
-  border: 1px solid #c8d6c9;
+  border: 1px solid #c8d7e5;
   border-top: 4px solid var(--studio-accent);
   border-radius: 6px;
   background: #fff;
-  color: #1b2821;
+  color: #152c42;
 }
 
 .pbs-print-document > .pbs-brand {
@@ -730,7 +730,7 @@
   height: 56px;
   place-items: center;
   border-radius: 8px;
-  background: #e7eee6;
+  background: #e6f0fa;
   color: var(--studio-accent);
   font-size: 22px;
   font-weight: 600;

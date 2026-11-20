@@ -6,12 +6,15 @@ import { mountAuth, requireAccount } from './auth.js';
 import { mountAdmin } from './admin.js';
 import { mountStudent } from './student.js';
 import { mountMedia } from './media.js';
+import { mountAcademy } from './academy.js';
+import { mountMicrosoft } from './microsoft.js';
 import { apiError, field, limitAttempts, RequestError, route } from './http.js';
 
 export async function createPortalApp(hosted = false) {
   const app = express();
   const publicOrigin = process.env.PBS_PUBLIC_ORIGIN ? new URL(process.env.PBS_PUBLIC_ORIGIN).origin : '';
   const db = await openDatabase(hosted);
+  app.locals.portalDatabase = db;
   try {
     await provisionInitialAdministrator(db);
   } catch (error) {
@@ -46,6 +49,8 @@ export async function createPortalApp(hosted = false) {
   mountAdmin(app, db, hosted);
   mountStudent(app, db, hosted);
   mountMedia(app, db, hosted);
+  mountAcademy(app, db, hosted);
+  mountMicrosoft(app, db, hosted);
 
   app.post('/api/ask-pbs', limitAttempts(12, hosted ? db : undefined), route(async (req, res) => {
     await requireAccount(db, req);

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   ArrowDownToLine, ArrowRight, BookOpen, BriefcaseBusiness, CircleHelp, ClipboardList,
-  CreditCard, FileText, IndianRupee, KeyRound, LogOut, MessageSquare, Plus, Search, UserRound, Users, Video
+  Activity, Award, Cloud, LayoutDashboard, CreditCard, FileText, IndianRupee, KeyRound, LogOut, MessageSquare, Plus, Search, UserRound, Users, Video
 } from 'lucide-react';
 import { PortalDialog } from '../components/student-dashboard/PortalUI';
 import { WorkspaceChrome, type WorkspaceNavGroup } from '../components/student-dashboard/WorkspaceChrome';
@@ -13,12 +13,17 @@ import {
 import { Classroom } from './Classroom';
 import { DocumentDialog, ReceiptList, type DocumentInfo } from './Documents';
 import { send } from './api';
+import { ActivityLog, AdminOverview, GrantAccessButton, PaymentLedger } from './AcademyAdmin';
+import { CertificateStudio } from './Certificates';
+import { Integrations } from './Integrations';
+import type { AdminAcademyData } from './academy-types';
 import type { Account, AdminWorkspaceData, Assignment, Course, Enrollment, Lesson, Receipt, StudentRecord } from './types';
 import { Button, dateLabel, dateTimeLabel, DialogForm, Empty, ExternalLink, Field, FormError, Input, money, Panel, Status, useApiResource, value } from './ui';
 
-type Page = 'students' | 'courses' | 'enrollments' | 'payments' | 'projects' | 'placements' | 'messages';
+type Page = 'overview' | 'students' | 'courses' | 'enrollments' | 'payments' | 'projects' | 'placements' | 'messages' | 'certificates' | 'integrations' | 'activity';
 const groups: WorkspaceNavGroup<Page>[] = [
   { label: 'Administration', pages: [
+    { id: 'overview', label: 'Academy overview', icon: LayoutDashboard },
     { id: 'students', label: 'Students', icon: Users },
     { id: 'courses', label: 'Courses & videos', icon: BookOpen },
     { id: 'enrollments', label: 'Enrollments', icon: ClipboardList },
@@ -28,6 +33,11 @@ const groups: WorkspaceNavGroup<Page>[] = [
     { id: 'projects', label: 'Projects & reviews', icon: FileText },
     { id: 'placements', label: 'Placements', icon: BriefcaseBusiness },
     { id: 'messages', label: 'Messages', icon: MessageSquare },
+    { id: 'certificates', label: 'Certificates', icon: Award },
+  ] },
+  { label: 'Academy settings', pages: [
+    { id: 'integrations', label: 'OneDrive & email', icon: Cloud },
+    { id: 'activity', label: 'Activity log', icon: Activity },
   ] },
 ];
 
@@ -153,7 +163,7 @@ function EnrollmentList({ enrollments, open, payment = false }: { enrollments: E
 }
 
 
-function StudentRecordPanel({ student, open, onClose }: { student: StudentRecord; open: (dialog: Dialog) => void; onClose: () => void }) {
+function StudentRecordPanel({ student, open, onClose, onSaved }: { student: StudentRecord; open: (dialog: Dialog) => void; onClose: () => void; onSaved: () => Promise<unknown> }) {
   return <PortalDialog title={student.name} className="pbs-dialog-wide" onClose={onClose}>
     <div className="pbs-live-stack">
       <dl className="pbs-facts">
@@ -173,9 +183,11 @@ function StudentRecordPanel({ student, open, onClose }: { student: StudentRecord
         <h3 className="pbs-subheading">Enrollments</h3>
         {!student.enrollments.length && <p className="pbs-muted">No courses assigned.</p>}
         {student.enrollments.map(enrollment => <div className="pbs-record-row" key={enrollment.id}>
-          <div><strong>{enrollment.courseTitle}</strong><p className="pbs-muted">{money(enrollment.paid)} received</p></div>
+          <div><strong>{enrollment.courseTitle}</strong><p className="pbs-muted">{money(enrollment.paid)} received · {money(enrollment.total - enrollment.paid)} outstanding</p><p className="pbs-muted">Applied {dateLabel(enrollment.submittedAt)}{enrollment.approvedAt ? ` · Approved ${dateLabel(enrollment.approvedAt)}` : ''}</p></div>
           <div className="pbs-actions"><Status value={enrollment.status} />
             {enrollment.status === 'approved' && <Button quiet onClick={() => open({ kind: 'document', document: { kind: 'letter', account: student, enrollment } })}>Bonafide letter</Button>}
+            {enrollment.status === 'approved' && enrollment.total > enrollment.paid && <Button onClick={() => open({ kind: 'payment', enrollment })}>Record payment</Button>}
+            {enrollment.status === 'approved' && <GrantAccessButton enrollment={enrollment} onSaved={onSaved} />}
           </div>
         </div>)}
       </div>
@@ -187,20 +199,22 @@ function StudentRecordPanel({ student, open, onClose }: { student: StudentRecord
 export function AdminWorkspace({ account, onAccount, onSignOut }: {
   account: Account; onAccount: (account: Account) => void; onSignOut: () => void;
 }) {
-  const [page, setPage] = useState<Page>('students');
+  const [page, setPage] = useState<Page>(() => new URLSearchParams(location.search).has('integration') ? 'integrations' : 'overview');
   const [dialog, setDialog] = useState<Dialog>();
   const [notice, setNotice] = useState('');
   const { data, error, refresh } = useApiResource<AdminWorkspaceData>('/admin/workspace');
+  const academy = useApiResource<AdminAcademyData>('/admin/academy');
+  async function refreshAll() { await Promise.all([refresh(), academy.refresh()]); }
   const close = () => setDialog(undefined);
   const show = (next: Dialog) => { setNotice(''); setDialog(next); };
   const showReceipt = (receipt: Receipt) => show({ kind: 'document', document: { kind: 'receipt', receipt } });
   async function saved(message = 'Changes saved.') {
-    await refresh();
+    await refreshAll();
     close();
     setNotice(message);
   }
   async function enroll(result: CreatedStudent) {
-    await refresh();
+    await refreshAll();
     if (result.temporaryPassword) {
       show({ kind: 'temp', email: result.student.email, password: result.temporaryPassword, receipt: result.receipt });
     } else if (result.receipt) showReceipt(result.receipt);
@@ -226,15 +240,19 @@ export function AdminWorkspace({ account, onAccount, onSignOut }: {
         { label: 'Sign out', icon: LogOut, run: onSignOut },
       ]}>
       {notice && <p className="pbs-form-status pbs-notice" role="status">{notice}</p>}
-      <FormError error={error} />
+      <FormError error={error || academy.error} />
       {!data && !error && <p className="pbs-muted" role="status">Loading records…</p>}
+      {data && page === 'overview' && <AdminOverview data={data} academy={academy.data} navigate={navigate} onEnroll={() => data.courses.length ? show({ kind: 'enroll' }) : show({ kind: 'course' })} />}
       {data && page === 'students' && <Roster data={data} open={show} onCreateCourse={() => show({ kind: 'course' })} />}
       {data && page === 'courses' && <CourseManager courses={data.courses} open={show} />}
       {data && page === 'enrollments' && <EnrollmentList enrollments={data.enrollments} open={show} />}
       {data && page === 'payments' && <div className="pbs-live-stack">
-        <EnrollmentList enrollments={data.enrollments.filter(enrollment => enrollment.status === 'approved' && (enrollment.total > enrollment.paid || enrollment.requestedPayment))} open={show} payment />
+        {academy.data && <PaymentLedger data={data} academy={academy.data} open={(kind, enrollment) => show({ kind, enrollment })} onSaved={refreshAll} />}
         <ReceiptList receipts={data.receipts} onOpen={showReceipt} />
       </div>}
+      {data && academy.data && page === 'certificates' && <CertificateStudio courses={data.courses} records={academy.data.certificates} onSaved={refreshAll} />}
+      {data && page === 'integrations' && <Integrations courses={data.courses} enrollments={data.enrollments} onSaved={refreshAll} />}
+      {academy.data && page === 'activity' && <ActivityLog events={academy.data.events} />}
       {data && page === 'projects' && <Panel title="Project submissions">
         {!data.assignments.length && <Empty title="No submissions yet">Student projects appear here for review.</Empty>}
         {data.assignments.map(assignment => <article className="pbs-record-row" key={assignment.id}>
@@ -264,12 +282,12 @@ export function AdminWorkspace({ account, onAccount, onSignOut }: {
     {dialog?.kind === 'assessment' && <AssessmentForm course={dialog.course} onClose={close} onSaved={() => saved('Assessment published.')} />}
     {dialog?.kind === 'preview' && <Classroom course={dialog.course} completed={new Set()} onClose={close} />}
     {dialog?.kind === 'enroll' && data && <EnrollStudentForm courses={data.courses} student={dialog.student} onClose={close} onSaved={enroll} />}
-    {dialog?.kind === 'record' && <StudentRecordPanel student={dialog.student} open={show} onClose={close} />}
+    {dialog?.kind === 'record' && <StudentRecordPanel student={data?.students.find(item => item.id === dialog.student.id) || dialog.student} open={show} onClose={close} onSaved={refreshAll} />}
     {dialog?.kind === 'review' && <ReviewEnrollmentForm enrollment={dialog.enrollment} onClose={close} onSaved={async receipt => {
       await saved('Enrollment reviewed.'); if (receipt) showReceipt(receipt);
     }} />}
     {dialog?.kind === 'payment' && <RecordPaymentForm enrollment={dialog.enrollment} onClose={close} onSaved={async receipt => {
-      await refresh(); showReceipt(receipt);
+      await refreshAll(); showReceipt(receipt);
     }} />}
     {dialog?.kind === 'reject-payment' && <DialogForm title="Decline payment reference" detail={dialog.enrollment.reference}
       onClose={close} submit="Decline reference" onSubmit={async form => {

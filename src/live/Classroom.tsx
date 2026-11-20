@@ -48,6 +48,7 @@ export function Classroom({ course, completed, onClose, onCompletion, onAssessme
           <div className="pbs-player">
             {active && failed === active.id ? <Empty title="Video unavailable">Open the source or report the playback issue to PBS.</Empty> :
               active?.playback.kind === 'video' ? <video key={active.id} src={active.playback.url} controls playsInline preload="metadata"
+                controlsList="nodownload noremoteplayback" disablePictureInPicture disableRemotePlayback onContextMenu={event => event.preventDefault()}
                 onError={() => setFailed(active.id)} aria-label={active.title} /> :
               active?.playback.kind === 'embed' ? <iframe key={active.id} src={active.playback.url} title={active.title}
                 allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" /> :
@@ -55,7 +56,6 @@ export function Classroom({ course, completed, onClose, onCompletion, onAssessme
           </div>
           {active && <div className="pbs-lesson-meta">
             <div><h3>{active.title}</h3>{active.duration && <p className="pbs-muted">{active.duration}</p>}</div>
-            {active.playback.source && <ExternalLink href={active.playback.source}>Open video source</ExternalLink>}
           </div>}
           {active?.description && <p className="pbs-muted pbs-pre-wrap">{active.description}</p>}
           <FormError error={error} />

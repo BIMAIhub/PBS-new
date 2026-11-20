@@ -8,6 +8,54 @@ export const dataDirectory = path.resolve(process.env.PBS_DATA_DIR || 'data');
 export const videoDirectory = path.join(dataDirectory, 'videos');
 
 const schema = `
+    CREATE TABLE IF NOT EXISTS academy_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS enrollment_details (
+      enrollment_id TEXT PRIMARY KEY REFERENCES enrollments(id), due_date TEXT NOT NULL DEFAULT '',
+      source TEXT NOT NULL DEFAULT 'student', internal_note TEXT NOT NULL DEFAULT ''
+    );
+    CREATE TABLE IF NOT EXISTS academy_events (
+      id TEXT PRIMARY KEY, actor_id TEXT NOT NULL, action TEXT NOT NULL, target_id TEXT NOT NULL,
+      detail TEXT NOT NULL, created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS payment_reminders (
+      id TEXT PRIMARY KEY, enrollment_id TEXT NOT NULL REFERENCES enrollments(id),
+      request_key TEXT NOT NULL UNIQUE, channel TEXT NOT NULL, status TEXT NOT NULL,
+      body TEXT NOT NULL, sent_at TEXT NOT NULL, error TEXT NOT NULL DEFAULT ''
+    );
+    CREATE TABLE IF NOT EXISTS certificate_templates (
+      course_id TEXT PRIMARY KEY, title TEXT NOT NULL, issuer TEXT NOT NULL,
+      signer TEXT NOT NULL, signer_role TEXT NOT NULL, design TEXT NOT NULL,
+      primary_color TEXT NOT NULL, accent_color TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS certificates (
+      id TEXT PRIMARY KEY, account_id TEXT NOT NULL REFERENCES accounts(id),
+      course_id TEXT NOT NULL REFERENCES courses(id), student_name TEXT NOT NULL,
+      course_title TEXT NOT NULL, score INTEGER NOT NULL, issued_at TEXT NOT NULL,
+      public_token TEXT NOT NULL UNIQUE, published INTEGER NOT NULL DEFAULT 0,
+      revoked_at TEXT NOT NULL DEFAULT '', UNIQUE(account_id, course_id)
+    );
+    CREATE TABLE IF NOT EXISTS portfolio_links (
+      account_id TEXT PRIMARY KEY REFERENCES accounts(id), linkedin TEXT NOT NULL DEFAULT '',
+      github TEXT NOT NULL DEFAULT '', website TEXT NOT NULL DEFAULT ''
+    );
+    CREATE TABLE IF NOT EXISTS microsoft_connections (
+      admin_id TEXT PRIMARY KEY REFERENCES accounts(id), profile_email TEXT NOT NULL,
+      profile_name TEXT NOT NULL, token_cache TEXT NOT NULL, connected_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS microsoft_oauth (
+      state_hash TEXT PRIMARY KEY, admin_id TEXT NOT NULL REFERENCES accounts(id),
+      verifier TEXT NOT NULL, redirect_uri TEXT NOT NULL, expires_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS course_storage (
+      course_id TEXT PRIMARY KEY REFERENCES courses(id), admin_id TEXT NOT NULL REFERENCES accounts(id),
+      drive_id TEXT NOT NULL, item_id TEXT NOT NULL, item_name TEXT NOT NULL,
+      web_url TEXT NOT NULL, automatic INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS course_access_grants (
+      enrollment_id TEXT PRIMARY KEY REFERENCES enrollments(id), email TEXT NOT NULL,
+      status TEXT NOT NULL, permission_ids TEXT NOT NULL DEFAULT '[]', error TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS accounts (
       id TEXT PRIMARY KEY, role TEXT NOT NULL CHECK(role IN ('admin', 'student')),
       name TEXT NOT NULL, email TEXT NOT NULL UNIQUE COLLATE NOCASE,
