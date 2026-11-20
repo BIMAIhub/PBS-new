@@ -1,10 +1,10 @@
 import type { Express } from 'express';
-import { findAccount, publicAccount, renewAccountSession, requireAccount } from './auth';
-import { type WritableDatabase, makeId, makeStudentId, now, transaction } from './database';
-import { badRequest, conflict, emailAddress, field, integer, limitAttempts, notFound, route } from './http';
-import { httpsLink, paymentClaim, paymentReference, phoneNumber } from './inputs';
-import { hashPassword, temporaryPassword, verifyPassword } from './passwords';
-import { adminWorkspace, courseById, courseDetails, enrollmentById, getAssessment, issueReceipt } from './records';
+import { findAccount, publicAccount, renewAccountSession, requireAccount } from './auth.js';
+import { type WritableDatabase, makeId, makeStudentId, now, transaction } from './database.js';
+import { badRequest, conflict, emailAddress, field, integer, limitAttempts, notFound, route } from './http.js';
+import { httpsLink, paymentClaim, paymentReference, phoneNumber } from './inputs.js';
+import { hashPassword, temporaryPassword, verifyPassword } from './passwords.js';
+import { adminWorkspace, courseById, courseDetails, enrollmentById, getAssessment, issueReceipt } from './records.js';
 
 export function mountAdmin(app: Express, db: WritableDatabase, hosted: boolean) {
   app.patch('/api/admin/profile', limitAttempts(10, hosted ? db : undefined), route(async (req, res) => {

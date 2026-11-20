@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Request, Response, NextFunction } from 'express';
-import type { Database } from './database';
+import type { Database } from './database.js';
 
 export class RequestError extends Error {
   constructor(public status: number, message: string) {

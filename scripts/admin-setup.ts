@@ -1,9 +1,9 @@
 import 'dotenv/config';
 import { parseArgs } from 'node:util';
-import { openDatabase, transaction } from '../server/database';
-import { insertAdministrator } from '../server/administrators';
-import { hashPassword } from '../server/passwords';
-import { emailAddress, field } from '../server/http';
+import { openDatabase, transaction } from '../server/database.js';
+import { insertAdministrator } from '../server/administrators.js';
+import { hashPassword } from '../server/passwords.js';
+import { emailAddress, field } from '../server/http.js';
 import { readSecret } from './secret.mjs';
 
 async function main() {

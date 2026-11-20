@@ -4,12 +4,12 @@ import { pipeline } from 'node:stream/promises';
 import path from 'node:path';
 import type { Express } from 'express';
 import { BlobNotFoundError, del, head, issueSignedToken, presignUrl } from '@vercel/blob';
-import { requireAccount } from './auth';
-import { type Database, type WritableDatabase, makeId, transaction, videoDirectory } from './database';
-import { badRequest, field, notFound, RequestError, route } from './http';
-import { httpsLink } from './inputs';
-import { hasCourseAccess } from './records';
-import { videoPlayback } from './video';
+import { requireAccount } from './auth.js';
+import { type Database, type WritableDatabase, makeId, transaction, videoDirectory } from './database.js';
+import { badRequest, field, notFound, RequestError, route } from './http.js';
+import { httpsLink } from './inputs.js';
+import { hasCourseAccess } from './records.js';
+import { videoPlayback } from './video.js';
 
 const videoTypes = { 'video/mp4': '.mp4', 'video/webm': '.webm' } as const;
 const routes = '/api/admin/courses/:courseId/modules/:moduleId/lessons';

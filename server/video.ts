@@ -1,4 +1,4 @@
-import type { Lesson } from '../src/live/types';
+import type { Lesson } from '../src/live/types.js';
 
 export function externalUrl(value: string) {
   let url: URL;

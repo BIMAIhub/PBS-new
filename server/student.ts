@@ -1,13 +1,13 @@
 import type { Express } from 'express';
-import { findAccount, publicAccount, requireAccount, sessionAccount, startSession } from './auth';
-import { type WritableDatabase, makeId, makeStudentId, now, transaction } from './database';
-import { badRequest, conflict, emailAddress, field, limitAttempts, notFound, RequestError, route } from './http';
-import { httpsLink, paymentClaim, phoneNumber } from './inputs';
-import { hashPassword, validPassword } from './passwords';
+import { findAccount, publicAccount, requireAccount, sessionAccount, startSession } from './auth.js';
+import { type WritableDatabase, makeId, makeStudentId, now, transaction } from './database.js';
+import { badRequest, conflict, emailAddress, field, limitAttempts, notFound, RequestError, route } from './http.js';
+import { httpsLink, paymentClaim, phoneNumber } from './inputs.js';
+import { hashPassword, validPassword } from './passwords.js';
 import {
   checkReference, courseById, courses, enrollmentById, getAssessment, hasCourseAccess,
   portfolio, requireCompletedLessons, studentWorkspace
-} from './records';
+} from './records.js';
 
 export function mountStudent(app: Express, db: WritableDatabase, hosted: boolean) {
   app.get('/api/catalog', route(async (_req, res) => {

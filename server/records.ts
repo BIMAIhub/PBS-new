@@ -1,11 +1,11 @@
 import type {
   Account, AssessmentQuestion, AssessmentResult, Assignment, Completion, Course, CourseSummary,
   Enrollment, Message, Portfolio, Receipt, StudentRecord
-} from '../src/live/types';
-import { accountFields, publicAccount } from './auth';
-import { type Database, makeId, now } from './database';
-import { conflict, notFound, badRequest } from './http';
-import { videoPlayback } from './video';
+} from '../src/live/types.js';
+import { accountFields, publicAccount } from './auth.js';
+import { type Database, makeId, now } from './database.js';
+import { conflict, notFound, badRequest } from './http.js';
+import { videoPlayback } from './video.js';
 
 const courseFields = `id, title, description, category, instructor, schedule, fee, published`;
 const enrollmentFields = `e.id, e.account_id AS studentId, a.name AS studentName, a.email,

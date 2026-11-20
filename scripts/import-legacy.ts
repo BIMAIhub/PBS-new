@@ -2,10 +2,10 @@ import 'dotenv/config';
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { parseArgs } from 'node:util';
-import { openDatabase, now, transaction } from '../server/database';
-import { issueReceipt } from '../server/records';
-import { videoPlayback } from '../server/video';
-import { paymentReference } from '../server/inputs';
+import { openDatabase, now, transaction } from '../server/database.js';
+import { issueReceipt } from '../server/records.js';
+import { videoPlayback } from '../server/video.js';
+import { paymentReference } from '../server/inputs.js';
 
 type Row = Record<string, unknown>;
 const row = (value: unknown): Row => value && typeof value === 'object' && !Array.isArray(value) ? value as Row : {};

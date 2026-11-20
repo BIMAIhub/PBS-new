@@ -1,9 +1,9 @@
 import { createHash, randomBytes } from 'node:crypto';
 import type { Express, Request, Response } from 'express';
-import type { Account, Role } from '../src/live/types';
-import { type Database, type WritableDatabase, transaction } from './database';
-import { RequestError, badRequest, field, limitAttempts, route } from './http';
-import { hashPassword, validPassword, verifyPassword } from './passwords';
+import type { Account, Role } from '../src/live/types.js';
+import { type Database, type WritableDatabase, transaction } from './database.js';
+import { RequestError, badRequest, field, limitAttempts, route } from './http.js';
+import { hashPassword, validPassword, verifyPassword } from './passwords.js';
 
 type AccountRow = Omit<Account, 'mustChangePassword'> & { mustChangePassword: number; passwordHash: string };
 export const accountFields = `id, role, name, email, phone, roll_number AS rollNumber,

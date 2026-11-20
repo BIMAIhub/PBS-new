@@ -1,12 +1,12 @@
 import express from 'express';
 import { GoogleGenAI } from '@google/genai';
-import { openDatabase } from './database';
-import { provisionInitialAdministrator } from './administrators';
-import { mountAuth, requireAccount } from './auth';
-import { mountAdmin } from './admin';
-import { mountStudent } from './student';
-import { mountMedia } from './media';
-import { apiError, field, limitAttempts, RequestError, route } from './http';
+import { openDatabase } from './database.js';
+import { provisionInitialAdministrator } from './administrators.js';
+import { mountAuth, requireAccount } from './auth.js';
+import { mountAdmin } from './admin.js';
+import { mountStudent } from './student.js';
+import { mountMedia } from './media.js';
+import { apiError, field, limitAttempts, RequestError, route } from './http.js';
 
 export async function createPortalApp(hosted = false) {
   const app = express();

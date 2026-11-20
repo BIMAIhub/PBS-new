@@ -1,6 +1,6 @@
-import { type Database, type WritableDatabase, makeId, now, transaction } from './database';
-import { emailAddress, field } from './http';
-import { hashPassword } from './passwords';
+import { type Database, type WritableDatabase, makeId, now, transaction } from './database.js';
+import { emailAddress, field } from './http.js';
+import { hashPassword } from './passwords.js';
 
 export async function insertAdministrator(db: Database, { email, name, passwordHash, mustChangePassword = false }: {
   email: string; name: string; passwordHash: string; mustChangePassword?: boolean;
@@ -25,7 +25,7 @@ export async function provisionInitialAdministrator(db: WritableDatabase) {
   const passwordHash = await hashPassword(password, { temporary: true });
 
   await transaction(db, async tx => {
-    if (await administrator.get()) return;
+    if (await tx.prepare("SELECT 1 FROM accounts WHERE role = 'admin' LIMIT 1").get()) return;
     if (await tx.prepare('SELECT 1 FROM accounts WHERE email = ?').get(email)) {
       throw new Error('The initial administrator email already belongs to a student account.');
     }

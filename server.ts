@@ -1,8 +1,8 @@
 import 'dotenv/config';
 import express from 'express';
 import path from 'node:path';
-import { dataDirectory } from './server/database';
-import { createPortalApp } from './server/app';
+import { dataDirectory } from './server/database.js';
+import { createPortalApp } from './server/app.js';
 
 async function startServer() {
   const production = process.env.NODE_ENV === 'production' || process.argv.includes('--production');

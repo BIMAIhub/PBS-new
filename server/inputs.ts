@@ -1,5 +1,5 @@
-import { badRequest, field, integer } from './http';
-import { externalUrl } from './video';
+import { badRequest, field, integer } from './http.js';
+import { externalUrl } from './video.js';
 
 export function httpsLink(value: unknown, label: string, required = true) {
   const link = field(value, label, 2048, required);

@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { createPortalApp } from '../server/app';
+import { createPortalApp } from '../server/app.js';
 
 export const config = { helpers: false };
 
