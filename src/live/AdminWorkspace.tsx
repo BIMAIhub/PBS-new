@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   ArrowDownToLine, ArrowRight, BookOpen, BriefcaseBusiness, CircleHelp, ClipboardList,
-  Activity, Award, Cloud, FilePenLine, Tag, LayoutDashboard, CreditCard, FileText, IndianRupee, KeyRound, LogOut, MessageSquare, Plus, Search, UserRound, Users, Video
+  Activity, Award, Cloud, FilePenLine, Paintbrush, Tag, LayoutDashboard, CreditCard, FileText, IndianRupee, KeyRound, LogOut, MessageSquare, Plus, Search, UserRound, Users, Video
 } from 'lucide-react';
 import { PortalDialog } from '../components/student-dashboard/PortalUI';
 import { WorkspaceChrome, type WorkspaceNavGroup } from '../components/student-dashboard/WorkspaceChrome';
@@ -19,11 +19,12 @@ import { Integrations } from './Integrations';
 import { OffersAdmin } from './OffersAdmin';
 import { CurriculumAdmin } from './CurriculumAdmin';
 import { NotificationCenter } from './Notifications';
+import { BrandingAdmin } from './BrandingAdmin';
 import type { AdminAcademyData } from './academy-types';
 import type { Account, AdminWorkspaceData, Assignment, Course, Enrollment, Lesson, Receipt, StudentRecord } from './types';
 import { Button, dateLabel, dateTimeLabel, DialogForm, Empty, ExternalLink, Field, FormError, Input, money, Panel, Status, useApiResource, value } from './ui';
 
-type Page = 'overview' | 'students' | 'courses' | 'enrollments' | 'payments' | 'projects' | 'placements' | 'messages' | 'certificates' | 'integrations' | 'activity' | 'offers' | 'curriculum';
+type Page = 'overview' | 'students' | 'courses' | 'enrollments' | 'payments' | 'projects' | 'placements' | 'messages' | 'certificates' | 'integrations' | 'activity' | 'offers' | 'curriculum' | 'branding';
 const groups: WorkspaceNavGroup<Page>[] = [
   { label: 'Administration', pages: [
     { id: 'overview', label: 'Academy overview', icon: LayoutDashboard },
@@ -41,6 +42,7 @@ const groups: WorkspaceNavGroup<Page>[] = [
     { id: 'certificates', label: 'Certificates', icon: Award },
   ] },
   { label: 'Academy settings', pages: [
+    { id: 'branding', label: 'Branding & appearance', icon: Paintbrush },
     { id: 'integrations', label: 'OneDrive & email', icon: Cloud },
     { id: 'activity', label: 'Activity log', icon: Activity },
   ] },
@@ -255,6 +257,7 @@ export function AdminWorkspace({ account, onAccount, onSignOut }: {
       {data && page === 'courses' && <CourseManager courses={data.courses} open={show} />}
       {data && page === 'curriculum' && <CurriculumAdmin courses={data.courses} onSaved={refreshAll} />}
       {data && page === 'offers' && <OffersAdmin courses={data.courses} students={data.students} />}
+      {page === 'branding' && <BrandingAdmin />}
       {data && page === 'enrollments' && <EnrollmentList enrollments={data.enrollments} open={show} />}
       {data && page === 'payments' && <div className="pbs-live-stack">
         {academy.data && <PaymentLedger data={data} academy={academy.data} open={(kind, enrollment) => show({ kind, enrollment })} onSaved={refreshAll} />}

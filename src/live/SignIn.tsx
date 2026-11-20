@@ -1,11 +1,13 @@
 import { useState, type FormEvent } from 'react';
-import { ArrowDownRight, ArrowRight, ArrowUpRight, GraduationCap, ShieldCheck } from 'lucide-react';
+import { ArrowRight, ArrowUpRight, BookOpen, GraduationCap, Layers, ShieldCheck } from 'lucide-react';
 import { PortalBrand } from '../components/student-dashboard/PortalUI';
-import { DialogForm, FormError, Input, PasswordInput, supportEmail, value } from './ui';
+import { DialogForm, FormError, Input, PasswordInput, value } from './ui';
 import { messageFrom, send } from './api';
 import type { Account, EnrollmentStatus, Role } from './types';
+import { useBranding } from './Branding';
 
 export function SignIn({ onSignedIn }: { onSignedIn: (account: Account) => void }) {
+  const { brand } = useBranding();
   const [role, setRole] = useState<Role>('student');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -32,14 +34,16 @@ export function SignIn({ onSignedIn }: { onSignedIn: (account: Account) => void 
   }
 
   return <div className="pbs-login">
-    <aside className="pbs-login-art" aria-label="Pragmatic BIM Solution">
-      <img className="pbs-login-image" src="/bim-study-model.webp" alt="" fetchPriority="high" />
+    <aside className="pbs-login-art" aria-label={brand.academyName}>
       <div className="pbs-login-art-top">
         <PortalBrand />
-        <div className="pbs-login-intro"><span className="pbs-drawing-mark" aria-hidden="true"><ArrowDownRight /></span>
-          <h2>Build your<br />BIM practice</h2></div>
+        <div className="pbs-login-intro"><p className="pbs-hero-eyebrow"><span />{brand.heroEyebrow}</p>
+          <h2 className="pbs-pre-wrap">{brand.heroTitle}</h2><p className="pbs-login-description">{brand.heroDescription}</p>
+          <a className="pbs-hero-link" href="/explore"><BookOpen size={18} />Explore BIM courses</a>
+          <div className="pbs-login-features"><div><Layers /><span>Learn by doing<small>Lessons & project practice</small></span></div><div><GraduationCap /><span>Show your progress<small>Portfolio & course credentials</small></span></div></div>
+        </div>
       </div>
-      <div className="pbs-login-art-caption"><span>Architectural study model</span><span>Structure / Services / Coordination</span></div>
+      <div className="pbs-login-art-caption"><span>Structure / Services / Coordination</span><span>{brand.shortName} learning portal</span></div>
     </aside>
     <main className="pbs-login-pane">
       <div className="pbs-login-pane-top">
@@ -66,12 +70,12 @@ export function SignIn({ onSignedIn }: { onSignedIn: (account: Account) => void 
             {busy ? 'Signing in…' : 'Sign in'} <ArrowRight />
           </button>
         </form>
-        <div className="pbs-login-admissions"><span>New to Pragmatic BIM Solution?</span>
+        <div className="pbs-login-admissions"><span>New to {brand.shortName}?</span>
           <a className="pbs-text-button" href="/explore">Explore courses</a>
         </div>
       </div>
-      <footer className="pbs-login-footer"><span>Pragmatic BIM Solution</span>
-        <a href={`mailto:${supportEmail}`}>Contact support <ArrowUpRight /></a>
+      <footer className="pbs-login-footer"><span>{brand.academyName}</span>
+        <a href={`mailto:${brand.supportEmail}`}>Contact support <ArrowUpRight /></a>
       </footer>
     </main>
     {dialog === 'lookup' && <DialogForm title="Check enrollment" submit="Check status" onClose={() => setDialog(null)}

@@ -4,8 +4,10 @@ import { PortalDialog } from '../components/student-dashboard/PortalUI';
 import type { PortalNotification } from './experience-types';
 import { messageFrom, send } from './api';
 import { Button, dateTimeLabel, Empty, FormError, useApiResource } from './ui';
+import { useBranding } from './Branding';
 
 export function NotificationCenter({ onNavigate }: { onNavigate: (page: string) => void }) {
+  const { brand } = useBranding();
   const { data, error, refresh } = useApiResource<{ items: PortalNotification[]; unread: number }>('/notifications');
   const [open, setOpen] = useState(false), [toast, setToast] = useState<PortalNotification>(), [problem, setProblem] = useState('');
   const [desktop, setDesktop] = useState(() => localStorage.getItem('pbs-desktop-notifications:v1') === '1');
@@ -22,10 +24,10 @@ export function NotificationCenter({ onNavigate }: { onNavigate: (page: string) 
     setToast(unseen[0]);
     void send('/notifications/seen', { ids: unseen.map(item => item.id) }).catch(() => {});
     if (desktop && 'Notification' in window && Notification.permission === 'granted' && document.visibilityState !== 'visible') {
-      const notification = new Notification(unseen[0].title, { body: unseen[0].body, icon: '/pbs-logo.svg', tag: unseen[0].id });
+      const notification = new Notification(unseen[0].title, { body: unseen[0].body, icon: brand.logoUrl, tag: unseen[0].id });
       notification.onclick = () => { window.focus(); onNavigate(unseen[0].page); notification.close(); };
     }
-  }, [data, desktop]);
+  }, [data, desktop, brand.logoUrl]);
   useEffect(() => { if (!toast) return; const timer = setTimeout(() => setToast(undefined), 9000); return () => clearTimeout(timer); }, [toast]);
   async function select(item: PortalNotification) {
     setProblem('');

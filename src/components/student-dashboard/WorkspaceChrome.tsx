@@ -133,8 +133,8 @@ export function WorkspaceChrome<Page extends string>({
         </header>
 
         <main id="workspace-content" className="pbs-workspace-main" tabIndex={-1}>
-          <h1 className="pbs-page-title">{pageName}</h1>
-          {children}
+          <div className="pbs-workspace-heading"><p>{workspaceLabel || 'Your learning workspace'}</p><h1 className="pbs-page-title">{pageName}</h1><span aria-hidden="true" /></div>
+          <div className="pbs-page-content" key={activePage}>{children}</div>
         </main>
       </div>
 

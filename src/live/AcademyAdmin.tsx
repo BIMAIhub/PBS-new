@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ArrowDownToLine, ArrowRight, Bell, CalendarDays, Check, Cloud, CreditCard, IndianRupee, Search, Settings, ShieldCheck, Users } from 'lucide-react';
 import { send, messageFrom } from './api';
+import { useBranding } from './Branding';
 import type { AdminWorkspaceData, Enrollment } from './types';
 import type { AdminAcademyData, EnrollmentDetail } from './academy-types';
 import { Button, dateLabel, dateTimeLabel, DialogForm, Empty, Field, FormError, Input, money, Panel, PasswordInput, Status, value } from './ui';
@@ -11,6 +12,7 @@ const balance = (item: Enrollment) => Math.max(0, item.total - item.paid);
 export function AdminOverview({ data, academy, navigate, onEnroll }: {
   data: AdminWorkspaceData; academy?: AdminAcademyData; navigate: (page: 'students' | 'enrollments' | 'payments' | 'certificates' | 'integrations') => void; onEnroll: () => void;
 }) {
+  const { brand } = useBranding();
   const active = data.enrollments.filter(item => item.status === 'approved');
   const pending = data.enrollments.filter(item => item.status === 'pending').length;
   const reported = data.enrollments.filter(item => item.requestedPayment).length;
@@ -27,7 +29,7 @@ export function AdminOverview({ data, academy, navigate, onEnroll }: {
     <section className="pbs-academy-welcome">
       <div><p className="pbs-eyebrow">PBS academy · Administration</p><h2>A clear view of your academy.</h2><p>Manage learning, follow up on fees, and keep every student moving forward.</p>
         <div className="pbs-actions"><Button onClick={onEnroll}><Users size={17} /> Enroll a student</Button><Button quiet onClick={() => navigate('enrollments')}>Review applications <ArrowRight size={17} /></Button></div>
-      </div><div className="pbs-academy-emblem" aria-hidden="true"><img src="/pbs-logo.svg" width="100" height="100" /><span>PRAGMATIC BIM SOLUTION</span></div>
+      </div><div className="pbs-academy-emblem" aria-hidden="true"><img src={brand.logoUrl} width="100" height="100" /><span>{brand.academyName}</span></div>
     </section>
     <dl className="pbs-learning-stats pbs-academy-stats">
       <div><dt><Users /> Active students</dt><dd>{new Set(active.map(item => item.studentId)).size}</dd><small>Across {data.courses.length} courses</small></div>

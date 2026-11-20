@@ -12,6 +12,7 @@ import { mountProfiles } from './profiles.js';
 import { mountNotifications } from './notifications.js';
 import { mountCurriculum } from './curriculum.js';
 import { generateLearningText } from './ai.js';
+import { mountBranding } from './branding.js';
 import { apiError, field, limitAttempts, RequestError, route } from './http.js';
 
 export async function createPortalApp(hosted = false) {
@@ -51,6 +52,7 @@ export async function createPortalApp(hosted = false) {
     res.json({ status: 'ok' });
   }));
   mountAuth(app, db, hosted);
+  mountBranding(app, db, hosted);
   mountAdmin(app, db, hosted);
   mountStudent(app, db, hosted);
   mountMedia(app, db, hosted);

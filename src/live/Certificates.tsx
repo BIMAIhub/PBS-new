@@ -5,6 +5,8 @@ import { api, messageFrom, send } from './api';
 import type { AcademyData, CertificateRecord, CertificateTemplate } from './academy-types';
 import type { Course, StudentWorkspaceData } from './types';
 import { Button, dateLabel, DialogForm, Empty, Field, FormError, Input, Panel, Status, useApiResource, value } from './ui';
+import { brandLogoData, useBranding } from './Branding';
+import { defaultBranding, type Branding } from './branding-types';
 
 const initialTemplate: CertificateTemplate = { courseId: '', title: 'Certificate of completion', issuer: 'Pragmatic BIM Solution', signer: 'Academic Director', signerRole: 'Authorized signatory', design: 'architectural', primaryColor: '#176BB7', accentColor: '#D4A94D' };
 export type CertificateView = Pick<CertificateRecord, 'id' | 'studentName' | 'courseTitle' | 'issuedAt' | 'revokedAt' | 'template'>;
@@ -12,9 +14,10 @@ export const verificationUrl = (record: CertificateRecord) => `${location.origin
 export const linkedInShareUrl = (url: string) => `https://www.linkedin.com/sharing/share-offsite/?${new URLSearchParams({ url })}`;
 
 export function CertificatePaper({ record, preview = false }: { record: CertificateView; preview?: boolean }) {
+  const { brand } = useBranding();
   const template = record.template;
   return <article className={`pbs-certificate-paper pbs-certificate-${template.design}`} style={{ '--cert-primary': template.primaryColor, '--cert-accent': template.accentColor } as CSSProperties}>
-    <div className="pbs-cert-header"><img src="/pbs-logo.svg" width="48" height="48" alt="PBS" /><span>{template.issuer}<small>Professional BIM education</small></span><span className="pbs-cert-seal"><Award size={31} /></span></div>
+    <div className="pbs-cert-header"><img src={brand.logoUrl} width="48" height="48" alt={brand.shortName} /><span>{template.issuer}<small>Professional BIM education</small></span><span className="pbs-cert-seal"><Award size={31} /></span></div>
     <div className="pbs-cert-content"><p className="pbs-cert-eyebrow">Learning. Applied.</p><h2>{template.title}</h2><p>This is to certify that</p><h3>{record.studentName}</h3><p>has successfully completed the learning requirements and assessment for</p><h4>{record.courseTitle}</h4><div className="pbs-cert-line" /></div>
     <div className="pbs-cert-bottom"><div><strong>{template.signer}</strong><small>{template.signerRole}</small></div><div><strong>{preview ? 'Issue date' : dateLabel(record.issuedAt)}</strong><small>{preview ? 'Certificate ID assigned on completion' : record.id}</small></div></div>
     {record.revokedAt && <div className="pbs-cert-revoked">Revoked</div>}
@@ -22,6 +25,7 @@ export function CertificatePaper({ record, preview = false }: { record: Certific
 }
 
 export async function downloadCertificate(record: CertificateRecord) {
+  const brand = await api<Branding>('/branding').catch(() => defaultBranding);
   const [{ jsPDF }, qr] = await Promise.all([import('jspdf'), import('qrcode')]);
   const pdf = new jsPDF({ orientation: 'landscape', format: 'a4', unit: 'mm', compress: true });
   const t = record.template;
@@ -36,10 +40,8 @@ export async function downloadCertificate(record: CertificateRecord) {
   pdf.setDrawColor(t.accentColor); pdf.setLineWidth(1); pdf.line(18, 17, 279, 17);
   if (t.design === 'architectural') { pdf.setFillColor(t.primaryColor); pdf.rect(10, 10, 5, 190, 'F'); pdf.setFillColor(t.accentColor); pdf.triangle(260, 10, 287, 10, 287, 37, 'F'); }
   if (t.design === 'classic') { pdf.setDrawColor(t.accentColor); pdf.setLineWidth(0.3); pdf.rect(14, 14, 269, 182); }
-  pdf.setFillColor(t.primaryColor); pdf.roundedRect(26, 25, 15, 15, 2.5, 2.5, 'F');
-  pdf.setDrawColor('#ffffff'); pdf.setLineWidth(0.45);
-  const cube = [[29, 30, 33.5, 27.4], [33.5, 27.4, 38, 30], [38, 30, 38, 34], [38, 34, 33.5, 36.6], [33.5, 36.6, 29, 34], [29, 34, 29, 30], [29, 30, 33.5, 32.6], [33.5, 32.6, 38, 30], [33.5, 32.6, 33.5, 36.6], [29, 32.3, 33.5, 34.9], [33.5, 34.9, 38, 32.3]];
-  for (const [x1, y1, x2, y2] of cube) pdf.line(x1, y1, x2, y2);
+  try { pdf.addImage(await brandLogoData(brand), 'PNG', 26, 24, 17, 17); }
+  catch { pdf.setTextColor(t.primaryColor); pdf.setFontSize(14); pdf.text(brand.shortName, 26, 34); }
   pdf.setTextColor(t.primaryColor); pdf.setFont('helvetica', 'bold'); pdf.setFontSize(15);
   pdf.text(fitText(t.issuer, 190, 15, 11), 148.5, 32, { align: 'center' });
   pdf.setFontSize(8); pdf.setFont('helvetica', 'normal'); pdf.text('Professional BIM education', 148.5, 40, { align: 'center' });
@@ -62,11 +64,12 @@ export async function downloadCertificate(record: CertificateRecord) {
 }
 
 export function CertificateDialog({ record, onClose, celebrate = false }: { record: CertificateRecord; onClose: () => void; celebrate?: boolean }) {
+  const { brand } = useBranding();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const celebrationCanvas = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
-    if (!celebrate || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    if (!celebrate || !brand.motionEnabled || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     let active = true, stop = () => {};
     void import('canvas-confetti').then(({ default: confetti }) => {
       if (!active || !celebrationCanvas.current) return;
@@ -75,7 +78,7 @@ export function CertificateDialog({ record, onClose, celebrate = false }: { reco
       void fire({ particleCount: 48, spread: 58, origin: { y: .4 }, colors: ['#176BB7', '#D4A94D', '#dce5ed'], disableForReducedMotion: true });
     });
     return () => { active = false; stop(); };
-  }, [celebrate]);
+  }, [celebrate, brand.motionEnabled]);
   return <PortalDialog title="Your course certificate" className="pbs-dialog-wide pbs-certificate-dialog" onClose={onClose}>
     {celebrate && <canvas ref={celebrationCanvas} className="pbs-award-confetti" aria-hidden="true" />}
     {celebrate && <div className="pbs-certificate-earned"><Award size={34} /><div><h3>You earned your PBS credential</h3><p>Your course completion is recorded. Download your certificate, then enable public verification to share it on LinkedIn.</p></div></div>}
@@ -169,8 +172,9 @@ export function CertificateStudio({ courses, records, onSaved }: { courses: Cour
 }
 
 export function PublicCertificate({ token }: { token: string }) {
+  const { brand } = useBranding();
   const { data, error } = useApiResource<CertificateView>(`/certificates/verify/${encodeURIComponent(token)}`);
-  return <main className="pbs-public-certificate"><a href="/" className="pbs-text-button"><img src="/pbs-logo.svg" width="32" height="32" alt="PBS" /> Pragmatic BIM Solution</a><FormError error={error} />
+  return <main className="pbs-public-certificate"><a href="/" className="pbs-text-button"><img src={brand.logoUrl} width="32" height="32" alt={brand.shortName} /> {brand.academyName}</a><FormError error={error} />
     {!data && !error && <p className="pbs-muted" role="status">Verifying credential…</p>}
     {data && <><div className={`pbs-verification-status ${data.revokedAt ? 'pbs-is-revoked' : ''}`}><ShieldCheck size={24} /><div><h1>{data.revokedAt ? 'Credential revoked' : 'Verified PBS credential'}</h1><p>{data.revokedAt ? `Revoked ${dateLabel(data.revokedAt)}` : `${data.studentName} earned this course certificate on ${dateLabel(data.issuedAt)}.`}</p></div></div><CertificatePaper record={data} /></>}
   </main>;

@@ -4,6 +4,7 @@ import { PortalBrand } from '../components/student-dashboard/PortalUI';
 import type { Portfolio } from './types';
 import type { PortfolioSections } from './experience-types';
 import { dateLabel, FormError, useApiResource } from './ui';
+import { useBranding } from './Branding';
 
 export interface PublicPortfolioData {
   name: string; portfolio: Portfolio; sections: PortfolioSections;
@@ -11,6 +12,7 @@ export interface PublicPortfolioData {
   certificates: { id: string; courseTitle: string; issuedAt: string; publicToken: string; issuer: string }[];
 }
 export function PortfolioShowcase({ data, id, preview = false }: { data: PublicPortfolioData; id: string; preview?: boolean }) {
+  const { brand } = useBranding();
   const { portfolio, profile, sections } = data;
   return <div className={`pbs-showcase pbs-showcase-${sections.layout}`} style={{ '--portfolio-accent': sections.accentColor } as CSSProperties}>
     <header className="pbs-showcase-header"><a href="/explore"><PortalBrand subtitle="BIM professional portfolios" /></a><span>{preview ? 'Portfolio preview' : 'Professional portfolio'}</span></header>
@@ -19,7 +21,7 @@ export function PortfolioShowcase({ data, id, preview = false }: { data: PublicP
       {(sections.projects.length > 0 || portfolio.projectUrl) && <section className="pbs-showcase-section"><div className="pbs-showcase-section-heading"><h2>Selected projects</h2><span>{sections.projects.length || 1} projects</span></div><div className="pbs-showcase-projects">{(sections.projects.length ? sections.projects : [{ title: 'Featured BIM project', summary: '', tools: '', url: portfolio.projectUrl }]).map((project, index) => <article key={index}><div className="pbs-project-drawing"><Layers size={40} /><span>{project.tools || 'BIM project'}</span></div><div><h3>{project.title}</h3>{project.summary && <p className="pbs-pre-wrap">{project.summary}</p>}<a href={project.url} target="_blank" rel="noopener noreferrer">Open project <ExternalLink size={15} /></a></div></article>)}</div></section>}
       {(sections.experience.length > 0 || sections.education.length > 0) && <div className="pbs-showcase-history">{[{ title: 'Experience', icon: BriefcaseBusiness, items: sections.experience }, { title: 'Education', icon: GraduationCap, items: sections.education }].map(({ title, icon: Icon, items }) => items.length > 0 && <section className="pbs-showcase-section" key={title}><h2><Icon size={21} />{title}</h2>{items.map((entry, index) => <article className="pbs-showcase-timeline" key={index}><span>{entry.period}</span><div><h3>{entry.title}</h3><strong>{entry.organization}</strong><p className="pbs-pre-wrap">{entry.description}</p></div></article>)}</section>)}</div>}
       {data.certificates.length > 0 && <section className="pbs-showcase-section"><h2>Earned credentials</h2><div className="pbs-showcase-credentials">{data.certificates.map(item => <a href={`/verify/certificate/${encodeURIComponent(item.publicToken)}`} key={item.id} target="_blank" rel="noopener noreferrer"><Award size={28} /><div><h3>{item.courseTitle}</h3><p>{item.issuer} · {dateLabel(item.issuedAt)}</p><span>Verify credential</span></div><ExternalLink size={16} /></a>)}</div></section>}
-    </main><footer className="pbs-showcase-footer"><span>Portfolio by {data.name}</span><a href="/explore">Pragmatic BIM Solution</a></footer>
+    </main><footer className="pbs-showcase-footer"><span>Portfolio by {data.name}</span><a href="/explore">{brand.academyName}</a></footer>
   </div>;
 }
 export function PublicPortfolioPage({ id }: { id: string }) {

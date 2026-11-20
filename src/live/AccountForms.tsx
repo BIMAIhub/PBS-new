@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { ArrowUpRight } from 'lucide-react';
 import { PortalDialog } from '../components/student-dashboard/PortalUI';
 import { send } from './api';
+import { useBranding } from './Branding';
 import type { Account, Message, Portfolio } from './types';
-import { Button, dateTimeLabel, DialogForm, Empty, Field, Input, Panel, PasswordInput, supportEmail, value } from './ui';
+import { Button, dateTimeLabel, DialogForm, Empty, Field, Input, Panel, PasswordInput, value } from './ui';
 
 export function PasswordForm({ account, onSaved, onClose }: {
   account: Account; onSaved: (account: Account) => void; onClose: () => void;
@@ -26,9 +27,10 @@ export function PasswordForm({ account, onSaved, onClose }: {
 }
 
 export function HelpDialog({ onClose }: { onClose: () => void }) {
-  return <PortalDialog title="PBS support" onClose={onClose}>
-    <p className="pbs-muted">Contact Pragmatic BIM Solution for account access, enrollment or classroom help.</p>
-    <a className="pbs-text-button" href={`mailto:${supportEmail}`}>{supportEmail} <ArrowUpRight /></a>
+  const { brand } = useBranding();
+  return <PortalDialog title={`${brand.shortName} support`} onClose={onClose}>
+    <p className="pbs-muted">Contact {brand.academyName} for account access, enrollment or classroom help.</p>
+    <a className="pbs-text-button" href={`mailto:${brand.supportEmail}`}>{brand.supportEmail} <ArrowUpRight /></a>
   </PortalDialog>;
 }
 

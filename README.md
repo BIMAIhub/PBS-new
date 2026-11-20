@@ -89,6 +89,16 @@ Students unlock **My certificates** after completing every lesson and passing th
 
 **My portfolio** lets students edit a headline, project summary, project URL, LinkedIn, GitHub and website links. Publishing is optional. Students can copy the public portfolio link or share it to LinkedIn. Fee records, internal notes and contact information do not appear on the public page.
 
+## Global branding and glass appearance
+
+Open **Academy settings → Branding & appearance** in the admin workspace. Upload a square PNG, JPEG or WebP logo (up to 512 KB) and select **Publish logo**. The identity updates in public pages, workspace navigation, student IDs, receipts, bonafide letters, certificate previews and newly downloaded certificate PDFs, desktop notification icons, and the browser tab. Existing downloaded PDFs remain unchanged. Upload a wide background (up to 2 MB) for sign-in and public course discovery, or restore the included PBS assets.
+
+Edit the academy name, short name, tagline, support email, hero headline and introduction, then choose **Save branding**. The default palette is blue `#176BB7`, gold `#D4A94D`, and light reading surfaces `#F4F7FA`, set against a navy photographic stage. Colours, glass surfaces, and interface animation can be changed here. Primary button colour is checked for readable white text; reading surfaces stay light. System reduced-motion preferences always override animation. The admin motion setting also stops certificate confetti. Other open tabs refresh branding on focus and at most once a minute while visible.
+
+Brand settings persist in the database. Hosted uploads use the configured private Vercel Blob store, with only the current public brand images served through the PBS API. Local uploads use the persistent PBS data directory. Image files are bounded and checked for their raster format; SVG uploads are not accepted. Branding changes require an administrator account and appear in the academy activity log. Payment payee details and saved certificate issuer wording are managed separately and are not rewritten by a brand change.
+
+The included `public/bim-studio-hero.webp` is an original generated concept image of a BIM learning studio, created with the built-in image generation tool. It illustrates the learning setting; it does not document a specific PBS facility or imply third-party accreditation. Generation brief: editorial architectural photograph of adult engineers collaborating around BIM and MEP models in a contemporary studio, navy shadows, warm gold lighting, wide composition with calm room for a headline, no text or logos. The architectural logo remains a resolution-independent SVG in `public/pbs-logo.svg`.
+
 ## Course discovery, offers and notifications
 
 The public catalog is available at `/explore`, with a separate page at `/courses/COURSE_ID`. Only published courses are public. In **Courses & videos**, edit a course and enable **Show in the enrollment catalog**. **Curriculum & assignments → Edit public course information** adds the level, intended audience, learning outcomes and requirements. Public course responses contain curriculum information and lesson titles, without private playback URLs.

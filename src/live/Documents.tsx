@@ -4,6 +4,7 @@ import { PortalBrand, PortalDialog } from '../components/student-dashboard/Porta
 import type { Account, CourseSummary, Enrollment, Receipt, AssessmentResult } from './types';
 import { Button, dateLabel, Empty, FormError, money, Panel } from './ui';
 import { messageFrom } from './api';
+import { useBranding } from './Branding';
 
 export type DocumentInfo =
   | { kind: 'receipt'; receipt: Receipt }
@@ -15,6 +16,7 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 }
 
 function DocumentContent({ document }: { document: DocumentInfo }) {
+  const { brand } = useBranding();
   if (document.kind === 'receipt') {
     const receipt = document.receipt;
     return <>
@@ -28,7 +30,7 @@ function DocumentContent({ document }: { document: DocumentInfo }) {
         <Row label="Payment method">{receipt.method}</Row>
         <Row label="Payment reference">{receipt.reference || 'On file'}</Row>
       </dl>
-      <p className="pbs-doc-note">Pragmatic BIM Solution acknowledges receipt of the payment above.</p>
+      <p className="pbs-doc-note">{brand.academyName} acknowledges receipt of the payment above.</p>
     </>;
   }
   const { account } = document;
@@ -53,7 +55,7 @@ function DocumentContent({ document }: { document: DocumentInfo }) {
     return <>
       <p className="pbs-doc-kicker">Enrollment confirmation</p>
       <h3>Bonafide enrollment letter</h3>
-      <p className="pbs-doc-body">Pragmatic BIM Solution confirms that <strong>{account.name}</strong> is enrolled in <strong>{enrollment.courseTitle}</strong>.</p>
+      <p className="pbs-doc-body">{brand.academyName} confirms that <strong>{account.name}</strong> is enrolled in <strong>{enrollment.courseTitle}</strong>.</p>
       <dl className="pbs-document-fields">
         <Row label="Student ID">{account.id}</Row>
         <Row label="Roll number">{account.rollNumber}</Row>
@@ -69,6 +71,7 @@ function DocumentContent({ document }: { document: DocumentInfo }) {
 const titles = { receipt: 'Payment receipt', id: 'Student ID', letter: 'Bonafide letter', certificate: 'Course certificate' };
 
 export function DocumentDialog({ document, onClose }: { document: DocumentInfo; onClose: () => void }) {
+  const { brand } = useBranding();
   const paper = useRef<HTMLElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -79,6 +82,7 @@ export function DocumentDialog({ document, onClose }: { document: DocumentInfo; 
     try {
       const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import('html2canvas'), import('jspdf')]);
       await window.document.fonts.ready;
+      await Promise.all(Array.from(paper.current.querySelectorAll('img')).map(image => image.decode().catch(() => {})));
       const canvas = await html2canvas(paper.current, { scale: 2, backgroundColor: '#ffffff', logging: false });
       const landscape = document.kind === 'id';
       const pdf = new jsPDF({ orientation: landscape ? 'landscape' : 'portrait', unit: 'mm', format: landscape ? 'a5' : 'a4', compress: true });
@@ -100,7 +104,7 @@ export function DocumentDialog({ document, onClose }: { document: DocumentInfo; 
       <article className={`pbs-print-document pbs-document-${document.kind}`} ref={paper}>
         <PortalBrand subtitle="Learning records" />
         <DocumentContent document={document} />
-        <footer className="pbs-doc-footer"><span>Pragmatic BIM Solution</span><span>info@pragmaticbim.com</span></footer>
+        <footer className="pbs-doc-footer"><span>{brand.academyName}</span><span>{brand.supportEmail}</span></footer>
       </article>
     </div>
     <FormError error={error} />
