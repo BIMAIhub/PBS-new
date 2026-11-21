@@ -4,9 +4,10 @@ import { type WritableDatabase, makeId, makeStudentId, now, transaction } from '
 import { badRequest, conflict, emailAddress, field, integer, limitAttempts, notFound, route } from './http.js';
 import { httpsLink, paymentClaim, paymentReference, phoneNumber } from './inputs.js';
 import { hashPassword, temporaryPassword, verifyPassword } from './passwords.js';
+import { accessPackage, deliverAccessEmail } from './admissions.js';
 import { adminWorkspace, courseById, courseDetails, enrollmentById, getAssessment, issueReceipt } from './records.js';
 import { academyWorkspace, audit } from './academy-data.js';
-import { grantCourseAccess } from './microsoft.js';
+import { grantCourseAccess, portalOrigin } from './microsoft.js';
 import { saveLiveClass } from './live-classes.js';
 
 export function mountAdmin(app: Express, db: WritableDatabase, hosted: boolean) {
@@ -131,12 +132,17 @@ export function mountAdmin(app: Express, db: WritableDatabase, hosted: boolean) 
     const name = existing ? '' : field(req.body?.name, 'full name', 120);
     const phone = phoneNumber(req.body?.phone);
     const rollNumber = field(req.body?.rollNumber, 'roll number', 60, false) || id;
-    const password = existing ? undefined : temporaryPassword();
+    const activate = existing && Boolean(await db.prepare("SELECT 1 FROM student_admissions WHERE account_id = ? AND approved_at = ''").get(id));
+    const password = !existing || activate ? temporaryPassword() : undefined;
     const hash = password ? await hashPassword(password) : undefined;
     const result = await transaction(db, async tx => {
       if (!existing) {
         await tx.prepare(`INSERT INTO accounts (id, role, name, email, phone, roll_number, password_hash, must_change, created_at)
           VALUES (?, 'student', ?, ?, ?, ?, ?, 1, ?)`).run(id, name, email, phone, rollNumber, hash!, now());
+      } else if (activate) {
+        await tx.prepare('UPDATE accounts SET password_hash = ?, must_change = 1 WHERE id = ?').run(hash!, id);
+        await tx.prepare('UPDATE student_admissions SET approved_at = ? WHERE account_id = ?').run(now(), id);
+        await tx.prepare('DELETE FROM sessions WHERE account_id = ?').run(id);
       }
       const prior = await tx.prepare('SELECT id, status FROM enrollments WHERE account_id = ? AND course_id = ?')
         .get(id, course.id) as { id: string; status: string } | undefined;
@@ -156,20 +162,25 @@ export function mountAdmin(app: Express, db: WritableDatabase, hosted: boolean) 
       return { student: publicAccount((await findAccount(tx, id))!), enrollment: await enrollmentById(tx, enrollmentId), receipt };
     });
     const courseAccess = await grantCourseAccess(db, result.enrollment.id, admin.id, true).catch(() => ({ status: 'failed' }));
-    res.status(201).json({ ...result, temporaryPassword: password, courseAccess });
+    const access = await accessPackage(db, id, portalOrigin(req), password);
+    const delivery = req.body?.sendEmail === true ? await deliverAccessEmail(db, admin.id, access, `enroll:${result.enrollment.id}:${result.enrollment.approvedAt}`).catch(() => ({ status: 'unknown', error: 'Enrollment saved. Check Sent Items before sharing these details again.' })) : undefined;
+    res.status(201).json({ ...result, temporaryPassword: password, access, delivery, courseAccess });
   }));
 
   app.post('/api/admin/students/:id/reset-password', route(async (req, res) => {
-    await requireAccount(db, req, 'admin');
+    const admin = await requireAccount(db, req, 'admin');
     const student = await findAccount(db, req.params.id);
     if (!student || student.role !== 'student') throw notFound('This student is unavailable.');
+    await accessPackage(db, student.id, portalOrigin(req));
     const password = temporaryPassword();
     const hash = await hashPassword(password);
     await transaction(db, async tx => {
       await tx.prepare('UPDATE accounts SET password_hash = ?, must_change = 1 WHERE id = ?').run(hash, student.id);
       await tx.prepare('DELETE FROM sessions WHERE account_id = ?').run(student.id);
     });
-    res.json({ temporaryPassword: password });
+    const access = await accessPackage(db, student.id, portalOrigin(req), password);
+    const delivery = req.body?.sendEmail === true ? await deliverAccessEmail(db, admin.id, access, `reset:${makeId()}`).catch(() => ({ status: 'unknown', error: 'Password reset saved. Check Sent Items before sharing these details again.' })) : undefined;
+    res.json({ temporaryPassword: password, access, delivery });
   }));
 
   app.patch('/api/admin/students/:id', route(async (req, res) => {
@@ -198,12 +209,20 @@ export function mountAdmin(app: Express, db: WritableDatabase, hosted: boolean) 
     const decision = req.body?.decision;
     if (decision !== 'approved' && decision !== 'rejected') throw badRequest('Choose an enrollment decision.');
     const note = field(req.body?.notes, 'decision notes', 1000, false);
+    const candidate = decision === 'approved' ? temporaryPassword() : undefined;
+    const candidateHash = candidate ? await hashPassword(candidate) : undefined;
     const result = await transaction(db, async tx => {
       const enrollment = await enrollmentById(tx, req.params.id);
       if (enrollment.status === decision) return { enrollment };
       if (enrollment.status !== 'pending') throw conflict('This application has already been reviewed.');
       await tx.prepare('UPDATE enrollments SET status = ?, approved_at = ?, notes = ? WHERE id = ?')
         .run(decision, decision === 'approved' ? now() : '', note, enrollment.id);
+      const activate = decision === 'approved' && Boolean(await tx.prepare("SELECT 1 FROM student_admissions WHERE account_id = ? AND approved_at = ''").get(enrollment.studentId));
+      if (activate) {
+        await tx.prepare('UPDATE student_admissions SET approved_at = ? WHERE account_id = ?').run(now(), enrollment.studentId);
+        await tx.prepare('UPDATE accounts SET password_hash = ?, must_change = 1 WHERE id = ?').run(candidateHash!, enrollment.studentId);
+        await tx.prepare('DELETE FROM sessions WHERE account_id = ?').run(enrollment.studentId);
+      }
       const receipt = decision === 'approved' && req.body?.recordPayment === true && enrollment.requestedPayment
         ? await issueReceipt(tx, enrollment.id, enrollment.requestedPayment, 'UPI', enrollment.reference, admin.id)
         : undefined;
@@ -211,10 +230,12 @@ export function mountAdmin(app: Express, db: WritableDatabase, hosted: boolean) 
         await tx.prepare("UPDATE enrollments SET requested_payment = 0, reference = '' WHERE id = ?").run(enrollment.id);
       }
       await audit(tx, admin.id, `Enrollment ${decision}`, enrollment.id, enrollment.studentName);
-      return { enrollment: await enrollmentById(tx, enrollment.id), receipt };
+      return { enrollment: await enrollmentById(tx, enrollment.id), receipt, temporaryPassword: activate ? candidate : undefined, changed: true };
     });
     const courseAccess = decision === 'approved' ? await grantCourseAccess(db, result.enrollment.id, admin.id, true).catch(() => ({ status: 'failed' })) : undefined;
-    res.json({ ...result, courseAccess });
+    const access = decision === 'approved' && result.changed ? await accessPackage(db, result.enrollment.studentId, portalOrigin(req), result.temporaryPassword) : undefined;
+    const delivery = access && req.body?.sendEmail === true ? await deliverAccessEmail(db, admin.id, access, `approve:${result.enrollment.id}:${result.enrollment.approvedAt}`).catch(() => ({ status: 'unknown', error: 'Approval saved. Check Sent Items before sharing these details again.' })) : undefined;
+    res.json({ ...result, access, delivery, courseAccess });
   }));
 
   app.post('/api/admin/enrollments/:id/payment', route(async (req, res) => {

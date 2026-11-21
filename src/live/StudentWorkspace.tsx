@@ -1,3 +1,4 @@
+import { StudentCourseFeedback } from './CourseFeedback';
 import { useState } from 'react';
 import {
   ArrowRight, Award, BookOpen, Bot, CalendarDays, Clock, CreditCard, Download, FileText, IdCard,
@@ -24,7 +25,7 @@ import type { AcademyData } from './academy-types';
 import type { Account, AssessmentQuestion, AssessmentResult, Catalog, Course, CourseSummary, Enrollment, StudentWorkspaceData } from './types';
 import { Button, dateLabel, dateTimeLabel, DialogForm, Empty, ExternalLink, Field, FormError, Input, money, Panel, Status, useApiResource, value } from './ui';
 
-type Page = 'overview' | 'courses' | 'sessions' | 'project' | 'downloads' | 'fees' | 'reviews' | 'messages' | 'certificates' | 'portfolio' | 'profile' | 'explore';
+type Page = 'overview' | 'courses' | 'sessions' | 'project' | 'downloads' | 'fees' | 'reviews' | 'messages' | 'certificates' | 'portfolio' | 'profile' | 'explore' | 'course-feedback';
 const groups: WorkspaceNavGroup<Page>[] = [
   { label: 'Learning', pages: [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
@@ -39,7 +40,8 @@ const groups: WorkspaceNavGroup<Page>[] = [
     { id: 'certificates', label: 'My certificates', icon: Award },
     { id: 'portfolio', label: 'My portfolio', icon: Share2 },
     { id: 'profile', label: 'My profile & CV', icon: UserRound },
-    { id: 'reviews', label: 'Feedback & reviews', icon: FileText },
+    { id: 'reviews', label: 'Project reviews', icon: FileText },
+    { id: 'course-feedback', label: 'Course feedback', icon: MessageSquare },
     { id: 'messages', label: 'Messages', icon: MessageSquare },
   ] },
 ];
@@ -147,6 +149,7 @@ function StudentFees({ data, catalog, open, academy }: { data: StudentWorkspaceD
         </div>
         <div className="pbs-actions">
           <strong>{money(enrollment.total - enrollment.paid)} due</strong>
+          <Button quiet onClick={() => open({ kind: 'document', document: { kind: 'statement', enrollment, receipts: data.receipts } })}>Fee statement</Button>
           {catalog?.paymentUpiId && enrollment.total > enrollment.paid && !enrollment.requestedPayment &&
             <Button onClick={() => open({ kind: 'payment', enrollment })}><CreditCard size={17} /> Pay course fees</Button>}
           {!catalog?.paymentUpiId && enrollment.total > enrollment.paid && <Button quiet onClick={() => open({ kind: 'message' })}>Arrange payment with PBS</Button>}
@@ -225,10 +228,11 @@ export function StudentWorkspace({ account, onAccount, onSignOut }: {
       {data && page === 'overview' && <StudentOverview data={data} completed={completed} open={show} navigate={navigate} />}
       {data && page === 'courses' && <StudentCourses data={data} account={account} open={show} academy={academy.data} />}
       {data && page === 'fees' && <StudentFees data={data} catalog={catalog.data} open={show} academy={academy.data} />}
-      {data && academy.data && page === 'certificates' && <StudentCertificates data={data} academy={academy.data} onSaved={refreshAll} />}
+      {data && academy.data && page === 'certificates' && <StudentCertificates data={data} academy={academy.data} onSaved={refreshAll} onFeedback={() => navigate('course-feedback')} />}
       {data && page === 'portfolio' && <PortfolioBuilder account={account} portfolio={data.portfolio} certificates={academy.data?.certificates || []} onSaved={refreshAll} />}
       {page === 'profile' && <ProfilePage account={account} onAccount={onAccount} />}
       {page === 'explore' && catalog.data && <CatalogBrowser catalog={catalog.data} onChoose={course => show({ kind: 'course-info', course })} />}
+      {page === 'course-feedback' && <StudentCourseFeedback account={account} />}
       {page === 'sessions' && <LiveClassesStudent />}
       {data && page === 'downloads' && <Panel title="Course resources">
         {!data.courses.some(course => course.resources.length) && <Empty title="No resources yet">Course files and practice materials will appear here.</Empty>}

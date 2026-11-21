@@ -43,7 +43,9 @@ export async function sessionAccount(db: Database, req: Request) {
   if (!token) return undefined;
   const session = await db.prepare('SELECT account_id AS id FROM sessions WHERE token_hash = ? AND expires_at > ?')
     .get(token, Date.now()) as { id: string } | undefined;
-  return session ? await findAccount(db, session.id) : undefined;
+  const account = session ? await findAccount(db, session.id) : undefined;
+  if (account?.role === 'student' && await db.prepare("SELECT 1 FROM student_admissions WHERE account_id = ? AND approved_at = ''").get(account.id)) return undefined;
+  return account;
 }
 
 export async function requireAccount(db: Database, req: Request, role?: Role, allowPasswordChange = false) {
@@ -90,6 +92,9 @@ export function mountAuth(app: Express, db: WritableDatabase, hosted: boolean) {
       const latest = await findAccount(tx, account.id);
       if (!latest || latest.passwordHash !== account.passwordHash || latest.email !== account.email || latest.rollNumber !== account.rollNumber) {
         throw new RequestError(401, 'Check your email or student ID and password.');
+      }
+      if (latest.role === 'student' && await tx.prepare("SELECT 1 FROM student_admissions WHERE account_id = ? AND approved_at = ''").get(latest.id)) {
+        throw new RequestError(403, 'Your application is awaiting PBS approval. Your sign-in details will be issued after approval.');
       }
       await startSession(tx, req, res, latest.id, req.body.remember === true);
       return publicAccount(latest);

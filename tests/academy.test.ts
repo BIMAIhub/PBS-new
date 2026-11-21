@@ -1,3 +1,4 @@
+import { signInApproved, activateOnAnotherCourse } from './admission-fixtures.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -51,18 +52,21 @@ test('PBS academy payments, credentials and enrollment access', async t => {
       await req(admin, `/admin/courses/${course.id}/assessment`, { passingScore: 75, questions: [{ prompt: 'BIM uses information?', options: ['Yes', 'No'], answer: 0 }] }, 'PUT', 204);
       const applied = await req(student, '/enrollments', { courseId: course.id, name: 'QA Student', email: 'qa-student@example.invalid', password, amount: 20000, reference: 'QAUTR001' }, 'POST', 201);
       enrollment = applied.enrollment;
-      await req(student, '/admin/academy', undefined, 'GET', 403);
-      await req(student, `/student/courses/${course.id}/certificate`, {}, 'POST', 404);
+      assert.equal(student.cookie, '');
+      await req(student, '/admin/academy', undefined, 'GET', 401);
+      await req(student, `/student/courses/${course.id}/certificate`, {}, 'POST', 401);
       assert.equal((await req(admin, '/admin/academy')).details.find((item: any) => item.enrollmentId === enrollment.id).source, 'student');
     });
     await t.test('approved payment is counted once, repeated decisions do not duplicate receipts', async () => {
+      const approval = await req(admin, `/admin/enrollments/${enrollment.id}/decision`, { decision: 'approved', recordPayment: true });
       await req(admin, `/admin/enrollments/${enrollment.id}/decision`, { decision: 'approved', recordPayment: true });
-      await req(admin, `/admin/enrollments/${enrollment.id}/decision`, { decision: 'approved', recordPayment: true });
+      await signInApproved(req, student, approval, password);
       const workspace = await req(admin, '/admin/workspace'); assert.equal(workspace.receipts.length, 1); assert.equal(workspace.enrollments[0].paid, 20000);
       await req(student, `/student/courses/${course.id}/certificate`, {}, 'POST', 409);
     });
     await t.test('student payment reference requires ownership; admin verification is idempotent', async () => {
       await req(other, '/enrollments', { courseId: course.id, name: 'Other QA', email: 'other-qa@example.invalid', password, amount: 0 }, 'POST', 201);
+      await activateOnAnotherCourse(req, admin, other, 'other-qa@example.invalid', password);
       await req(other, `/student/enrollments/${enrollment.id}/payment`, { amount: 10000, reference: 'QAWRONG' }, 'POST', 404);
       await req(student, `/student/enrollments/${enrollment.id}/payment`, { amount: 30000, reference: 'QAUTR002' });
       await req(student, `/student/enrollments/${enrollment.id}/payment`, { amount: 10000, reference: 'QAUTR003' }, 'POST', 409);
@@ -88,7 +92,7 @@ test('PBS academy payments, credentials and enrollment access', async t => {
       assert.equal((await req(other, '/student/academy')).reminders.length, 0);
     });
     await t.test('certificate requires complete lessons and passed assessment, with stable issuance', async () => {
-      const details = await req(admin, '/admin/workspace'); const lessonId = details.courses[0].modules[0].lessons[0].id;
+      const details = await req(admin, '/admin/workspace'); const lessonId = details.courses.find((item: any) => item.id === course.id).modules[0].lessons[0].id;
       await req(student, `/student/lessons/${lessonId}/completion`, { completed: true }, 'POST', 204);
       await req(student, `/student/courses/${course.id}/certificate`, {}, 'POST', 409);
       await req(student, `/student/courses/${course.id}/assessment`, { answers: [0] });
@@ -123,7 +127,7 @@ test('PBS academy payments, credentials and enrollment access', async t => {
       };
       assert.equal((await grantCourseAccess(db, enrollment.id, adminId, true, request)).status, 'granted');
       assert.equal((await grantCourseAccess(db, enrollment.id, adminId, true, request)).status, 'granted'); assert.equal(calls, 1);
-      const pending = (await req(admin, '/admin/workspace')).enrollments.find((item: any) => item.email === 'other-qa@example.invalid');
+      const pending = (await req(admin, '/admin/workspace')).enrollments.find((item: any) => item.email === 'other-qa@example.invalid' && item.status === 'pending');
       await assert.rejects(() => grantCourseAccess(db, pending.id, adminId, true, request), /Approve enrollment/);
       await db.prepare("UPDATE course_access_grants SET status = 'failed' WHERE enrollment_id = ?").run(enrollment.id);
       const failed = await grantCourseAccess(db, enrollment.id, adminId, true, async () => { throw new Error('QA remote failure'); }); assert.equal(failed.status, 'failed');

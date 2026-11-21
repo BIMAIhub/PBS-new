@@ -8,6 +8,29 @@ export const dataDirectory = path.resolve(process.env.PBS_DATA_DIR || 'data');
 export const videoDirectory = path.join(dataDirectory, 'videos');
 
 const schema = `
+    CREATE TABLE IF NOT EXISTS student_admissions (
+      account_id TEXT PRIMARY KEY REFERENCES accounts(id), approved_at TEXT NOT NULL DEFAULT ''
+    );
+    CREATE TABLE IF NOT EXISTS access_deliveries (
+      id TEXT PRIMARY KEY, account_id TEXT NOT NULL REFERENCES accounts(id), request_key TEXT NOT NULL UNIQUE,
+      content_hash TEXT NOT NULL, email TEXT NOT NULL, status TEXT NOT NULL,
+      created_at TEXT NOT NULL, error TEXT NOT NULL DEFAULT ''
+    );
+    CREATE TABLE IF NOT EXISTS receipt_balances (
+      receipt_id TEXT PRIMARY KEY REFERENCES receipts(id), total_fee INTEGER NOT NULL,
+      paid_to_date INTEGER NOT NULL, balance INTEGER NOT NULL, due_date TEXT NOT NULL DEFAULT ''
+    );
+    CREATE TABLE IF NOT EXISTS course_feedback (
+      id TEXT PRIMARY KEY, account_id TEXT NOT NULL REFERENCES accounts(id), course_id TEXT NOT NULL REFERENCES courses(id),
+      student_name TEXT NOT NULL, qualification TEXT NOT NULL, photo TEXT NOT NULL,
+      completed_at TEXT NOT NULL, placed INTEGER NOT NULL DEFAULT 0, company TEXT NOT NULL DEFAULT '',
+      course_rating INTEGER NOT NULL, website_rating INTEGER NOT NULL, body TEXT NOT NULL, website_feedback TEXT NOT NULL DEFAULT '',
+      consent INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','private','published')),
+      reply TEXT NOT NULL DEFAULT '', submitted_at TEXT NOT NULL, reviewed_at TEXT NOT NULL DEFAULT '',
+      revision TEXT NOT NULL, UNIQUE(account_id, course_id)
+    );
+    CREATE INDEX IF NOT EXISTS feedback_public ON course_feedback(status, course_id);
+    CREATE INDEX IF NOT EXISTS feedback_admin_page ON course_feedback(submitted_at DESC, id DESC);
     CREATE TABLE IF NOT EXISTS live_classes (
       id TEXT PRIMARY KEY, course_id TEXT NOT NULL REFERENCES courses(id), title TEXT NOT NULL,
       description TEXT NOT NULL DEFAULT '', meet_url TEXT NOT NULL, starts_at TEXT NOT NULL, ends_at TEXT NOT NULL,
@@ -176,6 +199,7 @@ const schema = `
     );
     CREATE UNIQUE INDEX IF NOT EXISTS enrollment_payment_reference
       ON enrollments(reference COLLATE NOCASE) WHERE reference <> '' AND status <> 'rejected';
+    CREATE INDEX IF NOT EXISTS enrollments_status_course ON enrollments(status, course_id, account_id);
     CREATE TABLE IF NOT EXISTS receipts (
       sequence INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL UNIQUE,
       enrollment_id TEXT NOT NULL REFERENCES enrollments(id),

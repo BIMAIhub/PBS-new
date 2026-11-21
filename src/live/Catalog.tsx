@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BookOpen, Search, SlidersHorizontal, Tag } from 'lucide-react';
+import { BookOpen, Search, SlidersHorizontal, Tag, Users } from 'lucide-react';
 import type { Catalog, CourseSummary } from './types';
 import { Button, Empty, money } from './ui';
 
@@ -14,7 +14,7 @@ export function CatalogBrowser({ catalog, onChoose, compact = false }: { catalog
     <div className="pbs-catalog-grid">{filtered.map(course => <article className="pbs-catalog-course" key={course.id}>
       <div className="pbs-catalog-cover"><img src="/bim-study-model.webp" alt="Architectural model showing structure and building services" loading="lazy" /><span>{course.category}</span></div>
       <div className="pbs-catalog-course-body"><p className="pbs-catalog-meta"><BookOpen size={15} /> PBS course</p><h2>{course.title}</h2><p className="pbs-catalog-summary">{course.description}</p>
-        <div className="pbs-catalog-price"><strong>{money(course.price?.total ?? course.fee)}</strong>{Boolean(course.price?.discount) && <><del>{money(course.fee)}</del><span>{course.price!.percent}% off</span></>}</div>
+        <div className="pbs-course-live-count"><Users size={16} /><span>{course.approvedEnrollments || 0} approved enrollments</span>{catalog.community?.placementAssistance && <span>Placement assistance</span>}</div><div className="pbs-catalog-price"><strong>{money(course.price?.total ?? course.fee)}</strong>{Boolean(course.price?.discount) && <><del>{money(course.fee)}</del><span>{course.price!.percent}% off</span></>}</div>
         <div className="pbs-catalog-card-footer"><Button onClick={() => onChoose(course)}>View course</Button><a className="pbs-text-button" href={`/courses/${encodeURIComponent(course.id)}`}>Course details</a></div>
       </div>
     </article>)}</div>

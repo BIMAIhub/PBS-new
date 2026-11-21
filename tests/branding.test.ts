@@ -1,3 +1,4 @@
+import { signInApproved } from './admission-fixtures.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -34,7 +35,9 @@ test('PBS global branding and public image delivery', async t => {
       await request(admin, '/admin/branding', defaultBrandSettings, 'PUT', 403);
       await request(admin, '/auth/password', { current: process.env.PBS_BOOTSTRAP_ADMIN_PASSWORD, next: password });
       const course = (await request(visitor, '/catalog')).courses[0];
-      await request(student, '/enrollments', { courseId: course.id, name: 'Isolated branding learner', email: 'branding-student@example.invalid', password, amount: 0 }, 'POST', 201);
+      const applied = await request(student, '/enrollments', { courseId: course.id, name: 'Isolated branding learner', email: 'branding-student@example.invalid', password, amount: 0 }, 'POST', 201);
+      const approval = await request(admin, `/admin/enrollments/${applied.enrollment.id}/decision`, { decision: 'approved' });
+      await signInApproved(request, student, approval, password);
       await request(student, '/admin/branding', defaultBrandSettings, 'PUT', 403);
       await request(student, '/admin/branding/assets/logo', png, 'POST', 403, 'image/png');
     });

@@ -1,3 +1,4 @@
+import { signInApproved } from './admission-fixtures.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -32,26 +33,27 @@ test('PBS scheduled live sessions, access, attendance and points', async t => {
       await req(admin, '/auth/password', { current: process.env.PBS_BOOTSTRAP_ADMIN_PASSWORD, next: password });
       const applied = await req(student, '/enrollments', { courseId, name: 'Live QA learner', email: 'live-student@example.invalid', password, amount: 0 }, 'POST', 201); enrollmentId = applied.enrollment.id; studentId = applied.account.id;
       await req(pending, '/enrollments', { courseId, name: 'Pending live learner', email: 'pending-live@example.invalid', password, amount: 0 }, 'POST', 201);
-      await req(visitor, '/admin/live-classes', input(), 'POST', 401); await req(student, '/admin/live-classes', input(), 'POST', 403);
+      await req(visitor, '/admin/live-classes', input(), 'POST', 401); await req(student, '/admin/live-classes', input(), 'POST', 401);
       await req(admin, '/admin/live-classes', { ...input(), meetUrl: 'https://meet.google.com.evil.example/abc-defg-hij' }, 'POST', 400);
       await req(admin, '/admin/live-classes', { ...input(), accessConfirmed: false }, 'POST', 400);
       await req(admin, '/admin/live-classes', { ...input(), endsAt: time(59) }, 'POST', 400);
       upcoming = await req(admin, '/admin/live-classes', input(), 'POST', 201); assert.equal(upcoming.state, 'upcoming');
-      assert.equal((await req(student, '/student/live-classes')).classes.length, 0);
+      await req(student, '/student/live-classes', undefined, 'GET', 401);
     });
     await t.test('approval is required and meeting links stay out of student lists and calendars', async () => {
-      await req(admin, `/admin/enrollments/${enrollmentId}/decision`, { decision: 'approved', recordPayment: false });
+      const approval = await req(admin, `/admin/enrollments/${enrollmentId}/decision`, { decision: 'approved', recordPayment: false });
+      await signInApproved(req, student, approval, password);
       const data = await req(student, '/student/live-classes'); assert.equal(data.classes[0].id, upcoming.id); assert.equal('meetUrl' in data.classes[0], false);
       assert.equal(JSON.stringify(await req(student, '/student/workspace')).includes('meet.google.com'), false);
       const calendar = await req(student, `/live-classes/${upcoming.id}/calendar`); assert.match(calendar, /BEGIN:VCALENDAR/); assert.match(calendar, /page=sessions/); assert.equal(calendar.includes('meet.google.com'), false);
-      await req(pending, `/live-classes/${upcoming.id}/calendar`, undefined, 'GET', 404);
+      await req(pending, `/live-classes/${upcoming.id}/calendar`, undefined, 'GET', 401);
       await req(visitor, '/student/live-classes', undefined, 'GET', 401);
       await req(student, `/live-classes/${upcoming.id}/join`, {}, 'POST', 403);
       assert.equal((await db.prepare('SELECT COUNT(*) AS total FROM live_attendance').get())!.total, 0);
     });
     await t.test('join window and current enrollment are enforced when requesting the Meet link', async () => {
       active = await req(admin, '/admin/live-classes', input(-5, 55), 'POST', 201); assert.equal(active.state, 'open');
-      await req(pending, `/live-classes/${active.id}/join`, {}, 'POST', 404);
+      await req(pending, `/live-classes/${active.id}/join`, {}, 'POST', 401);
       await req(admin, `/live-classes/${active.id}/join`, {}, 'POST', 403);
       assert.equal((await req(student, `/live-classes/${active.id}/join`, { studentId: 'someone-else' })).url, active.meetUrl);
       await req(student, `/live-classes/${active.id}/join`, {});
@@ -60,7 +62,7 @@ test('PBS scheduled live sessions, access, attendance and points', async t => {
     });
     await t.test('schedule and opening notifications are scoped to approved course students', async () => {
       const notices = await req(student, '/notifications'); assert.ok(notices.items.some((item: any) => item.title === 'Your live session is open')); assert.equal(JSON.stringify(notices).includes('meet.google.com'), false);
-      assert.equal((await req(pending, '/notifications')).items.some((item: any) => item.kind === 'session'), false);
+      await req(pending, '/notifications', undefined, 'GET', 401);
       const again = await req(student, '/notifications'); assert.equal(again.items.filter((item: any) => item.title === 'Your live session is open').length, 1);
       const updated = await req(admin, `/admin/live-classes/${upcoming.id}`, { ...upcoming, title: 'Rescheduled workshop', description: '' }, 'PUT'); assert.notEqual(updated.revision, upcoming.revision);
       assert.ok((await req(student, '/notifications')).items.some((item: any) => item.body.includes('Rescheduled workshop')));
@@ -145,7 +147,7 @@ test('PBS scheduled live sessions, access, attendance and points', async t => {
       await req(admin, `/admin/live-classes/${active.id}/attendance/${studentId}`, { status: 'present', minutes: 45 }, 'PATCH', 400);
       const pendingId = String((await db.prepare('SELECT id FROM accounts WHERE email = ?').get('pending-live@example.invalid'))!.id);
       await req(admin, `/admin/live-classes/${active.id}/attendance/${pendingId}`, { status: 'absent', minutes: 0 }, 'PATCH', 400);
-      await req(pending, `/admin/live-classes/${active.id}/attendance/${studentId}`, { status: 'absent', minutes: 0 }, 'PATCH', 403);
+      await req(pending, `/admin/live-classes/${active.id}/attendance/${studentId}`, { status: 'absent', minutes: 0 }, 'PATCH', 401);
     });
   } finally { await new Promise<void>(resolve => server.close(() => resolve())); db.close(); rmSync(directory, { recursive: true, force: true }); }
 });

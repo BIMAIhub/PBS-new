@@ -13,6 +13,9 @@ import {
 import { Classroom } from './Classroom';
 import { DocumentDialog, ReceiptList, type DocumentInfo } from './Documents';
 import { send } from './api';
+import type { AccessPackage, AccessDelivery } from './admissions-types';
+import { ShareAccessButton } from './AccessSharing';
+import { AdminCourseFeedback } from './CourseFeedback';
 import { ActivityLog, AdminOverview, GrantAccessButton, PaymentLedger } from './AcademyAdmin';
 import { CertificateStudio } from './Certificates';
 import { Integrations } from './Integrations';
@@ -25,7 +28,7 @@ import type { AdminAcademyData } from './academy-types';
 import type { Account, AdminWorkspaceData, Assignment, Course, Enrollment, Lesson, Receipt, StudentRecord } from './types';
 import { Button, dateLabel, dateTimeLabel, DialogForm, Empty, ExternalLink, Field, FormError, Input, money, Panel, Status, useApiResource, value } from './ui';
 
-type Page = 'overview' | 'students' | 'courses' | 'sessions' | 'enrollments' | 'payments' | 'projects' | 'placements' | 'messages' | 'certificates' | 'integrations' | 'activity' | 'offers' | 'curriculum' | 'branding';
+type Page = 'overview' | 'students' | 'courses' | 'sessions' | 'enrollments' | 'payments' | 'projects' | 'placements' | 'messages' | 'certificates' | 'integrations' | 'activity' | 'offers' | 'curriculum' | 'branding' | 'course-feedback';
 const groups: WorkspaceNavGroup<Page>[] = [
   { label: 'Administration', pages: [
     { id: 'overview', label: 'Academy overview', icon: LayoutDashboard },
@@ -42,6 +45,7 @@ const groups: WorkspaceNavGroup<Page>[] = [
     { id: 'placements', label: 'Placements', icon: BriefcaseBusiness },
     { id: 'messages', label: 'Messages', icon: MessageSquare },
     { id: 'certificates', label: 'Certificates', icon: Award },
+    { id: 'course-feedback', label: 'Student feedback', icon: MessageSquare },
   ] },
   { label: 'Academy settings', pages: [
     { id: 'branding', label: 'Branding & appearance', icon: Paintbrush },
@@ -59,7 +63,7 @@ type Dialog =
   | { kind: 'record' | 'edit-student' | 'reset' | 'placement'; student: StudentRecord }
   | { kind: 'review' | 'payment' | 'reject-payment'; enrollment: Enrollment }
   | { kind: 'document'; document: DocumentInfo }
-  | { kind: 'temp'; email: string; password: string; receipt?: Receipt }
+  | { kind: 'temp'; access: AccessPackage; delivery?: AccessDelivery; receipt?: Receipt }
   | { kind: 'feedback'; assignment: Assignment }
   | { kind: 'message'; student: { id: string; name: string }; subject?: string }
   | { kind: 'profile' | 'password' | 'help' };
@@ -195,12 +199,14 @@ function StudentRecordPanel({ student, open, onClose, onSaved }: { student: Stud
         {student.enrollments.map(enrollment => <div className="pbs-record-row" key={enrollment.id}>
           <div><strong>{enrollment.courseTitle}</strong><p className="pbs-muted">{money(enrollment.paid)} received · {money(enrollment.total - enrollment.paid)} outstanding</p><p className="pbs-muted">Applied {dateLabel(enrollment.submittedAt)}{enrollment.approvedAt ? ` · Approved ${dateLabel(enrollment.approvedAt)}` : ''}</p></div>
           <div className="pbs-actions"><Status value={enrollment.status} />
+            {enrollment.status === 'approved' && <Button quiet onClick={() => open({ kind: 'document', document: { kind: 'statement', enrollment, receipts: student.receipts } })}>Fee statement</Button>}
             {enrollment.status === 'approved' && <Button quiet onClick={() => open({ kind: 'document', document: { kind: 'letter', account: student, enrollment } })}>Bonafide letter</Button>}
             {enrollment.status === 'approved' && enrollment.total > enrollment.paid && <Button onClick={() => open({ kind: 'payment', enrollment })}>Record payment</Button>}
             {enrollment.status === 'approved' && <GrantAccessButton enrollment={enrollment} onSaved={onSaved} />}
           </div>
         </div>)}
       </div>
+      {student.enrollments.some(item => item.status === 'approved') && <div className="pbs-actions"><ShareAccessButton studentId={student.id} /></div>}
       {student.receipts.length > 0 && <ReceiptList receipts={student.receipts} onOpen={receipt => open({ kind: 'document', document: { kind: 'receipt', receipt } })} />}
     </div>
   </PortalDialog>;
@@ -229,8 +235,8 @@ export function AdminWorkspace({ account, onAccount, onSignOut }: {
   }
   async function enroll(result: CreatedStudent) {
     await refreshAll();
-    if (result.temporaryPassword) {
-      show({ kind: 'temp', email: result.student.email, password: result.temporaryPassword, receipt: result.receipt });
+    if (result.access) {
+      show({ kind: 'temp', access: result.access, delivery: result.delivery, receipt: result.receipt });
     } else if (result.receipt) showReceipt(result.receipt);
     else { close(); setNotice('Student enrolled.'); }
   }
@@ -272,6 +278,7 @@ export function AdminWorkspace({ account, onAccount, onSignOut }: {
         <ReceiptList receipts={data.receipts} onOpen={showReceipt} />
       </div>}
       {data && academy.data && page === 'certificates' && <CertificateStudio courses={data.courses} records={academy.data.certificates} onSaved={refreshAll} />}
+      {page === 'course-feedback' && <AdminCourseFeedback />}
       {data && page === 'integrations' && <Integrations courses={data.courses} enrollments={data.enrollments} onSaved={refreshAll} />}
       {academy.data && page === 'activity' && <ActivityLog events={academy.data.events} />}
       {data && page === 'projects' && <Panel title="Project submissions">
@@ -304,8 +311,8 @@ export function AdminWorkspace({ account, onAccount, onSignOut }: {
     {dialog?.kind === 'preview' && <Classroom course={dialog.course} completed={new Set()} onClose={close} />}
     {dialog?.kind === 'enroll' && data && <EnrollStudentForm courses={data.courses} student={dialog.student} onClose={close} onSaved={enroll} />}
     {dialog?.kind === 'record' && <StudentRecordPanel student={data?.students.find(item => item.id === dialog.student.id) || dialog.student} open={show} onClose={close} onSaved={refreshAll} />}
-    {dialog?.kind === 'review' && <ReviewEnrollmentForm enrollment={dialog.enrollment} onClose={close} onSaved={async receipt => {
-      await saved('Enrollment reviewed.'); if (receipt) showReceipt(receipt);
+    {dialog?.kind === 'review' && <ReviewEnrollmentForm enrollment={dialog.enrollment} onClose={close} onSaved={async result => {
+      await saved('Enrollment reviewed.'); if (result.access) show({ kind: 'temp', access: result.access, delivery: result.delivery, receipt: result.receipt }); else if (result.receipt) showReceipt(result.receipt);
     }} />}
     {dialog?.kind === 'payment' && <RecordPaymentForm enrollment={dialog.enrollment} onClose={close} onSaved={async receipt => {
       await refreshAll(); showReceipt(receipt);
@@ -319,8 +326,8 @@ export function AdminWorkspace({ account, onAccount, onSignOut }: {
     </DialogForm>}
     {dialog?.kind === 'reset' && <DialogForm title="Reset student password" detail={dialog.student.email} onClose={close}
       submit="Generate temporary password" onSubmit={async () => {
-        const result = await send<{ temporaryPassword: string }>(`/admin/students/${dialog.student.id}/reset-password`);
-        show({ kind: 'temp', email: dialog.student.email, password: result.temporaryPassword });
+        const result = await send<{ temporaryPassword: string; access: AccessPackage; delivery?: AccessDelivery }>(`/admin/students/${dialog.student.id}/reset-password`);
+        show({ kind: 'temp', access: result.access, delivery: result.delivery });
       }}><p className="pbs-muted">The student will be signed out and will need the new temporary password.</p></DialogForm>}
     {dialog?.kind === 'edit-student' && <DialogForm title="Edit student record" submit="Save record" onClose={close}
       onSubmit={async form => {
@@ -355,7 +362,7 @@ export function AdminWorkspace({ account, onAccount, onSignOut }: {
       <Field label="Feedback"><textarea name="feedback" maxLength={4000} rows={5} defaultValue={dialog.assignment.feedback} required /></Field>
     </DialogForm>}
     {dialog?.kind === 'message' && <MessageForm student={dialog.student} initialSubject={dialog.subject} onClose={close} onSaved={() => saved('Message sent.')} />}
-    {dialog?.kind === 'temp' && <TemporaryAccess email={dialog.email} password={dialog.password} receipt={dialog.receipt} onClose={close} onReceipt={showReceipt} />}
+    {dialog?.kind === 'temp' && <TemporaryAccess access={dialog.access} delivery={dialog.delivery} receipt={dialog.receipt} onClose={close} onReceipt={showReceipt} />}
     {dialog?.kind === 'document' && <DocumentDialog document={dialog.document} onClose={close} />}
     {dialog?.kind === 'profile' && <AdminProfileForm account={account} onClose={close} onSaved={updated => { onAccount(updated); close(); setNotice('Admin profile updated.'); }} />}
     {dialog?.kind === 'password' && <PasswordForm account={account} onClose={close} onSaved={updated => { onAccount(updated); close(); setNotice('Password changed.'); }} />}

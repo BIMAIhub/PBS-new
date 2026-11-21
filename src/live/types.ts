@@ -1,5 +1,6 @@
 import type { PriceQuote } from './experience-types';
 import type { StudentLiveData } from './live-session-types';
+import type { LearnerCommunity, PublicFeedback } from './admissions-types';
 export type Role = 'admin' | 'student';
 export type EnrollmentStatus = 'pending' | 'approved' | 'rejected';
 
@@ -24,6 +25,7 @@ export interface CourseSummary {
   fee: number;
   published: boolean;
   price?: PriceQuote;
+  approvedEnrollments?: number;
 }
 
 export interface Lesson {
@@ -75,6 +77,7 @@ export interface Enrollment {
   submittedAt: string;
   approvedAt: string;
   notes: string;
+  dueDate?: string;
   listPrice?: number;
   discount?: number;
   promotionTitle?: string;
@@ -92,6 +95,10 @@ export interface Receipt {
   method: string;
   reference: string;
   issuedAt: string;
+  feeTotal?: number;
+  paidToDate?: number;
+  balanceAfter?: number;
+  dueDate?: string;
 }
 
 export interface StudentRecord extends Account {
@@ -177,6 +184,8 @@ export interface AdminWorkspaceData {
 
 export interface Catalog {
   courses: CourseSummary[];
+  community?: LearnerCommunity;
+  feedback?: PublicFeedback[];
   paymentUpiId: string;
   paymentName: string;
   offers?: { id: string; title: string; description: string; percent: number; courseId: string; endsAt: string }[];

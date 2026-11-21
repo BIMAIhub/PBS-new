@@ -7,6 +7,7 @@ import type { Course, StudentWorkspaceData } from './types';
 import { Button, dateLabel, DialogForm, Empty, Field, FormError, Input, Panel, Status, useApiResource, value } from './ui';
 import { brandLogoData, useBranding } from './Branding';
 import { defaultBranding, type Branding } from './branding-types';
+import { buildCertificatePdf } from './certificate-pdf';
 
 const initialTemplate: CertificateTemplate = { courseId: '', title: 'Certificate of completion', issuer: 'Pragmatic BIM Solution', signer: 'Academic Director', signerRole: 'Authorized signatory', design: 'architectural', primaryColor: '#176BB7', accentColor: '#D4A94D' };
 export type CertificateView = Pick<CertificateRecord, 'id' | 'studentName' | 'courseTitle' | 'issuedAt' | 'revokedAt' | 'template'>;
@@ -17,8 +18,8 @@ export function CertificatePaper({ record, preview = false }: { record: Certific
   const { brand } = useBranding();
   const template = record.template;
   return <article className={`pbs-certificate-paper pbs-certificate-${template.design}`} style={{ '--cert-primary': template.primaryColor, '--cert-accent': template.accentColor } as CSSProperties}>
-    <div className="pbs-cert-header"><img src={brand.logoUrl} width="48" height="48" alt={brand.shortName} /><span>{template.issuer}<small>Professional BIM education</small></span><span className="pbs-cert-seal"><Award size={31} /></span></div>
-    <div className="pbs-cert-content"><p className="pbs-cert-eyebrow">Learning. Applied.</p><h2>{template.title}</h2><p>This is to certify that</p><h3>{record.studentName}</h3><p>has successfully completed the learning requirements and assessment for</p><h4>{record.courseTitle}</h4><div className="pbs-cert-line" /></div>
+    <div className="pbs-cert-corner" aria-hidden="true" /><div className="pbs-cert-header"><img src={brand.logoUrl} width="48" height="48" alt={brand.shortName} /><span>{template.issuer}<small>Professional BIM education</small></span><span className="pbs-cert-seal"><Award size={28} /><small>{brand.shortName}</small></span></div>
+    <div className="pbs-cert-content"><p className="pbs-cert-eyebrow">Professional achievement · Learning applied</p><h2>{template.title}</h2><p>This is to certify that</p><h3>{record.studentName}</h3><p>has successfully completed the learning requirements and assessment for</p><h4>{record.courseTitle}</h4><div className="pbs-cert-line" /></div>
     <div className="pbs-cert-bottom"><div><strong>{template.signer}</strong><small>{template.signerRole}</small></div><div><strong>{preview ? 'Issue date' : dateLabel(record.issuedAt)}</strong><small>{preview ? 'Certificate ID assigned on completion' : record.id}</small></div></div>
     {record.revokedAt && <div className="pbs-cert-revoked">Revoked</div>}
   </article>;
@@ -26,40 +27,11 @@ export function CertificatePaper({ record, preview = false }: { record: Certific
 
 export async function downloadCertificate(record: CertificateRecord) {
   const brand = await api<Branding>('/branding').catch(() => defaultBranding);
-  const [{ jsPDF }, qr] = await Promise.all([import('jspdf'), import('qrcode')]);
-  const pdf = new jsPDF({ orientation: 'landscape', format: 'a4', unit: 'mm', compress: true });
-  const t = record.template;
-  const fitText = (text: string, width: number, size: number, minSize: number, maxLines = 2) => {
-    pdf.setFontSize(size);
-    let lines: string[] = pdf.splitTextToSize(text, width);
-    while (lines.length > maxLines && size > minSize) { pdf.setFontSize(--size); lines = pdf.splitTextToSize(text, width); }
-    return lines;
-  };
-  pdf.setFillColor('#ffffff'); pdf.rect(0, 0, 297, 210, 'F');
-  pdf.setDrawColor(t.primaryColor); pdf.setLineWidth(t.design === 'classic' ? 1 : 0.5); pdf.rect(10, 10, 277, 190);
-  pdf.setDrawColor(t.accentColor); pdf.setLineWidth(1); pdf.line(18, 17, 279, 17);
-  if (t.design === 'architectural') { pdf.setFillColor(t.primaryColor); pdf.rect(10, 10, 5, 190, 'F'); pdf.setFillColor(t.accentColor); pdf.triangle(260, 10, 287, 10, 287, 37, 'F'); }
-  if (t.design === 'classic') { pdf.setDrawColor(t.accentColor); pdf.setLineWidth(0.3); pdf.rect(14, 14, 269, 182); }
-  try { pdf.addImage(await brandLogoData(brand), 'PNG', 26, 24, 17, 17); }
-  catch { pdf.setTextColor(t.primaryColor); pdf.setFontSize(14); pdf.text(brand.shortName, 26, 34); }
-  pdf.setTextColor(t.primaryColor); pdf.setFont('helvetica', 'bold'); pdf.setFontSize(15);
-  pdf.text(fitText(t.issuer, 190, 15, 11), 148.5, 32, { align: 'center' });
-  pdf.setFontSize(8); pdf.setFont('helvetica', 'normal'); pdf.text('Professional BIM education', 148.5, 40, { align: 'center' });
-  pdf.setFont('helvetica', 'bold'); pdf.text(fitText(t.title, 245, 27, 16), 148.5, 59, { align: 'center' });
-  pdf.setTextColor('#5e6c7b'); pdf.setFont('helvetica', 'normal'); pdf.setFontSize(11); pdf.text('This is to certify that', 148.5, 79, { align: 'center' });
-  pdf.setTextColor('#152c42'); pdf.setFont('helvetica', 'bold'); pdf.text(fitText(record.studentName, 240, 26, 14), 148.5, 94, { align: 'center' });
-  pdf.setFont('helvetica', 'normal'); pdf.setFontSize(10); pdf.setTextColor('#5e6c7b'); pdf.text('has successfully completed the learning requirements and assessment for', 148.5, 115, { align: 'center' });
-  pdf.setTextColor(t.primaryColor); pdf.setFont('helvetica', 'bold'); pdf.text(fitText(record.courseTitle, 225, 17, 12), 148.5, 129, { align: 'center' });
-  pdf.setDrawColor(t.accentColor); pdf.line(115, 151, 182, 151);
-  pdf.setTextColor('#152c42'); pdf.text(fitText(t.signer, 85, 11, 8), 28, 167);
-  pdf.setFont('helvetica', 'normal'); pdf.text(fitText(t.signerRole, 85, 9, 7), 28, 182);
-  pdf.setFontSize(9); pdf.text(`Issued ${dateLabel(record.issuedAt)}`, 210, 166); pdf.setFontSize(7); pdf.text(record.id, 210, 176);
-  if (record.published && !record.revokedAt) {
-    const url = verificationUrl(record);
-    pdf.addImage(await qr.toDataURL(url, { margin: 1, width: 160, errorCorrectionLevel: 'M' }), 'PNG', 131, 158, 27, 27);
-    pdf.link(131, 158, 27, 27, { url }); pdf.text('Verify credential', 144.5, 190, { align: 'center' });
-  } else { pdf.setFontSize(8); pdf.text('Private credential | Verification can be enabled in your PBS workspace.', 148.5, 190, { align: 'center' }); }
-  if (record.revokedAt) { pdf.setTextColor('#b83b34'); pdf.setFontSize(46); pdf.text('REVOKED', 148.5, 108, { align: 'center' }); }
+  let logo: string | undefined;
+  try { logo = await brandLogoData(brand); } catch { /* Keep the issuer name on the document. */ }
+  const url = record.published && !record.revokedAt ? verificationUrl(record) : undefined;
+  const qr = url ? await import('qrcode').then(module => module.toDataURL(url, { margin: 1, width: 200, errorCorrectionLevel: 'M' })) : undefined;
+  const pdf = await buildCertificatePdf(record, brand, { logo, qr, verificationUrl: url });
   pdf.save(`${record.id}.pdf`);
 }
 
@@ -89,7 +61,7 @@ export function CertificateDialog({ record, onClose, celebrate = false }: { reco
   </PortalDialog>;
 }
 
-export function StudentCertificates({ data, academy, onSaved }: { data: StudentWorkspaceData; academy: AcademyData; onSaved: () => Promise<unknown> }) {
+export function StudentCertificates({ data, academy, onSaved, onFeedback }: { data: StudentWorkspaceData; academy: AcademyData; onSaved: () => Promise<unknown>; onFeedback?: () => void }) {
   const [selected, setSelected] = useState<CertificateRecord>();
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
@@ -99,6 +71,7 @@ export function StudentCertificates({ data, academy, onSaved }: { data: StudentW
   return <div className="pbs-live-stack">
     <section className="pbs-achievement-banner"><span className="pbs-achievement-icon"><Award size={39} /></span><div><p className="pbs-eyebrow">Your work, recognized</p><h2>Turn your learning into a credential.</h2><p>Complete your lessons, pass the assessment, and share what you have earned.</p></div><strong>{academy.certificates.filter(item => !item.revokedAt).length}<small>certificates earned</small></strong></section>
     <FormError error={error} />
+    {onFeedback && academy.certificates.some(item => !item.revokedAt) && <div className="pbs-actions"><Button quiet onClick={onFeedback}><Share2 size={16} />Share your course feedback</Button></div>}
     {!data.courses.length && <Panel title="Course achievements"><Empty title="Your next achievement starts here">Enroll in a course to begin working toward a PBS certificate.</Empty></Panel>}
     <div className="pbs-certificate-grid">{data.courses.map(course => {
       const record = academy.certificates.find(item => item.courseId === course.id);

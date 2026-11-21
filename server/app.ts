@@ -14,6 +14,8 @@ import { mountCurriculum } from './curriculum.js';
 import { generateLearningText } from './ai.js';
 import { mountBranding } from './branding.js';
 import { migrateLegacyLiveClasses, mountLiveClasses } from './live-classes.js';
+import { migratePendingAdmissions, mountAdmissions } from './admissions.js';
+import { mountFeedback } from './feedback.js';
 import { apiError, field, limitAttempts, RequestError, route } from './http.js';
 
 export async function createPortalApp(hosted = false) {
@@ -25,6 +27,7 @@ export async function createPortalApp(hosted = false) {
     await provisionInitialAdministrator(db);
     await provisionReferenceCatalog(db);
     await migrateLegacyLiveClasses(db);
+    await migratePendingAdmissions(db);
   } catch (error) {
     db.close();
     throw error;
@@ -57,6 +60,8 @@ export async function createPortalApp(hosted = false) {
   mountBranding(app, db, hosted);
   mountLiveClasses(app, db, hosted);
   mountAdmin(app, db, hosted);
+  mountAdmissions(app, db, hosted);
+  mountFeedback(app, db, hosted);
   mountStudent(app, db, hosted);
   mountMedia(app, db, hosted);
   mountAcademy(app, db, hosted);

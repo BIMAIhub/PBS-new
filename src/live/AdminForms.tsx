@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { Copy, Plus, X } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
+import type { AccessPackage, AccessDelivery, EnrollmentDecision } from './admissions-types';
+export { StudentAccessDialog as TemporaryAccess } from './AccessSharing';
 import { PortalDialog } from '../components/student-dashboard/PortalUI';
 import { api, send } from './api';
 import type { Account, AssessmentQuestion, Course, Enrollment, Lesson, Receipt, StudentRecord } from './types';
@@ -148,6 +150,8 @@ export interface CreatedStudent {
   enrollment: Enrollment;
   receipt?: Receipt;
   temporaryPassword?: string;
+  access?: AccessPackage;
+  delivery?: AccessDelivery;
 }
 
 export function EnrollStudentForm({ courses, student, onClose, onSaved }: {
@@ -162,6 +166,7 @@ export function EnrollStudentForm({ courses, student, onClose, onSaved }: {
       const result = await send<CreatedStudent>('/admin/students', {
         name: value(form, 'name'), email: value(form, 'email'), phone: value(form, 'phone'), rollNumber: value(form, 'roll'),
         courseId, total: paise(form, 'total'), amount: paise(form, 'amount'), reference: value(form, 'reference'), method: value(form, 'method'),
+        sendEmail: form.has('sendEmail'),
       });
       await onSaved(result);
     }}>
@@ -180,6 +185,7 @@ export function EnrollStudentForm({ courses, student, onClose, onSaved }: {
       <Input label="Initial payment (₹)" name="amount" type="number" step=".01" min="0" value={amount} onChange={event => setAmount(event.target.value)} />
     </div>
     {Number(amount) > 0 && <PaymentDetails />}
+    <label className="pbs-check"><input type="checkbox" name="sendEmail" defaultChecked /> Email the approved access details through my connected Microsoft account</label>
   </DialogForm>;
 }
 
@@ -190,36 +196,16 @@ function PaymentDetails({ reference, method = 'UPI' }: { reference?: string; met
   </div>;
 }
 
-export function TemporaryAccess({ email, password, receipt, onReceipt, onClose }: {
-  email: string; password: string; receipt?: Receipt; onReceipt: (receipt: Receipt) => void; onClose: () => void;
-}) {
-  const [copied, setCopied] = useState(false);
-  return <PortalDialog title="Student access created" onClose={onClose}>
-    <div className="pbs-live-form">
-      <p className="pbs-muted">Share the temporary password privately. The student will set a new password when they sign in.</p>
-      <Input label="Student email" value={email} readOnly />
-      <Input label="Temporary password" value={password} readOnly />
-      {copied && <p className="pbs-form-status" role="status">Password copied.</p>}
-      <div className="pbs-dialog-actions">
-        {receipt && <Button quiet onClick={() => onReceipt(receipt)}>View receipt</Button>}
-        <Button onClick={() => void navigator.clipboard?.writeText(password).then(() => setCopied(true)).catch(() => setCopied(false))}>
-          <Copy size={17} /> Copy password
-        </Button>
-      </div>
-    </div>
-  </PortalDialog>;
-}
-
 export function ReviewEnrollmentForm({ enrollment, onClose, onSaved }: {
-  enrollment: Enrollment; onClose: () => void; onSaved: (receipt?: Receipt) => Promise<void>;
+  enrollment: Enrollment; onClose: () => void; onSaved: (result: EnrollmentDecision) => Promise<void>;
 }) {
   const [decision, setDecision] = useState('approved');
   return <DialogForm title="Review enrollment" detail={`${enrollment.studentName} · ${enrollment.courseTitle}`} submit="Save decision" onClose={onClose}
     onSubmit={async form => {
-      const result = await send<{ receipt?: Receipt }>(`/admin/enrollments/${enrollment.id}/decision`, {
-        decision, recordPayment: form.has('record'), notes: value(form, 'notes'),
+      const result = await send<EnrollmentDecision>(`/admin/enrollments/${enrollment.id}/decision`, {
+        decision, recordPayment: form.has('record'), notes: value(form, 'notes'), sendEmail: form.has('sendEmail'),
       });
-      await onSaved(result.receipt);
+      await onSaved(result);
     }}>
     <Field label="Decision"><select value={decision} onChange={event => setDecision(event.target.value)}>
       <option value="approved">Approve enrollment</option><option value="rejected">Decline application</option>
@@ -231,6 +217,7 @@ export function ReviewEnrollmentForm({ enrollment, onClose, onSaved }: {
         <input type="checkbox" name="record" /> I verified this payment. Record it and issue a receipt.
       </label>}
     </div>}
+    {decision === 'approved' && <label className="pbs-check"><input type="checkbox" name="sendEmail" defaultChecked /> Email the student their approved access details</label>}
     <Field label="Decision notes"><textarea name="notes" maxLength={1000} rows={3} /></Field>
   </DialogForm>;
 }

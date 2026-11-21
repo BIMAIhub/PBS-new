@@ -12,17 +12,22 @@ import { studentLiveData } from './live-classes.js';
 const courseFields = `id, title, description, category, instructor, schedule, fee, published`;
 const enrollmentFields = `e.id, e.account_id AS studentId, a.name AS studentName, a.email,
   e.course_id AS courseId, c.title AS courseTitle, e.status, e.total, e.requested_payment AS requestedPayment,
-  e.reference, e.submitted_at AS submittedAt, e.approved_at AS approvedAt, e.notes,
+  e.reference, e.submitted_at AS submittedAt, e.approved_at AS approvedAt, e.notes, COALESCE(ed.due_date, '') AS dueDate,
   COALESCE(ep.list_price, e.total) AS listPrice, COALESCE(ep.discount, 0) AS discount,
   COALESCE(ep.promotion_title, '') AS promotionTitle, COALESCE(ep.code, '') AS promotionCode,
   COALESCE((SELECT SUM(r.amount) FROM receipts r WHERE r.enrollment_id = e.id), 0) AS paid`;
 const enrollmentJoin = `FROM enrollments e JOIN accounts a ON a.id = e.account_id JOIN courses c ON c.id = e.course_id
-  LEFT JOIN enrollment_prices ep ON ep.enrollment_id = e.id`;
+  LEFT JOIN enrollment_prices ep ON ep.enrollment_id = e.id LEFT JOIN enrollment_details ed ON ed.enrollment_id = e.id`;
 const receiptFields = `r.id, r.sequence, e.account_id AS studentId,
   COALESCE(NULLIF(r.student_name, ''), a.name) AS studentName, COALESCE(NULLIF(r.course_title, ''), c.title) AS courseTitle,
-  r.enrollment_id AS enrollmentId, r.amount, r.method, r.reference, r.issued_at AS issuedAt`;
+  r.enrollment_id AS enrollmentId, r.amount, r.method, r.reference, r.issued_at AS issuedAt,
+  COALESCE(rb.total_fee, e.total) AS feeTotal,
+  COALESCE(rb.paid_to_date, (SELECT SUM(r2.amount) FROM receipts r2 WHERE r2.enrollment_id = r.enrollment_id AND r2.sequence <= r.sequence)) AS paidToDate,
+  COALESCE(rb.balance, e.total - (SELECT SUM(r3.amount) FROM receipts r3 WHERE r3.enrollment_id = r.enrollment_id AND r3.sequence <= r.sequence)) AS balanceAfter,
+  COALESCE(rb.due_date, '') AS dueDate`;
 const receiptJoin = `FROM receipts r JOIN enrollments e ON e.id = r.enrollment_id
-  JOIN accounts a ON a.id = e.account_id JOIN courses c ON c.id = e.course_id`;
+  JOIN accounts a ON a.id = e.account_id JOIN courses c ON c.id = e.course_id
+  LEFT JOIN receipt_balances rb ON rb.receipt_id = r.id`;
 
 export async function courses(db: Database, publishedOnly = false): Promise<CourseSummary[]> {
   const rows = await db.prepare(`SELECT ${courseFields} FROM courses ${publishedOnly ? 'WHERE published = 1' : ''} ORDER BY created_at DESC`).all();
@@ -106,6 +111,9 @@ export async function issueReceipt(db: Database, enrollmentId: string, amount: n
   await db.prepare(`INSERT INTO receipts (id, enrollment_id, amount, method, reference, issued_at, issued_by, student_name, course_title)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(id, enrollmentId, amount, method, reference, issuedAt, adminId, enrollment.studentName, enrollment.courseTitle);
+  const due = await db.prepare('SELECT due_date FROM enrollment_details WHERE enrollment_id = ?').get(enrollmentId);
+  await db.prepare('INSERT INTO receipt_balances VALUES (?, ?, ?, ?, ?)')
+    .run(id, enrollment.total, enrollment.paid + amount, enrollment.total - enrollment.paid - amount, String(due?.due_date || ''));
   await audit(db, adminId || 'PBS', 'Payment verified', enrollmentId, `${enrollment.studentName} · INR ${(amount / 100).toFixed(2)} · ${method}`);
   return receiptNumber(await db.prepare(`SELECT ${receiptFields} ${receiptJoin} WHERE r.id = ?`).get(id) as unknown as ReceiptRow);
 }

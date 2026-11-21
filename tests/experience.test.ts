@@ -1,3 +1,4 @@
+import { signInApproved, activateOnAnotherCourse } from './admission-fixtures.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -49,6 +50,8 @@ test('PBS discovery, offers, profiles, notifications and curriculum', async t =>
       assert.equal((await db.prepare('SELECT 1 FROM accounts WHERE email = ?').get(baseInput.email)), undefined);
       const applied = await req(student, '/enrollments', { ...baseInput, quotedTotal: quote.total }, 'POST', 201);
       studentId = applied.account.id; enrollmentId = applied.enrollment.id; assert.equal(applied.enrollment.discount, 449970); assert.equal(applied.enrollment.promotionCode, 'TEST30');
+      const approved = await req(admin, `/admin/enrollments/${enrollmentId}/decision`, { decision: 'approved', recordPayment: false });
+      await signInApproved(req, student, approved, password);
       await req(admin, `/admin/promotions/${id}`, { title: 'QA changed offer', kind: 'coupon', code: 'TEST30', percent: 15, active: true, maxUses: 0 }, 'PUT');
       assert.equal((await req(student, '/student/workspace')).enrollments[0].total, 1049930);
     });
@@ -71,6 +74,7 @@ test('PBS discovery, offers, profiles, notifications and curriculum', async t =>
     });
     await t.test('notifications are account-scoped and persist read and popup acknowledgement', async () => {
       const applied = await req(other, '/enrollments', { courseId, name: 'Other Experience QA', email: 'other-experience@example.invalid', password, amount: 0 }, 'POST', 201);
+      await activateOnAnotherCourse(req, admin, other, 'other-experience@example.invalid', password);
       await req(student, '/student/messages', { subject: 'QA course question', body: 'Please check my course application.' }, 'POST', 204);
       const inbox = await req(admin, '/notifications'); assert.ok(inbox.items.some((item: any) => item.title === 'QA course question')); assert.ok(inbox.unread > 0);
       const id = inbox.items[0].id;
@@ -114,13 +118,13 @@ test('PBS discovery, offers, profiles, notifications and curriculum', async t =>
       }) as typeof fetch;
       try {
         await req(student, `/admin/courses/${courseId}/curriculum/draft`, { brief: 'Do not allow students to generate curricula.' }, 'POST', 403);
-        const before = (await req(admin, '/admin/workspace')).courses[0].modules.length;
+        const before = (await req(admin, '/admin/workspace')).courses.find((item: any) => item.id === courseId).modules.length;
         const draft = await req(admin, `/admin/courses/${courseId}/curriculum/draft`, { brief: 'Prepare a module on linked-model setup and a practical assignment.' }); draftId = draft.id;
-        assert.equal((await req(admin, '/admin/workspace')).courses[0].modules.length, before);
+        assert.equal((await req(admin, '/admin/workspace')).courses.find((item: any) => item.id === courseId).modules.length, before);
         await req(admin, `/admin/curriculum/${draftId}/apply`, { content: { ...content, modules: [] } }, 'POST', 400);
         await req(admin, `/admin/curriculum/${draftId}/apply`, { content, publishTasks: true, updateDescription: false });
         assert.equal((await req(admin, `/admin/curriculum/${draftId}/apply`, { content, publishTasks: true })).alreadyApplied, true);
-        const course = (await req(admin, '/admin/workspace')).courses[0]; assert.equal(course.modules.length, before + 1); moduleId = course.modules.at(-1).id;
+        const course = (await req(admin, '/admin/workspace')).courses.find((item: any) => item.id === courseId); assert.equal(course.modules.length, before + 1); moduleId = course.modules.at(-1).id;
         assert.equal((await db.prepare('SELECT COUNT(*) AS total FROM lessons').get())!.total, 0);
       } finally { globalThis.fetch = originalFetch; }
     });

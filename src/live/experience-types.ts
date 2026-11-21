@@ -6,6 +6,7 @@ export interface Promotion {
 export interface PriceQuote { listPrice: number; discount: number; total: number; promotionId: string; promotionTitle: string; code: string; percent: number }
 export interface CoursePage { level: string; duration: string; audience: string; outcomes: string[]; requirements: string[] }
 export interface CourseOutline { id: string; title: string; description: string; category: string; instructor: string; schedule: string; fee: number; page: CoursePage;
+  approvedEnrollments?: number; community?: import('./admissions-types').LearnerCommunity; feedback?: import('./admissions-types').PublicFeedback[];
   modules: { id: string; title: string; summary: string; objectives: string[]; lessons: { title: string; duration: string }[] }[]; price: PriceQuote }
 export interface StudentProfile { name: string; phone: string; headline: string; location: string; about: string; skills: string[]; cvName: string; cvSize: number; showCv: boolean }
 export interface PortfolioProject { title: string; summary: string; url: string; tools: string }

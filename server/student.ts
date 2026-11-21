@@ -1,13 +1,14 @@
 import type { Express } from 'express';
-import { findAccount, publicAccount, requireAccount, sessionAccount, startSession } from './auth.js';
+import { findAccount, publicAccount, requireAccount, sessionAccount } from './auth.js';
 import { type WritableDatabase, makeId, makeStudentId, now, transaction } from './database.js';
 import { badRequest, conflict, emailAddress, field, integer, limitAttempts, notFound, RequestError, route } from './http.js';
 import { httpsLink, paymentClaim, phoneNumber } from './inputs.js';
-import { hashPassword, validPassword } from './passwords.js';
+import { hashPassword, temporaryPassword } from './passwords.js';
 import { audit, paymentSettings } from './academy-data.js';
 import { availablePromotion, promotions, publicPrice, quotePrice, savePrice } from './commerce.js';
 import { portfolioSections, studentProfile } from './profiles.js';
 import { certificateRecords } from './academy-data.js';
+import { enrollmentCounts, learnerCommunity, publishedFeedback } from './feedback.js';
 import {
   checkReference, courseById, courses, enrollmentById, getAssessment, hasCourseAccess,
   portfolio, requireCompletedLessons, studentWorkspace
@@ -15,9 +16,10 @@ import {
 
 export function mountStudent(app: Express, db: WritableDatabase, hosted: boolean) {
   app.get('/api/catalog', route(async (_req, res) => {
-    const [list, offers, payment] = await Promise.all([courses(db, true), promotions(db), paymentSettings(db)]);
+    const [list, offers, payment, counts, community, feedback] = await Promise.all([courses(db, true), promotions(db), paymentSettings(db), enrollmentCounts(db), learnerCommunity(db), publishedFeedback(db)]);
     res.json({
-      courses: list.map(course => ({ ...course, price: publicPrice(course, offers) })),
+      courses: list.map(course => ({ ...course, price: publicPrice(course, offers), approvedEnrollments: counts.get(course.id) || 0 })),
+      community, feedback,
       offers: offers.filter(item => item.kind === 'public' && !item.assignedEmail && list.some(course => availablePromotion(item, course.id)))
         .map(({ id, title, description, percent, courseId, endsAt }) => ({ id, title, description, percent, courseId, endsAt })),
       ...payment,
@@ -30,7 +32,7 @@ export function mountStudent(app: Express, db: WritableDatabase, hosted: boolean
     const page = await db.prepare('SELECT level, duration, audience, outcomes, requirements FROM course_pages WHERE course_id = ?').get(course.id);
     const modules = await db.prepare(`SELECT m.id, m.title, COALESCE(d.summary, '') AS summary, COALESCE(d.objectives, '[]') AS objectives
       FROM modules m LEFT JOIN module_details d ON d.module_id = m.id WHERE m.course_id = ? ORDER BY m.position`).all(course.id);
-    res.json({ ...course, price: await quotePrice(db, course.id), page: page ? { ...page, outcomes: JSON.parse(String(page.outcomes)), requirements: JSON.parse(String(page.requirements)) } : { level: '', duration: '', audience: '', outcomes: [], requirements: [] },
+    res.json({ ...course, price: await quotePrice(db, course.id), approvedEnrollments: (await enrollmentCounts(db)).get(course.id) || 0, community: await learnerCommunity(db), feedback: await publishedFeedback(db, course.id), page: page ? { ...page, outcomes: JSON.parse(String(page.outcomes)), requirements: JSON.parse(String(page.requirements)) } : { level: '', duration: '', audience: '', outcomes: [], requirements: [] },
       modules: await Promise.all(modules.map(async module => ({ ...module, objectives: JSON.parse(String(module.objectives)),
         lessons: await db.prepare('SELECT title, duration FROM lessons WHERE module_id = ? ORDER BY position').all(String(module.id)),
       }))) });
@@ -64,21 +66,20 @@ export function mountStudent(app: Express, db: WritableDatabase, hosted: boolean
       const email = emailAddress(req.body?.email);
       const name = field(req.body?.name, 'full name', 120);
       const phone = phoneNumber(req.body?.phone);
-      const password = typeof req.body?.password === 'string' ? req.body.password : '';
-      if (!validPassword(password)) throw badRequest('Use a password with at least 12 characters.');
       if (await db.prepare('SELECT id FROM accounts WHERE email = ?').get(email)) {
-        throw conflict('Sign in with your existing PBS account to apply.');
+        throw conflict('This email already has an account or application. Use Check enrollment, or sign in to your existing approved account.');
       }
-      signup = { email, name, phone, hash: await hashPassword(password) };
+      signup = { email, name, phone, hash: await hashPassword(temporaryPassword()) };
     }
 
     const enrollment = await transaction(db, async tx => {
       const available = await courseById(tx, courseId);
       if (!available.published || available.fee !== course.fee) throw conflict('This course changed. Refresh the catalog and try again.');
       if (signup) {
-        await tx.prepare(`INSERT INTO accounts (id, role, name, email, phone, roll_number, password_hash, created_at)
-          VALUES (?, 'student', ?, ?, ?, ?, ?, ?)`)
+        await tx.prepare(`INSERT INTO accounts (id, role, name, email, phone, roll_number, password_hash, created_at, must_change)
+          VALUES (?, 'student', ?, ?, ?, ?, ?, ?, 1)`)
           .run(id, signup.name, signup.email, signup.phone, id, signup.hash, now());
+        await tx.prepare('INSERT INTO student_admissions (account_id) VALUES (?)').run(id);
       }
       const previous = await tx.prepare('SELECT id, status FROM enrollments WHERE account_id = ? AND course_id = ?')
         .get(id, course.id) as { id: string; status: string } | undefined;
@@ -100,8 +101,8 @@ export function mountStudent(app: Express, db: WritableDatabase, hosted: boolean
       await audit(tx, id, 'Enrollment application submitted', enrollmentId, course.title);
       return await enrollmentById(tx, enrollmentId);
     });
-    if (signup) await startSession(db, req, res, id, false);
-    res.status(201).json({ enrollment, account: publicAccount((await findAccount(db, id))!) });
+    res.status(201).json({ enrollment, account: publicAccount((await findAccount(db, id))!),
+      application: { code: enrollment.id, email: enrollment.email, status: enrollment.status } });
   }));
 
   app.get('/api/student/workspace', route(async (req, res) => {

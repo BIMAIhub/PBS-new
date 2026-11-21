@@ -9,6 +9,9 @@ export async function syncNotifications(db: Database, account: { id: string; rol
     FROM messages m WHERE ${account.role === 'admin' ? "m.sender = 'student'" : "m.account_id = ? AND m.sender = 'admin'"}`)
     .run(account.id, account.id, ...(account.role === 'admin' ? [] : [account.id]));
   if (account.role === 'admin') {
+    await db.prepare(`${insert} SELECT 'course-feedback:' || f.id || ':' || f.revision || ':' || ?, ?, 'Student feedback to review',
+      f.student_name || ' shared feedback for ' || c.title, 'feedback', 'course-feedback', f.submitted_at
+      FROM course_feedback f JOIN courses c ON c.id = f.course_id WHERE f.status = 'pending'`).run(account.id, account.id);
     await db.prepare(`${insert} SELECT 'application:' || e.id || ':' || ?, ?, 'New enrollment application', a.name || ' applied for ' || c.title,
       'enrollment', 'enrollments', e.submitted_at FROM enrollments e JOIN accounts a ON a.id = e.account_id
       JOIN courses c ON c.id = e.course_id JOIN enrollment_details d ON d.enrollment_id = e.id WHERE d.source = 'student' AND e.status = 'pending'`).run(account.id, account.id);
@@ -18,6 +21,8 @@ export async function syncNotifications(db: Database, account: { id: string; rol
     await db.prepare(`${insert} SELECT 'task-submission:' || s.id || ':' || s.submitted_at || ':' || ?, ?, 'Assignment submitted', a.name || ' submitted ' || t.title,
       'assignment', 'curriculum', s.submitted_at FROM task_submissions s JOIN learning_tasks t ON t.id = s.task_id JOIN accounts a ON a.id = s.account_id WHERE s.reviewed_at = ''`).run(account.id, account.id);
   } else {
+    await db.prepare(`${insert} SELECT 'course-review:' || f.id || ':' || f.reviewed_at, ?, 'PBS reviewed your course feedback', c.title,
+      'feedback', 'course-feedback', f.reviewed_at FROM course_feedback f JOIN courses c ON c.id = f.course_id WHERE f.account_id = ? AND f.reviewed_at <> ''`).run(account.id, account.id);
     const knownLive = new Set((await db.prepare("SELECT id FROM notifications WHERE account_id = ? AND id LIKE 'live-%'").all(account.id)).map(item => String(item.id)));
     const liveClasses = await db.prepare(`SELECT l.id, l.title, l.starts_at, l.ends_at, l.join_before, l.status, l.access_confirmed, l.revision
       FROM live_classes l JOIN enrollments e ON e.course_id = l.course_id WHERE e.account_id = ? AND e.status = 'approved'
