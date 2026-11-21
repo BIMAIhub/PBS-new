@@ -112,7 +112,10 @@ export function mountCurriculum(app: Express, db: WritableDatabase, hosted: bool
     const rows = await db.prepare(`SELECT t.id, t.course_id AS courseId, t.module_id AS moduleId, t.title, t.brief, t.deliverables,
       c.title AS courseTitle, s.id AS submissionId, s.url, s.note, s.feedback, s.submitted_at AS submittedAt, s.reviewed_at AS reviewedAt
       FROM learning_tasks t JOIN courses c ON c.id = t.course_id JOIN enrollments e ON e.course_id = t.course_id AND e.account_id = ? AND e.status = 'approved'
-      LEFT JOIN task_submissions s ON s.task_id = t.id AND s.account_id = ? WHERE t.published = 1 ORDER BY t.created_at`).all(account.id, account.id);
+      LEFT JOIN task_submissions s ON s.task_id = t.id AND s.account_id = ? WHERE t.published = 1
+      AND NOT EXISTS (SELECT 1 FROM course_controls cc WHERE cc.course_id = t.course_id AND cc.paused = 1)
+      AND NOT EXISTS (SELECT 1 FROM enrollment_controls ec WHERE ec.enrollment_id = e.id AND ec.paused = 1)
+      ORDER BY t.created_at`).all(account.id, account.id);
     res.json({ tasks: rows.map(({ submissionId, url, note, feedback, submittedAt, reviewedAt, ...task }) => ({ ...task, published: true, deliverables: JSON.parse(String(task.deliverables)),
       submission: submissionId ? { id: submissionId, url, note, feedback, submittedAt, reviewedAt } : undefined })) });
   }));

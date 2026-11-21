@@ -116,9 +116,9 @@ function StudentCourses({ data, account, open, academy }: { data: StudentWorkspa
       {data.enrollments.map(enrollment => <article className="pbs-record-row" key={enrollment.id}>
         <div><h3>{enrollment.courseTitle}</h3><p className="pbs-muted">{dateLabel(enrollment.submittedAt)}</p>
           <p className="pbs-reference">Application code <code>{enrollment.id}</code></p>
-          {enrollment.notes && <p className="pbs-muted pbs-pre-wrap">{enrollment.notes}</p>}</div>
+          {enrollment.notes && <p className="pbs-muted pbs-pre-wrap">{enrollment.notes}</p>}{Boolean(enrollment.accessPaused || enrollment.coursePaused) && <p className="pbs-muted">{enrollment.pauseReason || 'PBS has paused this course access. Your progress and receipts are saved.'}</p>}</div>
         <div className="pbs-actions"><Status value={enrollment.status} />
-          {enrollment.status === 'approved' && <Button onClick={() => open({ kind: 'classroom', courseId: enrollment.courseId })}>Open classroom</Button>}</div>
+          {Boolean(enrollment.accessPaused || enrollment.coursePaused) && <Status value="Access paused" />}{enrollment.status === 'approved' && !enrollment.accessPaused && !enrollment.coursePaused && <Button onClick={() => open({ kind: 'classroom', courseId: enrollment.courseId })}>Open classroom</Button>}</div>
       </article>)}
     </Panel>
     {academy?.grants.some(item => item.status === 'granted' && item.webUrl) && <Panel title="OneDrive course access">

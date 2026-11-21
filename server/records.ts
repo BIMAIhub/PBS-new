@@ -8,11 +8,17 @@ import { conflict, notFound, badRequest } from './http.js';
 import { videoPlayback } from './video.js';
 import { audit } from './academy-data.js';
 import { studentLiveData } from './live-classes.js';
+import { activeCourseAccess } from './access-controls.js';
 
-const courseFields = `id, title, description, category, instructor, schedule, fee, published`;
+const courseFields = `id, title, description, category, instructor, schedule, fee, published,
+  COALESCE((SELECT paused FROM course_controls WHERE course_id = courses.id), 0) AS paused,
+  COALESCE((SELECT reason FROM course_controls WHERE course_id = courses.id), '') AS pauseReason`;
 const enrollmentFields = `e.id, e.account_id AS studentId, a.name AS studentName, a.email,
   e.course_id AS courseId, c.title AS courseTitle, e.status, e.total, e.requested_payment AS requestedPayment,
   e.reference, e.submitted_at AS submittedAt, e.approved_at AS approvedAt, e.notes, COALESCE(ed.due_date, '') AS dueDate,
+  COALESCE((SELECT paused FROM enrollment_controls WHERE enrollment_id = e.id), 0) AS accessPaused,
+  COALESCE((SELECT reason FROM enrollment_controls WHERE enrollment_id = e.id), '') AS pauseReason,
+  COALESCE((SELECT paused FROM course_controls WHERE course_id = e.course_id), 0) AS coursePaused,
   COALESCE(ep.list_price, e.total) AS listPrice, COALESCE(ep.discount, 0) AS discount,
   COALESCE(ep.promotion_title, '') AS promotionTitle, COALESCE(ep.code, '') AS promotionCode,
   COALESCE((SELECT SUM(r.amount) FROM receipts r WHERE r.enrollment_id = e.id), 0) AS paid`;
@@ -31,13 +37,13 @@ const receiptJoin = `FROM receipts r JOIN enrollments e ON e.id = r.enrollment_i
 
 export async function courses(db: Database, publishedOnly = false): Promise<CourseSummary[]> {
   const rows = await db.prepare(`SELECT ${courseFields} FROM courses ${publishedOnly ? 'WHERE published = 1' : ''} ORDER BY created_at DESC`).all();
-  return (rows as unknown as CourseSummary[]).map(row => ({ ...row, published: Boolean(row.published) }));
+  return (rows as unknown as CourseSummary[]).map(row => ({ ...row, published: Boolean(row.published), paused: Boolean(row.paused) }));
 }
 
 export async function courseById(db: Database, id: string) {
   const row = await db.prepare(`SELECT ${courseFields} FROM courses WHERE id = ?`).get(id) as unknown as CourseSummary | undefined;
   if (!row) throw notFound('This course is unavailable.');
-  return { ...row, published: Boolean(row.published) };
+  return { ...row, published: Boolean(row.published), paused: Boolean(row.paused) };
 }
 
 type LessonRow = { id: string; title: string; duration: string; description: string; sourceUrl: string; fileName: string };
@@ -65,14 +71,15 @@ export async function courseDetails(db: Database, course: CourseSummary): Promis
 
 export async function enrollments(db: Database, studentId?: string): Promise<Enrollment[]> {
   const filter = studentId ? 'WHERE e.account_id = ?' : '';
-  return await db.prepare(`SELECT ${enrollmentFields} ${enrollmentJoin} ${filter} ORDER BY e.submitted_at DESC`)
+  const rows = await db.prepare(`SELECT ${enrollmentFields} ${enrollmentJoin} ${filter} ORDER BY e.submitted_at DESC`)
     .all(...(studentId ? [studentId] : [])) as unknown as Enrollment[];
+  return rows.map(row => ({ ...row, accessPaused: Boolean(row.accessPaused), coursePaused: Boolean(row.coursePaused) }));
 }
 
 export async function enrollmentById(db: Database, id: string): Promise<Enrollment> {
   const row = await db.prepare(`SELECT ${enrollmentFields} ${enrollmentJoin} WHERE e.id = ?`).get(id) as unknown as Enrollment | undefined;
   if (!row) throw notFound('This enrollment is unavailable.');
-  return row;
+  return { ...row, accessPaused: Boolean(row.accessPaused), coursePaused: Boolean(row.coursePaused) };
 }
 
 type ReceiptRow = Omit<Receipt, 'number'> & { sequence: number };
@@ -146,7 +153,7 @@ export async function studentWorkspace(db: Database, account: Account) {
   return {
     enrollments: list,
     live: await studentLiveData(db, account.id),
-    courses: await Promise.all(list.filter(enrollment => enrollment.status === 'approved')
+    courses: await Promise.all(list.filter(enrollment => enrollment.status === 'approved' && !enrollment.accessPaused && !enrollment.coursePaused)
       .map(async enrollment => courseDetails(db, await courseById(db, enrollment.courseId)))),
     receipts: await receipts(db, account.id),
     completions: await db.prepare(`SELECT m.course_id AS courseId, p.lesson_id AS lessonId FROM completions p
@@ -192,8 +199,7 @@ export async function adminWorkspace(db: Database) {
 }
 
 export async function hasCourseAccess(db: Database, account: Pick<Account, 'id' | 'role'>, courseId: string) {
-  return account.role === 'admin' || Boolean(await db.prepare(`SELECT 1 FROM enrollments
-    WHERE account_id = ? AND course_id = ? AND status = 'approved'`).get(account.id, courseId));
+  return account.role === 'admin' || activeCourseAccess(db, account.id, courseId);
 }
 
 export async function getAssessment(db: Database, courseId: string) {

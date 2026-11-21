@@ -7,7 +7,9 @@ import { hashPassword, validPassword, verifyPassword } from './passwords.js';
 
 type AccountRow = Omit<Account, 'mustChangePassword'> & { mustChangePassword: number; passwordHash: string };
 export const accountFields = `id, role, name, email, phone, roll_number AS rollNumber,
-  created_at AS createdAt, must_change AS mustChangePassword, password_hash AS passwordHash`;
+  created_at AS createdAt, must_change AS mustChangePassword, password_hash AS passwordHash,
+  COALESCE((SELECT status FROM account_controls WHERE account_id = accounts.id), 'active') AS accountStatus,
+  COALESCE((SELECT reason FROM account_controls WHERE account_id = accounts.id), '') AS accountReason`;
 const cookieName = 'pbs_session';
 const hour = 60 * 60 * 1000;
 const tokenHash = (token: string) => createHash('sha256').update(token).digest('hex');
@@ -44,6 +46,7 @@ export async function sessionAccount(db: Database, req: Request) {
   const session = await db.prepare('SELECT account_id AS id FROM sessions WHERE token_hash = ? AND expires_at > ?')
     .get(token, Date.now()) as { id: string } | undefined;
   const account = session ? await findAccount(db, session.id) : undefined;
+  if (account?.accountStatus !== undefined && account.accountStatus !== 'active') return undefined;
   if (account?.role === 'student' && await db.prepare("SELECT 1 FROM student_admissions WHERE account_id = ? AND approved_at = ''").get(account.id)) return undefined;
   return account;
 }
@@ -93,6 +96,7 @@ export function mountAuth(app: Express, db: WritableDatabase, hosted: boolean) {
       if (!latest || latest.passwordHash !== account.passwordHash || latest.email !== account.email || latest.rollNumber !== account.rollNumber) {
         throw new RequestError(401, 'Check your email or student ID and password.');
       }
+      if (latest.accountStatus !== 'active') throw new RequestError(403, 'This account is inactive. Contact PBS for help.');
       if (latest.role === 'student' && await tx.prepare("SELECT 1 FROM student_admissions WHERE account_id = ? AND approved_at = ''").get(latest.id)) {
         throw new RequestError(403, 'Your application is awaiting PBS approval. Your sign-in details will be issued after approval.');
       }

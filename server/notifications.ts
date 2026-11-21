@@ -26,6 +26,8 @@ export async function syncNotifications(db: Database, account: { id: string; rol
     const knownLive = new Set((await db.prepare("SELECT id FROM notifications WHERE account_id = ? AND id LIKE 'live-%'").all(account.id)).map(item => String(item.id)));
     const liveClasses = await db.prepare(`SELECT l.id, l.title, l.starts_at, l.ends_at, l.join_before, l.status, l.access_confirmed, l.revision
       FROM live_classes l JOIN enrollments e ON e.course_id = l.course_id WHERE e.account_id = ? AND e.status = 'approved'
+      AND NOT EXISTS (SELECT 1 FROM course_controls cc WHERE cc.course_id = e.course_id AND cc.paused = 1)
+      AND NOT EXISTS (SELECT 1 FROM enrollment_controls ec WHERE ec.enrollment_id = e.id AND ec.paused = 1)
       AND l.published = 1 AND (l.ends_at >= ? OR l.status = 'cancelled') ORDER BY l.starts_at LIMIT 100`).all(account.id, new Date(Date.now() - 24 * 60 * 60_000).toISOString());
     for (const session of liveClasses) {
       const time = new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kolkata' }).format(new Date(String(session.starts_at)));

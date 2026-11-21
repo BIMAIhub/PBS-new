@@ -27,17 +27,18 @@ export async function completedFeedbackCourses(db: Database, studentId: string) 
 export async function learnerCommunity(db: Database): Promise<LearnerCommunity> {
   const raw = await setting(db, 'learner_community');
   const saved = raw ? JSON.parse(raw) : { historicalLearners: 25, placementAssistance: true, placementNote: 'Portfolio, CV and interview guidance. Placement assistance does not guarantee a job.' };
-  const row = await db.prepare("SELECT COUNT(DISTINCT e.account_id) AS learners, COUNT(*) AS enrollments FROM enrollments e JOIN courses c ON c.id = e.course_id WHERE e.status = 'approved' AND c.published = 1").get();
+  const row = await db.prepare("SELECT COUNT(DISTINCT e.account_id) AS learners, COUNT(*) AS enrollments FROM enrollments e JOIN courses c ON c.id = e.course_id WHERE e.status = 'approved' AND c.published = 1 AND NOT EXISTS (SELECT 1 FROM account_controls ac WHERE ac.account_id = e.account_id AND ac.status = 'deleted')").get();
   return { historicalLearners: Number(saved.historicalLearners), placementAssistance: Boolean(saved.placementAssistance), placementNote: String(saved.placementNote),
     approvedLearners: Number(row?.learners || 0), approvedEnrollments: Number(row?.enrollments || 0) };
 }
 export async function enrollmentCounts(db: Database) {
-  const rows = await db.prepare("SELECT course_id, COUNT(*) AS total FROM enrollments WHERE status = 'approved' GROUP BY course_id").all();
+  const rows = await db.prepare("SELECT course_id, COUNT(*) AS total FROM enrollments WHERE status = 'approved' AND NOT EXISTS (SELECT 1 FROM account_controls ac WHERE ac.account_id = enrollments.account_id AND ac.status = 'deleted') GROUP BY course_id").all();
   return new Map(rows.map(row => [String(row.course_id), Number(row.total)]));
 }
 export async function publishedFeedback(db: Database, courseId = ''): Promise<PublicFeedback[]> {
   const rows = await db.prepare(`SELECT ${fields} FROM course_feedback f JOIN courses c ON c.id = f.course_id
-    WHERE f.status = 'published' AND f.consent = 1 AND c.published = 1 ${courseId ? 'AND f.course_id = ?' : ''}
+    WHERE f.status = 'published' AND f.consent = 1 AND c.published = 1
+    AND NOT EXISTS (SELECT 1 FROM account_controls ac WHERE ac.account_id = f.account_id AND ac.status <> 'active') ${courseId ? 'AND f.course_id = ?' : ''}
     AND EXISTS (SELECT 1 FROM enrollments e WHERE e.account_id = f.account_id AND e.course_id = f.course_id AND e.status = 'approved')
     AND NOT EXISTS (SELECT 1 FROM certificates ct WHERE ct.account_id = f.account_id AND ct.course_id = f.course_id AND ct.revoked_at <> '')
     ORDER BY f.reviewed_at DESC LIMIT 12`).all(...(courseId ? [courseId] : []));

@@ -1,5 +1,6 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
 import { ConfidentialClientApplication } from '@azure/msal-node';
+import { activeCourseAccess } from './access-controls.js';
 import type { Express, Request } from 'express';
 import { requireAccount } from './auth.js';
 import { type Database, type WritableDatabase, now, transaction } from './database.js';
@@ -92,9 +93,11 @@ export async function sendMicrosoftMail(db: Database, adminId: string, email: st
 export async function grantCourseAccess(db: WritableDatabase, enrollmentId: string, actorId: string, automatic = false, request: typeof graph = graph) {
   const enrollment = await enrollmentById(db, enrollmentId);
   if (enrollment.status !== 'approved') throw conflict('Approve enrollment before granting course access.');
+  if (!await activeCourseAccess(db, enrollment.studentId, enrollment.courseId)) throw conflict('Reactivate the student and resume course access before granting OneDrive access.');
   const storage = await db.prepare('SELECT * FROM course_storage WHERE course_id = ?').get(enrollment.courseId);
   if (!storage || (automatic && !storage.automatic)) return { status: 'unconfigured' };
   const claimed = await transaction(db, async tx => {
+    if (!await activeCourseAccess(tx, enrollment.studentId, enrollment.courseId)) throw conflict('This student course access is paused or inactive.');
     const prior = await tx.prepare('SELECT * FROM course_access_grants WHERE enrollment_id = ?').get(enrollmentId);
     if (prior?.status === 'granted' && prior.email === enrollment.email) return false;
     if (prior?.status === 'granting' && Date.now() - Date.parse(String(prior.updated_at)) < 60_000) throw conflict('Access is being granted. Refresh shortly.');

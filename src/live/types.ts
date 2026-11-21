@@ -13,6 +13,8 @@ export interface Account {
   rollNumber: string;
   createdAt: string;
   mustChangePassword: boolean;
+  accountStatus?: 'active' | 'inactive' | 'deleted';
+  accountReason?: string;
 }
 
 export interface CourseSummary {
@@ -24,6 +26,8 @@ export interface CourseSummary {
   schedule: string;
   fee: number;
   published: boolean;
+  paused?: boolean;
+  pauseReason?: string;
   price?: PriceQuote;
   approvedEnrollments?: number;
 }
@@ -70,6 +74,9 @@ export interface Enrollment {
   courseId: string;
   courseTitle: string;
   status: EnrollmentStatus;
+  accessPaused?: boolean;
+  pauseReason?: string;
+  coursePaused?: boolean;
   total: number;
   paid: number;
   requestedPayment: number;

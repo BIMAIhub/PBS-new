@@ -117,3 +117,17 @@
 @media print { .pbs-print-document { background: #F4F7FA !important; print-color-adjust: exact; -webkit-print-color-adjust: exact; } .pbs-certificate-paper { background: #F6F3E9 !important; print-color-adjust: exact; -webkit-print-color-adjust: exact; } }
 
 .pbs-feedback-pages { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding-top: 20px; border-top: 1px solid #ccbd99; }
+
+.pbs-payment-setup { border: 1px solid #D4A94D; background: linear-gradient(120deg, #d4a94d25, #f4f7fa12); margin-bottom: 18px; }
+.pbs-payment-setup p { max-width: 68ch; margin-block: 8px; }
+.pbs-payment-fields .pbs-payment-qr { background: #d4a94d12; border-color: #b59e6b80; align-items: center; }
+.pbs-payment-fields .pbs-payment-qr > div { min-width: 0; }
+.pbs-qr-frame { flex: 0 0 180px; width: 180px; min-height: 180px; display: grid; place-items: center; background: #fff; border-radius: 8px; padding: 8px; }
+.pbs-payment-fields .pbs-qr-frame img { width: 164px; height: 164px; display: block; }
+.pbs-qr-frame p { color: #152c42; font-size: 13px; padding: 8px; text-align: center; }
+.pbs-payment-fields .pbs-actions { gap: 8px; }
+@media (max-width: 640px) {
+  .pbs-payment-setup.pbs-section-top { align-items: stretch; flex-direction: column; }
+  .pbs-payment-fields .pbs-payment-qr { flex-direction: column; text-align: left; }
+  .pbs-payment-fields .pbs-payment-qr > div:last-child { width: 100%; }
+}

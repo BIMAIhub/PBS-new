@@ -9,6 +9,7 @@ import { adminWorkspace, courseById, courseDetails, enrollmentById, getAssessmen
 import { academyWorkspace, audit } from './academy-data.js';
 import { grantCourseAccess, portalOrigin } from './microsoft.js';
 import { saveLiveClass } from './live-classes.js';
+import { activeStudent } from './access-controls.js';
 
 export function mountAdmin(app: Express, db: WritableDatabase, hosted: boolean) {
   app.patch('/api/admin/profile', limitAttempts(10, hosted ? db : undefined), route(async (req, res) => {
@@ -136,6 +137,8 @@ export function mountAdmin(app: Express, db: WritableDatabase, hosted: boolean) 
     const password = !existing || activate ? temporaryPassword() : undefined;
     const hash = password ? await hashPassword(password) : undefined;
     const result = await transaction(db, async tx => {
+      if ((await courseById(tx, courseId)).paused) throw conflict('Resume this course before assigning it.');
+      if (existing && !await activeStudent(tx, id)) throw conflict('Reactivate this student before assigning a course.');
       if (!existing) {
         await tx.prepare(`INSERT INTO accounts (id, role, name, email, phone, roll_number, password_hash, must_change, created_at)
           VALUES (?, 'student', ?, ?, ?, ?, ?, 1, ?)`).run(id, name, email, phone, rollNumber, hash!, now());
@@ -213,6 +216,7 @@ export function mountAdmin(app: Express, db: WritableDatabase, hosted: boolean) 
     const candidateHash = candidate ? await hashPassword(candidate) : undefined;
     const result = await transaction(db, async tx => {
       const enrollment = await enrollmentById(tx, req.params.id);
+      if (decision === 'approved' && (!await activeStudent(tx, enrollment.studentId) || (await courseById(tx, enrollment.courseId)).paused)) throw conflict('Reactivate the student and resume the course before approval.');
       if (enrollment.status === decision) return { enrollment };
       if (enrollment.status !== 'pending') throw conflict('This application has already been reviewed.');
       await tx.prepare('UPDATE enrollments SET status = ?, approved_at = ?, notes = ? WHERE id = ?')

@@ -8,6 +8,7 @@ import { audit, paymentSettings } from './academy-data.js';
 import { availablePromotion, promotions, publicPrice, quotePrice, savePrice } from './commerce.js';
 import { portfolioSections, studentProfile } from './profiles.js';
 import { certificateRecords } from './academy-data.js';
+import { activeStudent } from './access-controls.js';
 import { enrollmentCounts, learnerCommunity, publishedFeedback } from './feedback.js';
 import {
   checkReference, courseById, courses, enrollmentById, getAssessment, hasCourseAccess,
@@ -52,6 +53,7 @@ export function mountStudent(app: Express, db: WritableDatabase, hosted: boolean
     const courseId = field(req.body?.courseId, 'course', 80);
     const course = await courseById(db, courseId);
     if (!course.published) throw notFound('This course is unavailable for enrollment.');
+    if (course.paused) throw conflict('Enrollment is paused for this course. Check the course page for updates.');
     const claim = paymentClaim(req.body, course.fee);
     if (claim.amount && !(await paymentSettings(db)).paymentUpiId) {
       throw badRequest('Contact PBS to arrange payment for this course.');
@@ -74,6 +76,8 @@ export function mountStudent(app: Express, db: WritableDatabase, hosted: boolean
 
     const enrollment = await transaction(db, async tx => {
       const available = await courseById(tx, courseId);
+      if (available.paused) throw conflict('Enrollment is paused for this course.');
+      if (signedIn && !await activeStudent(tx, signedIn.id)) throw new RequestError(403, 'This account is inactive.');
       if (!available.published || available.fee !== course.fee) throw conflict('This course changed. Refresh the catalog and try again.');
       if (signup) {
         await tx.prepare(`INSERT INTO accounts (id, role, name, email, phone, roll_number, password_hash, created_at, must_change)
@@ -249,7 +253,7 @@ export function mountStudent(app: Express, db: WritableDatabase, hosted: boolean
   app.get('/api/portfolios/:id', route(async (req, res) => {
     const student = await findAccount(db, req.params.id);
     const profile = student ? await portfolio(db, student.id) : null;
-    if (!student || student.role !== 'student' || !profile?.published) throw notFound('This portfolio is unavailable.');
+    if (!student || student.role !== 'student' || student.accountStatus !== 'active' || !profile?.published) throw notFound('This portfolio is unavailable.');
     const details = await studentProfile(db, student.id);
     const certificates = (await certificateRecords(db, student.id)).filter(item => item.published && !item.revokedAt)
       .map(({ id, courseTitle, issuedAt, publicToken, template }) => ({ id, courseTitle, issuedAt, publicToken, issuer: template.issuer }));

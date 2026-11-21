@@ -6,6 +6,7 @@ import type { Express, Response } from 'express';
 import { get, put, del } from '@vercel/blob';
 import { findAccount, publicAccount, requireAccount } from './auth.js';
 import { type Database, type WritableDatabase, dataDirectory, makeId, transaction } from './database.js';
+import { activeStudent } from './access-controls.js';
 import { audit } from './academy-data.js';
 import { badRequest, field, notFound, RequestError, route } from './http.js';
 import { httpsLink, phoneNumber } from './inputs.js';
@@ -117,6 +118,7 @@ export function mountProfiles(app: Express, db: WritableDatabase, hosted: boolea
     if (prior) await removeCv(prior).catch(() => {}); res.status(204).end();
   }));
   app.get('/api/portfolios/:id/cv', route(async (req, res) => {
+    if (!await activeStudent(db, req.params.id)) throw notFound('This CV is private or unavailable.');
     const row = await db.prepare(`SELECT s.cv_path, s.cv_name FROM student_profiles s JOIN portfolios p ON p.account_id = s.account_id
       WHERE s.account_id = ? AND s.show_cv = 1 AND p.published = 1`).get(req.params.id);
     if (!row?.cv_path) throw notFound('This CV is private or unavailable.'); await deliverCv(res, String(row.cv_path), String(row.cv_name));

@@ -60,7 +60,7 @@ export async function academyWorkspace(db: Database, accountId?: string) {
       COALESCE(d.source, 'unrecorded') AS source ${accountId ? '' : ", COALESCE(d.internal_note, '') AS internalNote"}
       FROM enrollments e LEFT JOIN enrollment_details d ON e.id = d.enrollment_id ${where}`).all(...params),
     grants: await db.prepare(`SELECT g.enrollment_id AS enrollmentId, g.email, g.status, g.error,
-      g.updated_at AS updatedAt, CASE WHEN g.status = 'granted' THEN COALESCE(s.web_url, '') ELSE '' END AS webUrl
+      g.updated_at AS updatedAt, CASE WHEN g.status = 'granted' ${accountId ? "AND NOT EXISTS (SELECT 1 FROM course_controls cc WHERE cc.course_id = e.course_id AND cc.paused = 1) AND NOT EXISTS (SELECT 1 FROM enrollment_controls ec WHERE ec.enrollment_id = e.id AND ec.paused = 1)" : ''} THEN COALESCE(s.web_url, '') ELSE '' END AS webUrl
       FROM course_access_grants g JOIN enrollments e ON e.id = g.enrollment_id
       LEFT JOIN course_storage s ON s.course_id = e.course_id ${where}`).all(...params),
   };

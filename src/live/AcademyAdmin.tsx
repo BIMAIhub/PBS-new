@@ -32,7 +32,7 @@ export function AdminOverview({ data, academy, navigate, onEnroll }: {
       </div><div className="pbs-academy-emblem" aria-hidden="true"><img src={brand.logoUrl} width="100" height="100" /><span>{brand.academyName}</span></div>
     </section>
     <dl className="pbs-learning-stats pbs-academy-stats">
-      <div><dt><Users /> Active students</dt><dd>{new Set(active.map(item => item.studentId)).size}</dd><small>Across {data.courses.length} courses</small></div>
+      <div><dt><Users /> Active students</dt><dd>{data.students.filter(student => (!student.accountStatus || student.accountStatus === 'active') && student.enrollments.some(item => item.status === 'approved')).length}</dd><small>Across {data.courses.length} courses</small></div>
       <div><dt><IndianRupee /> Verified collections</dt><dd>{money(paid)}</dd><small>{data.receipts.length} payment receipts</small></div>
       <div><dt><CreditCard /> Outstanding fees</dt><dd>{money(active.reduce((sum, item) => sum + balance(item), 0))}</dd><small>{active.filter(item => balance(item) > 0).length} enrollments with a balance</small></div>
       <div><dt><ShieldCheck /> Certificates earned</dt><dd>{academy?.certificates.filter(item => !item.revokedAt).length || 0}</dd><small>Verified course completions</small></div>
@@ -59,7 +59,7 @@ export function AdminOverview({ data, academy, navigate, onEnroll }: {
 export function GrantAccessButton({ enrollment, onSaved }: { enrollment: Enrollment; onSaved: () => Promise<unknown> }) {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
-  return <div className="pbs-access-action"><Button quiet disabled={busy} onClick={async () => {
+  return <div className="pbs-access-action"><Button quiet disabled={busy || enrollment.accessPaused || enrollment.coursePaused} onClick={async () => {
     setBusy(true); setNotice('');
     try {
       const result = await send<{ status: string; error?: string }>(`/admin/enrollments/${enrollment.id}/access`);
@@ -122,7 +122,7 @@ export function PaymentLedger({ data, academy, open, onSaved }: {
   </div>;
 }
 
-function PaymentSettingsForm({ payment, onClose, onSaved }: { payment: AdminAcademyData['payment']; onClose: () => void; onSaved: () => Promise<void> }) {
+export function PaymentSettingsForm({ payment, onClose, onSaved }: { payment: AdminAcademyData['payment']; onClose: () => void; onSaved: () => Promise<void> }) {
   return <DialogForm title="Student payment settings" submit="Save payment destination" onClose={onClose} onSubmit={async form => {
     await send('/admin/payment-settings', { paymentUpiId: value(form, 'upi'), paymentName: value(form, 'name'), current: String(form.get('current') || '') }, 'PUT'); await onSaved();
   }}><Input label="Payee name" name="name" defaultValue={payment.paymentName} maxLength={120} required /><Input label="UPI ID" name="upi" defaultValue={payment.paymentUpiId} placeholder="Your verified business UPI ID" maxLength={150} note="Students see this destination and its QR code. Leave blank to pause new UPI payments." />

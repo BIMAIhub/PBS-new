@@ -1,4 +1,5 @@
 import type { Express } from 'express';
+import { activeCourseAccess } from './access-controls.js';
 import { createHash } from 'node:crypto';
 import { requireAccount } from './auth.js';
 import { type Database, type WritableDatabase, makeId, now, transaction } from './database.js';
@@ -68,7 +69,10 @@ export async function studentLiveData(db: Database, accountId: string): Promise<
     a.join_count AS joinCount, a.status AS attendanceStatus, a.minutes, a.awarded_points AS attendancePoints, a.verified_at AS verifiedAt, a.source
     FROM live_classes l JOIN courses c ON c.id = l.course_id JOIN enrollments e ON e.course_id = l.course_id
     LEFT JOIN live_attendance a ON a.class_id = l.id AND a.account_id = e.account_id
-    WHERE e.account_id = ? AND e.status = 'approved' AND l.published = 1 ORDER BY l.starts_at DESC LIMIT 250`).all(accountId);
+    WHERE e.account_id = ? AND e.status = 'approved' AND l.published = 1
+    AND NOT EXISTS (SELECT 1 FROM course_controls cc WHERE cc.course_id = e.course_id AND cc.paused = 1)
+    AND NOT EXISTS (SELECT 1 FROM enrollment_controls ec WHERE ec.enrollment_id = e.id AND ec.paused = 1)
+    ORDER BY l.starts_at DESC LIMIT 250`).all(accountId);
   const total = await db.prepare("SELECT COALESCE(SUM(awarded_points), 0) AS points, SUM(CASE WHEN status = 'present' THEN 1 ELSE 0 END) AS attended FROM live_attendance WHERE account_id = ?").get(accountId);
   return { serverTime: now(), points: Number(total?.points || 0), attended: Number(total?.attended || 0), classes: rows.map(row => {
     const { firstJoinedAt, lastJoinedAt, joinCount, attendanceStatus, minutes, attendancePoints, verifiedAt, source, ...session } = row;
@@ -157,7 +161,7 @@ export function mountLiveClasses(app: Express, db: WritableDatabase, hosted: boo
     const account = await requireAccount(db, req, 'student');
     const session = await transaction(db, async tx => {
       const session = await getClass(tx, req.params.id);
-      if (!session.published || !await approved(tx, account.id, session.courseId)) throw notFound('An approved enrollment is required for this live session.');
+      if (!session.published || !await activeCourseAccess(tx, account.id, session.courseId)) throw notFound('An approved enrollment is required for this live session.');
       if (session.state !== 'open') throw new RequestError(403, session.state === 'upcoming' ? 'Joining opens at the scheduled join time.' : 'This live session is not open for joining.');
       const url = meetLink(session.meetUrl), time = now();
       await tx.prepare(`INSERT INTO live_attendance (class_id, account_id, first_joined_at, last_joined_at, join_count) VALUES (?, ?, ?, ?, 1)
@@ -167,7 +171,7 @@ export function mountLiveClasses(app: Express, db: WritableDatabase, hosted: boo
   }));
   app.get('/api/live-classes/:id/calendar', route(async (req, res) => {
     const account = await requireAccount(db, req, 'student'), session = await getClass(db, req.params.id);
-    if (!session.published || !await approved(db, account.id, session.courseId)) throw notFound('This course session is unavailable.');
+    if (!session.published || !await activeCourseAccess(db, account.id, session.courseId)) throw notFound('This course session is unavailable.');
     if (session.status === 'cancelled') throw badRequest('This session has been cancelled.');
     const origin = process.env.PBS_PUBLIC_ORIGIN || `${hosted ? 'https' : req.protocol}://${req.get('host')}`;
     res.type('text/calendar').attachment('PBS-live-session.ics').send(['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//PBS//Learning sessions//EN', 'BEGIN:VEVENT', `UID:${session.id}@pbs`, `DTSTAMP:${icsDate(now())}`, `DTSTART:${icsDate(session.startsAt)}`, `DTEND:${icsDate(session.endsAt)}`, `SUMMARY:${icsText(session.title)}`, `DESCRIPTION:${icsText(`${session.courseTitle}\nSign in to your PBS workspace to join. Your enrollment is checked when the session opens.`)}`, `URL:${origin}/?page=sessions`, 'BEGIN:VALARM', 'TRIGGER:-PT10M', 'ACTION:DISPLAY', `DESCRIPTION:${icsText(session.title)}`, 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR', ''].join('\r\n'));

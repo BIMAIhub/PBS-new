@@ -8,6 +8,19 @@ export const dataDirectory = path.resolve(process.env.PBS_DATA_DIR || 'data');
 export const videoDirectory = path.join(dataDirectory, 'videos');
 
 const schema = `
+    CREATE TABLE IF NOT EXISTS account_controls (
+      account_id TEXT PRIMARY KEY REFERENCES accounts(id),
+      status TEXT NOT NULL CHECK(status IN ('active','inactive','deleted')),
+      reason TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS course_controls (
+      course_id TEXT PRIMARY KEY REFERENCES courses(id), paused INTEGER NOT NULL DEFAULT 0,
+      reason TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS enrollment_controls (
+      enrollment_id TEXT PRIMARY KEY REFERENCES enrollments(id), paused INTEGER NOT NULL DEFAULT 0,
+      reason TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS student_admissions (
       account_id TEXT PRIMARY KEY REFERENCES accounts(id), approved_at TEXT NOT NULL DEFAULT ''
     );

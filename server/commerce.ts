@@ -83,6 +83,7 @@ export function mountCommerce(app: Express, db: WritableDatabase, hosted: boolea
     const account = await sessionAccount(db, req);
     const course = await courseById(db, field(req.body?.courseId, 'course', 80));
     if (!course.published) throw notFound('This course is unavailable.');
+    if (course.paused) throw conflict('Enrollment is paused for this course.');
     const email = account?.email || (req.body?.email ? emailAddress(req.body.email) : '');
     res.json(await quotePrice(db, course.id, field(req.body?.code, 'offer code', 40, false), email, account?.id));
   }));

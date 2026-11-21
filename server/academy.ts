@@ -4,7 +4,7 @@ import { requireAccount } from './auth.js';
 import { type WritableDatabase, makeId, now, transaction } from './database.js';
 import { academyWorkspace, audit, certificateRecords, certificateTemplate, paymentSettings, saveSetting } from './academy-data.js';
 import { badRequest, conflict, field, limitAttempts, notFound, RequestError, route } from './http.js';
-import { enrollmentById, requireCompletedLessons } from './records.js';
+import { enrollmentById, hasCourseAccess, requireCompletedLessons } from './records.js';
 import { verifyPassword } from './passwords.js';
 import { portalOrigin, sendMicrosoftMail } from './microsoft.js';
 
@@ -130,7 +130,7 @@ export function mountAcademy(app: Express, db: WritableDatabase, hosted: boolean
   app.post('/api/student/courses/:id/certificate', route(async (req, res) => {
     const account = await requireAccount(db, req, 'student');
     await transaction(db, async tx => {
-      const enrolled = await tx.prepare("SELECT 1 FROM enrollments WHERE account_id = ? AND course_id = ? AND status = 'approved'").get(account.id, req.params.id);
+      const enrolled = await hasCourseAccess(tx, account, req.params.id);
       if (!enrolled) throw notFound('This course is unavailable.');
       const prior = await tx.prepare('SELECT id FROM certificates WHERE account_id = ? AND course_id = ?').get(account.id, req.params.id);
       if (prior) return;

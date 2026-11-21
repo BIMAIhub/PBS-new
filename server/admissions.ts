@@ -34,7 +34,7 @@ export async function migratePendingAdmissions(db: WritableDatabase) {
 
 export async function accessPackage(db: Database, studentId: string, origin: string, password?: string): Promise<AccessPackage> {
   const student = await findAccount(db, studentId);
-  if (!student || student.role !== 'student') throw notFound('This student is unavailable.');
+  if (!student || student.role !== 'student' || student.accountStatus !== 'active') throw notFound('This student is inactive or unavailable.');
   const approved = (await enrollments(db, studentId)).filter(item => item.status === 'approved');
   if (!approved.length) throw conflict('Approve an enrollment before sharing student access.');
   const brand = await publicBranding(db);

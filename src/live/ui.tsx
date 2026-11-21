@@ -53,15 +53,15 @@ export function Button({ children, onClick, quiet = false, disabled = false }: {
   return <button type="button" className={`pbs-button ${quiet ? 'pbs-button-outline' : 'pbs-button-primary'}`} disabled={disabled} onClick={onClick}>{children}</button>;
 }
 
-export function DialogForm({ title, detail, submit, onClose, onSubmit, children, wide = false }: {
+export function DialogForm({ title, detail, submit, onClose, onSubmit, children, wide = false, submitDisabled = false }: {
   title: string; detail?: string; submit: string; onClose: () => void;
-  onSubmit: (form: FormData) => Promise<void>; children: ReactNode; wide?: boolean;
+  onSubmit: (form: FormData) => Promise<void>; children: ReactNode; wide?: boolean; submitDisabled?: boolean;
 }) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (busy) return;
+    if (busy || submitDisabled) return;
     setBusy(true);
     setError('');
     try {
@@ -80,7 +80,7 @@ export function DialogForm({ title, detail, submit, onClose, onSubmit, children,
         {children}
         <footer className="pbs-dialog-actions">
           <Button quiet onClick={onClose} disabled={busy}>Cancel</Button>
-          <button type="submit" className="pbs-button pbs-button-primary" disabled={busy}>
+          <button type="submit" className="pbs-button pbs-button-primary" disabled={busy || submitDisabled}>
             {busy ? <><LoaderCircle className="pbs-spinner" /> Saving…</> : submit}
           </button>
         </footer>

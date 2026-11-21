@@ -5,7 +5,7 @@ export { StudentAccessDialog as TemporaryAccess } from './AccessSharing';
 import { PortalDialog } from '../components/student-dashboard/PortalUI';
 import { api, send } from './api';
 import type { Account, AssessmentQuestion, Course, Enrollment, Lesson, Receipt, StudentRecord } from './types';
-import { Button, DialogForm, Field, Input, money, paise, useApiResource, value } from './ui';
+import { Button, DialogForm, Empty, Field, Input, money, paise, useApiResource, value } from './ui';
 
 type Save = () => Promise<void>;
 type FormProps = { onClose: () => void; onSaved: Save };
@@ -154,14 +154,18 @@ export interface CreatedStudent {
   delivery?: AccessDelivery;
 }
 
-export function EnrollStudentForm({ courses, student, onClose, onSaved }: {
-  courses: Course[]; student?: StudentRecord; onClose: () => void; onSaved: (result: CreatedStudent) => Promise<void>;
+export function EnrollStudentForm({ courses, student, initialCourseId, onExisting, onCreateCourse, onClose, onSaved }: {
+  courses: Course[]; student?: StudentRecord; initialCourseId?: string; onExisting: (enrollment: Enrollment) => void;
+  onCreateCourse: () => void; onClose: () => void; onSaved: (result: CreatedStudent) => Promise<void>;
 }) {
-  const available = courses.filter(course => !student?.enrollments.some(enrollment => enrollment.courseId === course.id && enrollment.status !== 'rejected'));
-  const [courseId, setCourseId] = useState(available[0]?.id || '');
-  const selected = available.find(course => course.id === courseId);
+  const assignable = courses.filter(course => !course.paused && !student?.enrollments.some(enrollment => enrollment.courseId === course.id && enrollment.status !== 'rejected'));
+  const [courseId, setCourseId] = useState(initialCourseId || assignable[0]?.id || courses[0]?.id || '');
+  const selected = courses.find(course => course.id === courseId);
+  const existing = student?.enrollments.find(item => item.courseId === courseId && item.status !== 'rejected');
+  const inactive = student?.accountStatus && student.accountStatus !== 'active';
   const [amount, setAmount] = useState('');
-  return <DialogForm title="Enroll a student" detail={student ? student.name : 'Use the email the student will sign in with.'} submit="Enroll student" wide onClose={onClose}
+  if (!courses.length) return <PortalDialog title="Assign a course" onClose={onClose}><Empty title="Create your first course">There are no courses in this workspace yet. Create one to start enrolling students.<Button onClick={onCreateCourse}>Create course</Button></Empty></PortalDialog>;
+  return <DialogForm title={student ? 'Assign or manage a course' : 'Enroll a student'} detail={student ? student.name : 'Use the email the student will sign in with.'} submit={existing ? 'Already assigned' : 'Enroll student'} submitDisabled={Boolean(existing || selected?.paused || inactive || !selected)} wide onClose={onClose}
     onSubmit={async form => {
       const result = await send<CreatedStudent>('/admin/students', {
         name: value(form, 'name'), email: value(form, 'email'), phone: value(form, 'phone'), rollNumber: value(form, 'roll'),
@@ -177,15 +181,18 @@ export function EnrollStudentForm({ courses, student, onClose, onSaved }: {
       <Input label="Roll number" name="roll" defaultValue={student?.rollNumber} readOnly={Boolean(student)} placeholder="Assigned automatically if blank" />
     </div>
     <Field label="Course"><select name="course" required value={courseId} onChange={event => setCourseId(event.target.value)}>
-      {!available.length && <option value="">No available courses</option>}
-      {available.map(course => <option key={course.id} value={course.id}>{course.title}</option>)}
+      {courses.map(course => { const enrollment = student?.enrollments.find(item => item.courseId === course.id && item.status !== 'rejected'); return <option key={course.id} value={course.id}>{course.title}{course.paused ? ' · Paused' : enrollment?.status === 'approved' ? ' · Already enrolled' : enrollment?.status === 'pending' ? ' · Awaiting approval' : !course.published ? ' · Draft' : ''}</option>; })}
     </select></Field>
+    {inactive && <p className="pbs-form-error">This student is {student.accountStatus}. Reactivate the account from the student record before assigning a course.</p>}
+    {selected?.paused && <div className="pbs-inset"><strong>Course paused</strong><p className="pbs-muted">{selected.pauseReason} Resume the course from Courses & videos to allow new enrollments.</p></div>}
+    {existing ? <div className="pbs-inset pbs-live-form"><strong>{existing.status === 'pending' ? 'An application already exists' : 'This course is already assigned'}</strong><p className="pbs-muted">Agreed fee {money(existing.total)} · Verified paid {money(existing.paid)} · Balance {money(existing.total - existing.paid)}</p><p className="pbs-muted">{existing.status === 'pending' ? 'Review the current application to approve access. This keeps its offer and payment reference together.' : 'Open the student record to manage access, record a payment or issue documents.'}</p><Button onClick={() => onExisting(existing)}>{existing.status === 'pending' ? 'Review application' : 'Manage assigned course'}</Button></div> : <>
     <div className="pbs-form-grid">
       <Input key={courseId} label="Agreed fee (₹)" name="total" type="number" step=".01" min="0" defaultValue={(selected?.fee ?? 0) / 100} required />
       <Input label="Initial payment (₹)" name="amount" type="number" step=".01" min="0" value={amount} onChange={event => setAmount(event.target.value)} />
     </div>
     {Number(amount) > 0 && <PaymentDetails />}
     <label className="pbs-check"><input type="checkbox" name="sendEmail" defaultChecked /> Email the approved access details through my connected Microsoft account</label>
+    </>}
   </DialogForm>;
 }
 

@@ -14,9 +14,10 @@ import { Classroom } from './Classroom';
 import { DocumentDialog, ReceiptList, type DocumentInfo } from './Documents';
 import { send } from './api';
 import type { AccessPackage, AccessDelivery } from './admissions-types';
+import { AccessControlForm, type AccessControlDialog } from './AccessControls';
 import { ShareAccessButton } from './AccessSharing';
 import { AdminCourseFeedback } from './CourseFeedback';
-import { ActivityLog, AdminOverview, GrantAccessButton, PaymentLedger } from './AcademyAdmin';
+import { ActivityLog, AdminOverview, GrantAccessButton, PaymentLedger, PaymentSettingsForm } from './AcademyAdmin';
 import { CertificateStudio } from './Certificates';
 import { Integrations } from './Integrations';
 import { OffersAdmin } from './OffersAdmin';
@@ -54,12 +55,13 @@ const groups: WorkspaceNavGroup<Page>[] = [
   ] },
 ];
 
-type Dialog =
+type Dialog = AccessControlDialog
+  | { kind: 'payment-settings' }
   | { kind: 'course'; course?: Course }
   | { kind: 'module' | 'assessment' | 'preview'; course: Course }
   | { kind: 'video'; course: Course; moduleId?: string; lesson?: Lesson }
   | { kind: 'link'; course: Course; type: 'session' | 'resource' }
-  | { kind: 'enroll'; student?: StudentRecord }
+  | { kind: 'enroll'; student?: StudentRecord; courseId?: string }
   | { kind: 'record' | 'edit-student' | 'reset' | 'placement'; student: StudentRecord }
   | { kind: 'review' | 'payment' | 'reject-payment'; enrollment: Enrollment }
   | { kind: 'document'; document: DocumentInfo }
@@ -69,7 +71,7 @@ type Dialog =
   | { kind: 'profile' | 'password' | 'help' };
 
 function AdminStats({ data }: { data: AdminWorkspaceData }) {
-  const active = data.students.filter(student => student.enrollments.some(enrollment => enrollment.status === 'approved')).length;
+  const active = data.students.filter(student => (!student.accountStatus || student.accountStatus === 'active') && student.enrollments.some(enrollment => enrollment.status === 'approved')).length;
   const due = data.enrollments.filter(enrollment => enrollment.status === 'approved')
     .reduce((sum, enrollment) => sum + enrollment.total - enrollment.paid, 0);
   const received = data.receipts.reduce((sum, receipt) => sum + receipt.amount, 0);
@@ -82,8 +84,9 @@ function AdminStats({ data }: { data: AdminWorkspaceData }) {
 
 function Roster({ data, open, onCreateCourse }: { data: AdminWorkspaceData; open: (dialog: Dialog) => void; onCreateCourse: () => void }) {
   const [query, setQuery] = useState('');
+  const [accountFilter, setAccountFilter] = useState('current');
   const search = query.trim().toLowerCase();
-  const students = data.students.filter(student => [student.name, student.email, student.id, student.rollNumber]
+  const students = data.students.filter(student => (accountFilter === 'current' ? student.accountStatus !== 'deleted' : (student.accountStatus || 'active') === accountFilter) && [student.name, student.email, student.id, student.rollNumber]
     .some(field => field.toLowerCase().includes(search)));
   return <div className="pbs-live-stack">
     <AdminStats data={data} />
@@ -92,6 +95,7 @@ function Roster({ data, open, onCreateCourse }: { data: AdminWorkspaceData; open
       : <Button onClick={onCreateCourse}><Plus size={18} /> Create course</Button>}>
       <label className="pbs-live-search pbs-roster-search"><Search size={18} /><input type="search" aria-label="Find a student"
         placeholder="Find by name, email or student ID" value={query} onChange={event => setQuery(event.target.value)} /></label>
+      <Field label="Account status"><select value={accountFilter} onChange={event => setAccountFilter(event.target.value)}><option value="current">Current students</option><option value="active">Active accounts</option><option value="inactive">Inactive accounts</option><option value="deleted">Deleted students</option></select></Field>
       {students.length ? <div className="pbs-table-scroll">
         <table className="pbs-table">
           <thead><tr><th>Student</th><th>Student ID</th><th>Courses</th><th>Live attendance</th><th>Balance</th><th><span className="sr-only">Actions</span></th></tr></thead>
@@ -99,13 +103,13 @@ function Roster({ data, open, onCreateCourse }: { data: AdminWorkspaceData; open
             const active = student.enrollments.filter(enrollment => enrollment.status === 'approved');
             const balance = active.reduce((sum, enrollment) => sum + enrollment.total - enrollment.paid, 0);
             return <tr key={student.id}>
-              <td><strong>{student.name}</strong><small>{student.email}</small></td>
+              <td><strong>{student.name}</strong><small>{student.email}</small><Status value={student.accountStatus || 'active'} /></td>
               <td>{student.id}</td><td>{active.length}</td><td><strong>{student.livePoints} points</strong><small>{student.attendedSessions} sessions confirmed</small></td><td>{money(balance)}</td>
               <td><button className="pbs-text-button" type="button" onClick={() => open({ kind: 'record', student })}>Open record <ArrowRight /></button></td>
             </tr>;
           })}</tbody>
         </table>
-      </div> : <Empty title={query ? 'No matching students' : 'No students yet'}>
+      </div> : <Empty title={query || accountFilter !== 'current' ? 'No matching students' : 'No students yet'}>
         {query ? 'Try a different name or email.' : 'Students appear after they apply or you enroll them directly.'}
       </Empty>}
     </Panel>
@@ -118,9 +122,12 @@ function CourseManager({ courses, open, onSessions }: { courses: Course[]; open:
     {courses.map(course => <article className="pbs-course-admin" key={course.id}>
       <div className="pbs-section-top">
         <div><p className="pbs-muted">{course.category}</p><h3>{course.title}</h3><p className="pbs-muted">{money(course.fee)} · {course.modules.length} modules</p></div>
-        <Status value={course.published ? 'Published' : 'Draft'} />
+        <div className="pbs-actions"><Status value={course.published ? 'Published' : 'Draft'} />{course.paused && <Status value="Paused" />}</div>
       </div>
+      {course.paused && <p className="pbs-muted">{course.pauseReason || 'Course access and new enrollments are paused.'}</p>}
       <div className="pbs-actions">
+        <Button quiet onClick={() => open({ kind: 'pause-course', course })}>{course.paused ? 'Resume course' : 'Pause course'}</Button>
+        <Button disabled={course.paused} onClick={() => open({ kind: 'enroll', courseId: course.id })}>Enroll student</Button>
         <Button quiet onClick={() => open({ kind: 'course', course })}>Edit course</Button>
         <Button quiet onClick={() => open({ kind: 'module', course })}>Add module</Button>
         <Button disabled={!course.modules.length} onClick={() => open({ kind: 'video', course })}><Video size={18} /> Add video</Button>
@@ -180,6 +187,7 @@ function EnrollmentList({ enrollments, open, payment = false }: { enrollments: E
 function StudentRecordPanel({ student, open, onClose, onSaved }: { student: StudentRecord; open: (dialog: Dialog) => void; onClose: () => void; onSaved: () => Promise<unknown> }) {
   return <PortalDialog title={student.name} className="pbs-dialog-wide" onClose={onClose}>
     <div className="pbs-live-stack">
+      <div className="pbs-section-top"><Status value={student.accountStatus || 'active'} />{student.accountReason && <p className="pbs-muted">{student.accountReason}</p>}</div>
       <dl className="pbs-facts">
         <div><dt>Email</dt><dd>{student.email}</dd></div>
         <div><dt>Student ID</dt><dd>{student.id}</dd></div>
@@ -187,7 +195,8 @@ function StudentRecordPanel({ student, open, onClose, onSaved }: { student: Stud
         <div><dt>Lessons completed</dt><dd>{student.completedLessons}</dd></div>
       </dl>
       <div className="pbs-actions">
-        <Button onClick={() => open({ kind: 'enroll', student })}>Assign course</Button>
+        {student.accountStatus === 'deleted' ? <Button onClick={() => open({ kind: 'restore-student', student })}>Restore student</Button> : <><Button quiet onClick={() => open({ kind: 'student-status', student })}>{student.accountStatus === 'inactive' ? 'Reactivate student' : 'Deactivate account'}</Button><Button quiet onClick={() => open({ kind: 'delete-student', student })}>Delete student</Button></>}
+        <Button disabled={student.accountStatus === 'deleted'} onClick={() => open({ kind: 'enroll', student })}>Assign course</Button>
         <Button quiet onClick={() => open({ kind: 'edit-student', student })}>Edit record</Button>
         <Button quiet onClick={() => open({ kind: 'reset', student })}>Reset password</Button>
         <Button quiet onClick={() => open({ kind: 'message', student })}>Message</Button>
@@ -198,7 +207,9 @@ function StudentRecordPanel({ student, open, onClose, onSaved }: { student: Stud
         {!student.enrollments.length && <p className="pbs-muted">No courses assigned.</p>}
         {student.enrollments.map(enrollment => <div className="pbs-record-row" key={enrollment.id}>
           <div><strong>{enrollment.courseTitle}</strong><p className="pbs-muted">{money(enrollment.paid)} received · {money(enrollment.total - enrollment.paid)} outstanding</p><p className="pbs-muted">Applied {dateLabel(enrollment.submittedAt)}{enrollment.approvedAt ? ` · Approved ${dateLabel(enrollment.approvedAt)}` : ''}</p></div>
-          <div className="pbs-actions"><Status value={enrollment.status} />
+          <div className="pbs-actions"><Status value={enrollment.status} />{Boolean(enrollment.accessPaused || enrollment.coursePaused) && <Status value="Access paused" />}
+            {enrollment.status === 'pending' && <Button onClick={() => open({ kind: 'review', enrollment })}>Review application</Button>}
+            {enrollment.status === 'approved' && <Button quiet onClick={() => open({ kind: 'pause-enrollment', enrollment })}>{enrollment.accessPaused ? 'Resume student access' : 'Pause student access'}</Button>}
             {enrollment.status === 'approved' && <Button quiet onClick={() => open({ kind: 'document', document: { kind: 'statement', enrollment, receipts: student.receipts } })}>Fee statement</Button>}
             {enrollment.status === 'approved' && <Button quiet onClick={() => open({ kind: 'document', document: { kind: 'letter', account: student, enrollment } })}>Bonafide letter</Button>}
             {enrollment.status === 'approved' && enrollment.total > enrollment.paid && <Button onClick={() => open({ kind: 'payment', enrollment })}>Record payment</Button>}
@@ -206,7 +217,7 @@ function StudentRecordPanel({ student, open, onClose, onSaved }: { student: Stud
           </div>
         </div>)}
       </div>
-      {student.enrollments.some(item => item.status === 'approved') && <div className="pbs-actions"><ShareAccessButton studentId={student.id} /></div>}
+      {(!student.accountStatus || student.accountStatus === 'active') && student.enrollments.some(item => item.status === 'approved') && <div className="pbs-actions"><ShareAccessButton studentId={student.id} /></div>}
       {student.receipts.length > 0 && <ReceiptList receipts={student.receipts} onOpen={receipt => open({ kind: 'document', document: { kind: 'receipt', receipt } })} />}
     </div>
   </PortalDialog>;
@@ -265,6 +276,7 @@ export function AdminWorkspace({ account, onAccount, onSignOut }: {
       {notice && <p className="pbs-form-status pbs-notice" role="status">{notice}</p>}
       <FormError error={error || academy.error} />
       {!data && !error && <p className="pbs-muted" role="status">Loading records…</p>}
+      {academy.data && !academy.data.payment.paymentUpiId && ['overview', 'students', 'courses', 'enrollments'].includes(page) && <div className="pbs-inset pbs-payment-setup pbs-section-top"><div><strong>Enable scan-to-pay & UPI app payments</strong><p className="pbs-muted">Add your verified business UPI ID and payee name. Students can apply while payment setup is pending.</p></div><Button onClick={() => show({ kind: 'payment-settings' })}>Set up student payments</Button></div>}
       {data && page === 'overview' && <AdminOverview data={data} academy={academy.data} navigate={navigate} onEnroll={() => data.courses.length ? show({ kind: 'enroll' }) : show({ kind: 'course' })} />}
       {data && page === 'students' && <Roster data={data} open={show} onCreateCourse={() => show({ kind: 'course' })} />}
       {data && page === 'courses' && <CourseManager courses={data.courses} open={show} onSessions={(courseId, create) => { navigate('sessions'); setLiveCourse(courseId); setCreateLive(create); }} />}
@@ -303,13 +315,15 @@ export function AdminWorkspace({ account, onAccount, onSignOut }: {
         onReply={message => show({ kind: 'message', student: { id: message.studentId, name: message.studentName }, subject: `Re: ${message.subject}`.slice(0, 140) })} />}
     </WorkspaceChrome>
 
+    {dialog && ['student-status', 'delete-student', 'restore-student', 'pause-course', 'pause-enrollment'].includes(dialog.kind) && <AccessControlForm control={dialog as AccessControlDialog} onClose={close} onSaved={saved} />}
+    {dialog?.kind === 'payment-settings' && academy.data && <PaymentSettingsForm payment={academy.data.payment} onClose={close} onSaved={() => saved('Student payment destination saved.')} />}
     {dialog?.kind === 'course' && <CourseForm course={dialog.course} onClose={close} onSaved={() => { navigate('courses'); return saved('Course saved.'); }} />}
     {dialog?.kind === 'module' && <ModuleForm course={dialog.course} onClose={close} onSaved={() => saved('Module added.')} />}
     {dialog?.kind === 'video' && <VideoForm course={dialog.course} moduleId={dialog.moduleId} lesson={dialog.lesson} onClose={close} onSaved={() => saved(dialog.lesson ? 'Video lesson updated.' : 'Video lesson added.')} />}
     {dialog?.kind === 'link' && <CourseLinkForm course={dialog.course} kind={dialog.type} onClose={close} onSaved={() => saved('Course materials saved.')} />}
     {dialog?.kind === 'assessment' && <AssessmentForm course={dialog.course} onClose={close} onSaved={() => saved('Assessment published.')} />}
     {dialog?.kind === 'preview' && <Classroom course={dialog.course} completed={new Set()} onClose={close} />}
-    {dialog?.kind === 'enroll' && data && <EnrollStudentForm courses={data.courses} student={dialog.student} onClose={close} onSaved={enroll} />}
+    {dialog?.kind === 'enroll' && data && <EnrollStudentForm courses={data.courses} student={dialog.student} initialCourseId={dialog.courseId} onExisting={enrollment => enrollment.status === 'pending' ? show({ kind: 'review', enrollment }) : show({ kind: 'record', student: data.students.find(item => item.id === enrollment.studentId)! })} onCreateCourse={() => show({ kind: 'course' })} onClose={close} onSaved={enroll} />}
     {dialog?.kind === 'record' && <StudentRecordPanel student={data?.students.find(item => item.id === dialog.student.id) || dialog.student} open={show} onClose={close} onSaved={refreshAll} />}
     {dialog?.kind === 'review' && <ReviewEnrollmentForm enrollment={dialog.enrollment} onClose={close} onSaved={async result => {
       await saved('Enrollment reviewed.'); if (result.access) show({ kind: 'temp', access: result.access, delivery: result.delivery, receipt: result.receipt }); else if (result.receipt) showReceipt(result.receipt);
