@@ -97,6 +97,41 @@ test('inline Microsoft video and account-scoped resume preserve existing records
       assert.equal(resolutions, prior);
     });
 
+    await t.test('missing metadata URLs fall back to file content without changing owner or permissions', async () => {
+      let metadataCalls = 0, contentCalls = 0;
+      const metadata: any = async (_db: unknown, owner: string, endpoint: string) => {
+        metadataCalls++; assert.equal(owner, adminId); assert.ok(endpoint.includes('/driveItem?'));
+        return { id: 'video!1', parentReference: { driveId: 'course-drive' }, file: { mimeType: 'video/mp4' }, video: { duration: 300000 } };
+      };
+      const content = async (_db: unknown, owner: string, endpoint: string) => {
+        contentCalls++; assert.equal(owner, adminId); assert.equal(endpoint, '/drives/course-drive/items/video!1/content');
+        return 'https://qa.files.1drv.com/recovered.mp4?temporary=isolated-test';
+      };
+      assert.match(await resolveMicrosoftVideo(db, courseId, oneDrive, source, metadata, content), /recovered.mp4/);
+      assert.equal(metadataCalls, 1); assert.equal(contentCalls, 1);
+      assert.deepEqual(await snapshots(), preserved);
+    });
+
+    await t.test('shared videos without drive IDs use the encoded sharing content endpoint', async () => {
+      const metadata: any = async () => ({ id: 'shared-video', file: { mimeType: 'video/webm' } });
+      const content = async (_db: unknown, owner: string, endpoint: string) => {
+        assert.equal(owner, adminId); assert.equal(endpoint, `/shares/u!${Buffer.from(source).toString('base64url')}/driveItem/content`);
+        return 'https://tenant.sharepoint.com/qa/video.webm?temporary=isolated-test';
+      };
+      assert.match(await resolveMicrosoftVideo(db, courseId, oneDrive, source, metadata, content), /video.webm/);
+      const remote: any = async () => ({ '@microsoft.graph.downloadUrl': 'https://qa.files.1drv.com/remote.mp4', remoteItem: { file: { mimeType: 'video/mp4' } } });
+      assert.match(await resolveMicrosoftVideo(db, courseId, oneDrive, source, remote, async () => { throw new Error('Should use the returned URL'); }), /remote.mp4/);
+    });
+
+    await t.test('a content permission denial stays a denial and never triggers an anonymous sharing fallback', async () => {
+      const metadata: any = async () => ({ file: { mimeType: 'video/mp4' } });
+      const { RequestError } = await import('../server/http.js'); let calls = 0;
+      await assert.rejects(() => resolveMicrosoftVideo(db, courseId, oneDrive, source, metadata, async () => {
+        calls++; throw new RequestError(502, 'Microsoft denied access to this recording (accessDenied).');
+      }), /denied access/);
+      assert.equal(calls, 1); assert.deepEqual(await snapshots(), preserved);
+    });
+
     await t.test('a pause position saves with sub-second precision and is returned on a later visit', async () => {
       saved = (await save({})).progress; assert.equal(saved.position, 85.125);
       const restored = await req(student, `/student/courses/${courseId}/playback`);

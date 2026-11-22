@@ -29,6 +29,8 @@ In **Courses & videos**, select **Add video** and choose a module. Upload an MP4
 
 Uploaded videos, direct video files and connected OneDrive recordings save each student's current position every 15 seconds, on pause, on lesson change and when leaving the classroom. Reopening the course selects the last watched recording and restores its timestamp. A device cache covers interrupted synchronization; the server record supports returning on another device. Replacing a recording invalidates the old timestamp. Time watched does not mark lessons complete or award points. Native playback includes play/pause, 10-second skips, speed, start over, focus mode and fullscreen.
 
+When Microsoft omits a playback URL from file metadata, PBS resolves the file through Graph's `/content` endpoint and reads its short-lived redirect on the server. A missing metadata URL is not reported as a permissions failure. Real Microsoft access denials remain blocked and are shown separately. This fallback uses the existing owner connection and changes no sharing permissions, credentials or saved settings.
+
 YouTube, Google Drive and Vimeo remain embedded when their providers allow it; their embedded controls do not expose PBS timestamp tracking. The native student player hides download and remote playback controls. Browser playback cannot prevent all copying or screen recording. This release adds playback data tables and does not reset account passwords, branding, payment destinations, Microsoft configuration or existing enrollment records.
 
 To add a lesson from a terminal, use the same administrator account. The command prompts for the password, or reads it from `PBS_ADMIN_PASSWORD` if supplied by the host.

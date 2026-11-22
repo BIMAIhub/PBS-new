@@ -8,6 +8,7 @@ import { audit, saveSetting, setting } from './academy-data.js';
 import { badRequest, conflict, field, limitAttempts, notFound, RequestError, route } from './http.js';
 import { verifyPassword } from './passwords.js';
 import { courseById, enrollmentById } from './records.js';
+import { readMicrosoftContentLocation } from './microsoft-content.js';
 
 const scopes = ['User.Read', 'Files.ReadWrite', 'Mail.Send'];
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -75,6 +76,10 @@ async function graphToken(token: string, path: string, init: RequestInit = {}) {
 
 export async function graph(db: Database, adminId: string, path: string, init: RequestInit = {}) {
   return graphToken(await accessToken(db, adminId), path, init);
+}
+
+export async function graphContentLocation(db: Database, adminId: string, path: string) {
+  return readMicrosoftContentLocation(await accessToken(db, adminId), path);
 }
 
 const part = (value: string) => encodeURIComponent(value);
