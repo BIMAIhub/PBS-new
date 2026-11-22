@@ -1,11 +1,11 @@
 import type {
   Account, AssessmentQuestion, AssessmentResult, Assignment, Completion, Course, CourseSummary,
-  Enrollment, Message, Portfolio, Receipt, StudentRecord
+  Enrollment, Lesson, Message, Portfolio, Receipt, StudentRecord
 } from '../src/live/types.js';
 import { accountFields, publicAccount } from './auth.js';
 import { type Database, makeId, now } from './database.js';
 import { conflict, notFound, badRequest } from './http.js';
-import { videoPlayback } from './video.js';
+import { videoPlayback, videoSourceKey } from './video.js';
 import { audit } from './academy-data.js';
 import { studentLiveData } from './live-classes.js';
 import { activeCourseAccess } from './access-controls.js';
@@ -48,7 +48,7 @@ export async function courseById(db: Database, id: string) {
 
 type LessonRow = { id: string; title: string; duration: string; description: string; sourceUrl: string; fileName: string };
 
-export async function courseDetails(db: Database, course: CourseSummary): Promise<Course> {
+export async function courseDetails(db: Database, course: CourseSummary, includeSources = false): Promise<Course> {
   const modules = await db.prepare('SELECT id, title FROM modules WHERE course_id = ? ORDER BY position').all(course.id) as { id: string; title: string }[];
   const links = await db.prepare('SELECT id, kind, title, url, starts_at AS startsAt FROM course_links WHERE course_id = ? ORDER BY starts_at, title')
     .all(course.id) as { id: string; kind: 'resource' | 'session'; title: string; url: string; startsAt: string }[];
@@ -58,10 +58,12 @@ export async function courseDetails(db: Database, course: CourseSummary): Promis
       ...module,
       lessons: (await db.prepare(`SELECT id, title, duration, description, source_url AS sourceUrl, file_name AS fileName
         FROM lessons WHERE module_id = ? ORDER BY position`).all(module.id) as LessonRow[])
-        .map(({ sourceUrl, fileName, ...lesson }) => ({
-          ...lesson,
-          playback: fileName ? { kind: 'video', url: `/api/lessons/${lesson.id}/video` } : videoPlayback(sourceUrl),
-        })),
+        .map(({ sourceUrl, fileName, ...lesson }) => {
+          const playback: Lesson['playback'] = fileName ? { kind: 'video', url: `/api/lessons/${lesson.id}/video` } : videoPlayback(sourceUrl);
+          if (playback.provider === 'microsoft') playback.url = `/api/lessons/${lesson.id}/video`;
+          if (!includeSources) delete playback.source;
+          return { ...lesson, mediaKey: videoSourceKey(sourceUrl, fileName), playback };
+        }),
     }))),
     resources: links.filter(link => link.kind === 'resource').map(({ id, title, url }) => ({ id, title, url })),
     sessions: [],
@@ -190,7 +192,7 @@ export async function adminWorkspace(db: Database) {
   }));
   return {
     students,
-    courses: await Promise.all((await courses(db)).map(course => courseDetails(db, course))),
+    courses: await Promise.all((await courses(db)).map(course => courseDetails(db, course, true))),
     enrollments: enrollmentList,
     receipts: receiptList,
     assignments: await assignments(db),

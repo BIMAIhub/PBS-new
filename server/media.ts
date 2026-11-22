@@ -9,7 +9,8 @@ import { type Database, type WritableDatabase, makeId, transaction, videoDirecto
 import { badRequest, field, notFound, RequestError, route } from './http.js';
 import { httpsLink } from './inputs.js';
 import { hasCourseAccess } from './records.js';
-import { videoPlayback } from './video.js';
+import { isMicrosoftVideo, videoPlayback } from './video.js';
+import { resolveMicrosoftVideo } from './microsoft-video.js';
 
 const videoTypes = { 'video/mp4': '.mp4', 'video/webm': '.webm' } as const;
 const routes = '/api/admin/courses/:courseId/modules/:moduleId/lessons';
@@ -115,22 +116,29 @@ async function removePriorFile(file: string) {
   }
 }
 
-export function mountMedia(app: Express, db: WritableDatabase, hosted: boolean) {
+export function mountMedia(app: Express, db: WritableDatabase, hosted: boolean, microsoftVideo: typeof resolveMicrosoftVideo = resolveMicrosoftVideo) {
   const blobConfigured = Boolean(process.env.BLOB_STORE_ID || process.env.BLOB_READ_WRITE_TOKEN);
   const cloud = hosted || blobConfigured;
   app.post(routes, route(async (req, res) => {
-    await requireAccount(db, req, 'admin');
+    const admin = await requireAccount(db, req, 'admin');
     const moduleId = await getModule(db, req.params.courseId, req.params.moduleId);
     const lesson = lessonFields(req.body);
     const replace = field(req.body?.replaceId, 'lesson ID', 80, false);
     const source = httpsLink(req.body?.url, 'video link', !replace);
     try {
-      if (source) videoPlayback(source);
+      if (source && videoPlayback(source).kind === 'link') throw new Error('Use an individual OneDrive, YouTube, Google Drive or Vimeo video, or a direct MP4/WebM link.');
     } catch (error) {
       throw badRequest(error instanceof Error ? error.message : 'Enter a valid video link.');
     }
-    const { id, oldFile } = await transaction(db, tx =>
-      saveLesson(tx, moduleId, lesson, source ? { sourceUrl: source, fileName: '', contentType: '' } : null, replace));
+    const { id, oldFile } = await transaction(db, async tx => {
+      await requireAccount(tx, req, 'admin');
+      const saved = await saveLesson(tx, moduleId, lesson, source ? { sourceUrl: source, fileName: '', contentType: '' } : null, replace);
+      if (source) {
+        await tx.prepare('DELETE FROM lesson_video_owners WHERE lesson_id = ?').run(saved.id);
+        if (isMicrosoftVideo(source)) await tx.prepare('INSERT INTO lesson_video_owners VALUES (?, ?)').run(saved.id, admin.id);
+      }
+      return saved;
+    });
     await removePriorFile(oldFile);
     res.status(replace ? 200 : 201).json({ id });
   }));
@@ -213,12 +221,27 @@ export function mountMedia(app: Express, db: WritableDatabase, hosted: boolean) 
     }
   }));
 
+  app.get('/api/lessons/:id/playback-status', route(async (req, res) => {
+    const account = await requireAccount(db, req);
+    const lesson = await db.prepare(`SELECT l.source_url AS sourceUrl, m.course_id AS courseId
+      FROM lessons l JOIN modules m ON m.id = l.module_id WHERE l.id = ?`).get(req.params.id);
+    if (!lesson || !await hasCourseAccess(db, account, String(lesson.courseId))) throw notFound('This video is unavailable.');
+    if (lesson.sourceUrl && isMicrosoftVideo(String(lesson.sourceUrl))) await microsoftVideo(db, String(lesson.courseId), req.params.id, String(lesson.sourceUrl));
+    res.json({ ready: true });
+  }));
+
   app.get('/api/lessons/:id/video', route(async (req, res) => {
     const account = await requireAccount(db, req);
-    const lesson = await db.prepare(`SELECT l.file_name AS fileName, l.content_type AS contentType, m.course_id AS courseId
+    const lesson = await db.prepare(`SELECT l.file_name AS fileName, l.source_url AS sourceUrl, l.content_type AS contentType, m.course_id AS courseId
       FROM lessons l JOIN modules m ON m.id = l.module_id WHERE l.id = ?`).get(req.params.id) as
-      { fileName: string; contentType: string; courseId: string } | undefined;
-    if (!lesson?.fileName || !await hasCourseAccess(db, account, lesson.courseId)) throw notFound('This video is unavailable.');
+      { fileName: string; sourceUrl: string; contentType: string; courseId: string } | undefined;
+    if (!lesson || !await hasCourseAccess(db, account, lesson.courseId)) throw notFound('This video is unavailable.');
+    if (!lesson.fileName && lesson.sourceUrl && isMicrosoftVideo(lesson.sourceUrl)) {
+      // A video-element redirect stays inside the player and lets Microsoft serve
+      // byte ranges for seeking without buffering an entire lesson in Vercel.
+      return res.redirect(302, await microsoftVideo(db, lesson.courseId, req.params.id, lesson.sourceUrl));
+    }
+    if (!lesson.fileName) throw notFound('This video is unavailable.');
     if (validBlobName(lesson.fileName) && blobConfigured) {
       return res.redirect(302, await readUrl(lesson.fileName, Date.now() + 60 * 60_000, req.method === 'HEAD' ? 'head' : 'get'));
     }

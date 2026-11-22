@@ -85,7 +85,7 @@ export function VideoForm({ course, moduleId, lesson, onClose, onSaved }: FormPr
     {source === 'file'
       ? <Input label="Video file" name="file" type="file" accept="video/mp4,video/webm,.mp4,.webm" required note="MP4 or WebM. Uploaded videos are available to enrolled students." />
       : source === 'link' ? <Input label="Video URL" name="url" type="url" defaultValue={lesson?.playback.source}
-          required note="Use a YouTube, Drive, OneDrive, Vimeo or direct HTTPS link." /> : null}
+          required note="Paste an individual video file link, not a folder. OneDrive videos use the saved Microsoft connection and play inside PBS with resume. MP4/WebM uploads also support resume." /> : null}
     <Field label="Lesson notes"><textarea name="description" rows={3} maxLength={3000} defaultValue={lesson?.description} /></Field>
   </DialogForm>;
 }

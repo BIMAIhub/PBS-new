@@ -1,4 +1,12 @@
 import type { Lesson } from '../src/live/types.js';
+import { createHash } from 'node:crypto';
+
+export function isMicrosoftVideo(value: string) {
+  const host = externalUrl(value).hostname.toLowerCase();
+  return ['onedrive.live.com', 'www.onedrive.live.com', '1drv.ms', 'www.1drv.ms'].includes(host) || /^[a-z0-9-]+\.sharepoint\.com$/.test(host);
+}
+
+export const videoSourceKey = (sourceUrl: string, fileName: string) => createHash('sha256').update(JSON.stringify([sourceUrl, fileName])).digest('hex');
 
 export function externalUrl(value: string) {
   let url: URL;
@@ -15,6 +23,7 @@ export function videoPlayback(raw: string): Lesson['playback'] {
   const url = externalUrl(raw);
   const host = url.hostname.toLowerCase();
   const segments = url.pathname.split('/').filter(Boolean);
+  if (isMicrosoftVideo(raw)) return { kind: 'video', url: url.href, source: url.href, provider: 'microsoft' };
   if (host === 'youtu.be' || ['youtube.com', 'www.youtube.com', 'm.youtube.com', 'www.youtube-nocookie.com'].includes(host)) {
     const id = host === 'youtu.be' ? segments[0] : url.searchParams.get('v') || segments[1];
     if (id && /^[A-Za-z0-9_-]{11}$/.test(id)) {
@@ -31,10 +40,6 @@ export function videoPlayback(raw: string): Lesson['playback'] {
       return { kind: 'embed', url: embed.href, source: url.href };
     }
     throw new Error('Enter the share link for a Google Drive video file.');
-  }
-  if ((host === 'onedrive.live.com' && url.pathname === '/embed') ||
-      (host.endsWith('.sharepoint.com') && /\/embed\.aspx$/i.test(url.pathname))) {
-    return { kind: 'embed', url: url.href, source: url.href };
   }
   if (['vimeo.com', 'www.vimeo.com', 'player.vimeo.com'].includes(host)) {
     const id = segments.find(value => /^\d+$/.test(value));

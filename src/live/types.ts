@@ -37,7 +37,8 @@ export interface Lesson {
   title: string;
   duration: string;
   description: string;
-  playback: { kind: 'video' | 'embed' | 'link'; url: string; source?: string };
+  mediaKey?: string;
+  playback: { kind: 'video' | 'embed' | 'link'; url: string; source?: string; provider?: 'microsoft' };
 }
 
 export interface Module {

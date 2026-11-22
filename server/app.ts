@@ -17,6 +17,7 @@ import { migrateLegacyLiveClasses, mountLiveClasses } from './live-classes.js';
 import { migratePendingAdmissions, mountAdmissions } from './admissions.js';
 import { mountFeedback } from './feedback.js';
 import { mountControls } from './control-routes.js';
+import { mountPlayback } from './playback.js';
 import { apiError, field, limitAttempts, RequestError, route } from './http.js';
 
 export async function createPortalApp(hosted = false) {
@@ -62,6 +63,7 @@ export async function createPortalApp(hosted = false) {
   mountLiveClasses(app, db, hosted);
   mountAdmin(app, db, hosted);
   mountControls(app, db, hosted);
+  mountPlayback(app, db, hosted);
   mountAdmissions(app, db, hosted);
   mountFeedback(app, db, hosted);
   mountStudent(app, db, hosted);

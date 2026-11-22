@@ -3,7 +3,9 @@ import { ArrowRight, BookOpen, Check, ChevronDown, CircleHelp, Maximize, Minimiz
 import { PortalDialog } from '../components/student-dashboard/PortalUI';
 import { messageFrom, send } from './api';
 import type { Course, Lesson } from './types';
-import { Button, dateTimeLabel, Empty, ExternalLink, Field, FormError, Input, useApiResource, value } from './ui';
+import { Button, dateTimeLabel, Empty, Field, FormError, Input, useApiResource, value } from './ui';
+import { LessonPlayer } from './LessonPlayer';
+import { usePlaybackProgress } from './usePlaybackProgress';
 
 export function Classroom({ course, completed, onClose, onCompletion, onAssessment, studentId }: {
   course: Course;
@@ -17,18 +19,25 @@ export function Classroom({ course, completed, onClose, onCompletion, onAssessme
   const [activeId, setActiveId] = useState(() => all.find(lesson => !completed.has(lesson.id))?.id || all[0]?.id);
   const [query, setQuery] = useState('');
   const [panel, setPanel] = useState<'content' | 'discussion'>('content');
-  const [failed, setFailed] = useState<string>();
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [report, setReport] = useState(false);
   const [sent, setSent] = useState(false);
   const [focusMode, setFocusMode] = useState(false), [fullscreen, setFullscreen] = useState(false);
   const player = useRef<HTMLDivElement>(null), video = useRef<HTMLVideoElement>(null);
+  const playback = usePlaybackProgress(course.id, studentId, all), selectedByStudent = useRef(false);
   const active = all.find(lesson => lesson.id === activeId) || all[0];
   const lessonDone = active ? completed.has(active.id) : false;
   const finished = all.filter(lesson => completed.has(lesson.id)).length;
   const next = active && all[all.findIndex(lesson => lesson.id === active.id) + 1];
   const term = query.toLowerCase().trim();
+  useEffect(() => {
+    if (playback.ready && playback.lastLessonId && !selectedByStudent.current && all.some(lesson => lesson.id === playback.lastLessonId)) setActiveId(playback.lastLessonId);
+  }, [playback.ready, playback.lastLessonId]);
+  function chooseLesson(id: string) {
+    playback.flush(); selectedByStudent.current = true; setActiveId(id); setSent(false);
+  }
+  function closeClassroom() { playback.flush(); onClose(); }
   async function toggleFullscreen() {
     try {
       if (document.fullscreenElement) await document.exitFullscreen();
@@ -65,7 +74,7 @@ export function Classroom({ course, completed, onClose, onCompletion, onAssessme
     }
   }
 
-  return <PortalDialog title="Classroom" className={`pbs-classroom-dialog ${focusMode ? 'pbs-focus-mode' : ''}`} onClose={onClose}>
+  return <PortalDialog title="Classroom" className={`pbs-classroom-dialog ${focusMode ? 'pbs-focus-mode' : ''}`} onClose={closeClassroom}>
     <p className="pbs-classroom-course">{course.title}</p>
     {all.length === 0 ? <Empty title="Lessons are being prepared">Published lessons appear here when PBS adds them to the course.</Empty> :
       <div className="pbs-classroom-layout">
@@ -73,14 +82,10 @@ export function Classroom({ course, completed, onClose, onCompletion, onAssessme
           <div className="pbs-player-toolbar"><span>{focusMode ? 'Focus mode' : 'Lesson player'}</span><div><Button quiet onClick={() => setFocusMode(current => !current)}>{focusMode ? <PanelRightOpen size={17} /> : <PanelRightClose size={17} />}{focusMode ? 'Exit focus' : 'Focus mode'}</Button><Button quiet onClick={() => void toggleFullscreen()}>{fullscreen ? <Minimize size={17} /> : <Maximize size={17} />}Fullscreen</Button></div></div>
           <div className="pbs-player" ref={player}>
             {studentId && <span className="pbs-player-watermark">PBS · {studentId}</span>}
-            {active && failed === active.id ? <Empty title="Video unavailable">Open the source or report the playback issue to PBS.</Empty> :
-              active?.playback.kind === 'video' ? <video key={active.id} ref={video} src={active.playback.url} controls playsInline preload="metadata"
-                controlsList="nodownload noremoteplayback" disablePictureInPicture disableRemotePlayback onContextMenu={event => event.preventDefault()}
-                onError={() => setFailed(active.id)} aria-label={active.title} /> :
-              active?.playback.kind === 'embed' ? <iframe key={active.id} src={active.playback.url} title={active.title}
-                allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" /> :
-              active && <Empty title="Watch on the video provider"><ExternalLink href={active.playback.url}>Open video</ExternalLink></Empty>}
+            {!playback.ready ? <p className="pbs-playback-loading" role="status">Restoring your saved place…</p> : active && <LessonPlayer key={`${active.id}:${active.mediaKey || ''}`} lesson={active} videoRef={video}
+              initialPosition={playback.positions[active.id]?.position || 0} onSnapshot={(position, duration, immediate) => playback.snapshot(active, position, duration, immediate)} />}
           </div>
+          {studentId && <p className="pbs-playback-save" role="status">{playback.status || 'Your place saves as you watch and when you pause.'}</p>}
           {active && <div className="pbs-lesson-meta">
             <div><h3>{active.title}</h3>{active.duration && <p className="pbs-muted">{active.duration}</p>}</div>
           </div>}
@@ -91,7 +96,7 @@ export function Classroom({ course, completed, onClose, onCompletion, onAssessme
             {onCompletion && <Button disabled={busy} onClick={() => void toggleCompletion()}>
               <Check size={18} /> {lessonDone ? 'Mark incomplete' : 'Mark complete'}
             </Button>}
-            {next && <Button quiet onClick={() => { setActiveId(next.id); setFailed(undefined); }}>Next lesson <ArrowRight size={18} /></Button>}
+            {next && <Button quiet disabled={!playback.ready} onClick={() => chooseLesson(next.id)}>Next lesson <ArrowRight size={18} /></Button>}
             {onCompletion && <button type="button" className="pbs-text-button" onClick={() => setReport(current => !current)}>
               <CircleHelp size={17} /> Report playback issue
             </button>}
@@ -128,7 +133,7 @@ export function Classroom({ course, completed, onClose, onCompletion, onAssessme
               <summary><span className="pbs-module-index">{String(index + 1).padStart(2, '0')}</span><strong>{module.title}</strong><ChevronDown size={16} /></summary>
               {matches.length ? matches.map(lesson => <button className="pbs-lesson-row" key={lesson.id} type="button"
                 aria-current={lesson.id === active?.id ? 'true' : undefined}
-                onClick={() => { setActiveId(lesson.id); setFailed(undefined); setSent(false); }}>
+                disabled={!playback.ready} onClick={() => chooseLesson(lesson.id)}>
                 {completed.has(lesson.id) ? <Check size={16} /> : <Play size={16} />}
                 <span>{lesson.title}</span><small>{lesson.duration}</small>
               </button>) : <p className="pbs-muted">No lessons in this module.</p>}
