@@ -1,13 +1,23 @@
 import { RequestError } from './http.js';
 import { externalUrl } from './video.js';
 
+// Graph can return personal OneDrive storage as well as SharePoint locations.
+// Keep the domain boundary check: a matching substring is not a trusted host.
+const microsoftVideoDomains = [
+  '1drv.com', 'onedrive.live.com', 'sharepoint.com', 'sharepointonline.com',
+  'microsoftpersonalcontent.com', 'storage.live.com', 'livefilestore.com', 'storage.msn.com',
+];
+
 export function microsoftDownloadLocation(value: string) {
   let target: URL;
   try { target = externalUrl(value); }
   catch { throw new RequestError(502, 'Microsoft returned an invalid video location.'); }
-  const trusted = ['1drv.com', 'onedrive.live.com', 'sharepoint.com', 'sharepointonline.com']
+  const trusted = microsoftVideoDomains
     .some(domain => target.hostname === domain || target.hostname.endsWith(`.${domain}`));
-  if (!trusted || target.port && target.port !== '443') throw new RequestError(502, 'Microsoft returned an unsupported video location.');
+  if (!trusted || target.port && target.port !== '443') {
+    // Signed paths and query strings are credentials; disclose only the host.
+    throw new RequestError(502, `Microsoft returned an unsupported video location (${target.hostname}). Report this recording to PBS.`);
+  }
   return target.href;
 }
 

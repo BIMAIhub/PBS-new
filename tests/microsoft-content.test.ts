@@ -19,6 +19,17 @@ test('content redirects accept encoded shares and Microsoft SharePoint delivery'
   assert.equal(result, 'https://qa.sharepoint.com/download.aspx?file=qa');
 });
 
+test('personal OneDrive delivery hosts support native playback and content redirects', async () => {
+  for (const host of ['my.microsoftpersonalcontent.com', 'storage.live.com', 'qa.storage.live.com', 'public.qa.livefilestore.com', 'qa.storage.msn.com']) {
+    const location = `https://${host}/personal/recording.mp4?tempauth=isolated-test`;
+    assert.equal(microsoftDownloadLocation(location), location);
+    assert.equal(await readMicrosoftContentLocation('isolated-qa-token', '/drives/a/items/b/content', async (_input, init) => {
+      assert.equal(init?.redirect, 'manual');
+      return new Response(null, { status: 302, headers: { location } });
+    }), location);
+  }
+});
+
 test('Microsoft permission errors preserve the access denial and omit raw provider details', async () => {
   for (const status of [401, 403]) {
     await assert.rejects(() => readMicrosoftContentLocation('isolated-qa-token', '/drives/a/items/b/content', async () => new Response(JSON.stringify({ error: { code: 'accessDenied', message: 'Private provider detail: isolated-qa-token' } }), { status })), (error: any) => {
@@ -51,8 +62,16 @@ test('invalid content paths are rejected before sending an access token', async 
 });
 
 test('untrusted, insecure and credential-bearing playback targets stay blocked', async () => {
-  for (const url of ['http://qa.files.1drv.com/video.mp4', 'https://1drv.com.unsafe.invalid/video.mp4', 'https://localhost/video.mp4', 'https://qa.files.1drv.com:8443/video.mp4', 'https://user:password@qa.files.1drv.com/video.mp4']) {
+  for (const url of ['http://qa.files.1drv.com/video.mp4', 'https://1drv.com.unsafe.invalid/video.mp4', 'https://my.microsoftpersonalcontent.com.unsafe.invalid/video.mp4', 'https://unsafe-microsoftpersonalcontent.com/video.mp4', 'https://storage.live.com.unsafe.invalid/video.mp4', 'https://localhost/video.mp4', 'https://127.0.0.1/video.mp4', 'https://qa.files.1drv.com:8443/video.mp4', 'https://my.microsoftpersonalcontent.com:8443/video.mp4', 'https://user:password@qa.files.1drv.com/video.mp4', 'https://my.microsoftpersonalcontent.com@unsafe.invalid/video.mp4']) {
     assert.throws(() => microsoftDownloadLocation(url), /video location/);
     await assert.rejects(() => readMicrosoftContentLocation('qa', '/drives/a/items/b/content', async () => new Response(null, { status: 302, headers: { location: url } })), /video location/);
   }
+});
+
+test('unsupported location diagnostics expose only the hostname', () => {
+  assert.throws(() => microsoftDownloadLocation('https://unknown.invalid/private-recording?tempauth=private-token'), (error: any) => {
+    assert.match(error.message, /unsupported video location \(unknown\.invalid\)/);
+    assert.ok(!error.message.includes('private-recording')); assert.ok(!error.message.includes('private-token'));
+    return true;
+  });
 });

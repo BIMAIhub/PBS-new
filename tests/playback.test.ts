@@ -81,9 +81,9 @@ test('inline Microsoft video and account-scoped resume preserve existing records
       let calls = 0;
       const graph: any = async (_db: unknown, owner: string, endpoint: string) => {
         calls++; assert.equal(owner, adminId); assert.ok(endpoint.startsWith(`/shares/u!${Buffer.from(source).toString('base64url')}/driveItem`));
-        return { id: 'qa-video', file: { mimeType: 'video/mp4' }, video: { duration: 300000 }, '@microsoft.graph.downloadUrl': 'https://qa.files.1drv.com/lesson.mp4?temporary=isolated-test' };
+        return { id: 'qa-video', file: { mimeType: 'video/mp4' }, video: { duration: 300000 }, '@microsoft.graph.downloadUrl': 'https://my.microsoftpersonalcontent.com/personal/qa/download.aspx?tempauth=isolated-test' };
       };
-      assert.match(await resolveMicrosoftVideo(db, courseId, oneDrive, source, graph), /^https:\/\/qa.files.1drv.com/); assert.equal(calls, 1);
+      assert.match(await resolveMicrosoftVideo(db, courseId, oneDrive, source, graph), /^https:\/\/my.microsoftpersonalcontent.com/); assert.equal(calls, 1);
       await assert.rejects(() => resolveMicrosoftVideo(db, courseId, oneDrive, source, (async () => ({ folder: {} })) as any), /not a video file/);
       await assert.rejects(() => resolveMicrosoftVideo(db, courseId, oneDrive, source, (async () => ({ file: { mimeType: 'video/mp4' }, '@microsoft.graph.downloadUrl': 'https://unsafe.invalid/file.mp4' })) as any), /unsupported video location/);
     });

@@ -31,6 +31,8 @@ Uploaded videos, direct video files and connected OneDrive recordings save each 
 
 When Microsoft omits a playback URL from file metadata, PBS resolves the file through Graph's `/content` endpoint and reads its short-lived redirect on the server. A missing metadata URL is not reported as a permissions failure. Real Microsoft access denials remain blocked and are shown separately. This fallback uses the existing owner connection and changes no sharing permissions, credentials or saved settings.
 
+The playback validator accepts Microsoft's personal OneDrive content and file-storage hosts as well as SharePoint. Unsupported-location errors include only the hostname for troubleshooting; signed paths and temporary access tokens stay out of error messages.
+
 YouTube, Google Drive and Vimeo remain embedded when their providers allow it; their embedded controls do not expose PBS timestamp tracking. The native student player hides download and remote playback controls. Browser playback cannot prevent all copying or screen recording. This release adds playback data tables and does not reset account passwords, branding, payment destinations, Microsoft configuration or existing enrollment records.
 
 To add a lesson from a terminal, use the same administrator account. The command prompts for the password, or reads it from `PBS_ADMIN_PASSWORD` if supplied by the host.
