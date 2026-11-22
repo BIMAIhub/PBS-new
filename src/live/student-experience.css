@@ -118,7 +118,8 @@
 
 .pbs-feedback-pages { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding-top: 20px; border-top: 1px solid #ccbd99; }
 
-.pbs-payment-setup { border: 1px solid #D4A94D; background: linear-gradient(120deg, #d4a94d25, #f4f7fa12); margin-bottom: 18px; }
+.pbs-payment-setup { border: 1px solid #D4A94D; background: linear-gradient(120deg, #d4a94d25, #f4f7fa12); color: #F4F7FA; margin-bottom: 18px; }
+.pbs-payment-setup .pbs-muted { color: #d6e3ef; }
 .pbs-payment-setup p { max-width: 68ch; margin-block: 8px; }
 .pbs-payment-fields .pbs-payment-qr { background: #d4a94d12; border-color: #b59e6b80; align-items: center; }
 .pbs-payment-fields .pbs-payment-qr > div { min-width: 0; }
