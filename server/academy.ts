@@ -7,6 +7,7 @@ import { badRequest, conflict, field, limitAttempts, notFound, RequestError, rou
 import { enrollmentById, hasCourseAccess, requireCompletedLessons } from './records.js';
 import { verifyPassword } from './passwords.js';
 import { portalOrigin, sendMicrosoftMail } from './microsoft.js';
+import { queueAutomation } from './mail.js';
 
 export function mountAcademy(app: Express, db: WritableDatabase, hosted: boolean) {
   app.get('/api/admin/academy', route(async (req, res) => {
@@ -129,7 +130,7 @@ export function mountAcademy(app: Express, db: WritableDatabase, hosted: boolean
   }));
   app.post('/api/student/courses/:id/certificate', route(async (req, res) => {
     const account = await requireAccount(db, req, 'student');
-    await transaction(db, async tx => {
+    const earned = await transaction(db, async tx => {
       const enrolled = await hasCourseAccess(tx, account, req.params.id);
       if (!enrolled) throw notFound('This course is unavailable.');
       const prior = await tx.prepare('SELECT id FROM certificates WHERE account_id = ? AND course_id = ?').get(account.id, req.params.id);
@@ -142,7 +143,9 @@ export function mountAcademy(app: Express, db: WritableDatabase, hosted: boolean
       await tx.prepare(`INSERT INTO certificates (id, account_id, course_id, student_name, course_title, score, issued_at, public_token)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(id, account.id, req.params.id, account.name, String(course!.title), Number(result.score), now(), randomBytes(24).toString('base64url'));
       await audit(tx, account.id, 'Certificate earned', id, String(course!.title));
+      return { id, course: String(course!.title) };
     });
+    if (earned) await queueAutomation(db, 'certificate', `certificate:${earned.id}`, account.id, portalOrigin(req), { course: earned.course });
     const certificate = (await certificateRecords(db, account.id)).find(item => item.courseId === req.params.id);
     res.json(certificate);
   }));

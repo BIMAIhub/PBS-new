@@ -4,6 +4,7 @@
   "installCommand": "npm ci --include=dev",
   "buildCommand": "npm run build:web",
   "outputDirectory": "dist",
+  "crons": [{ "path": "/api/jobs/academy", "schedule": "30 3 * * *" }],
   "rewrites": [
     {
       "source": "/api/:path(.*)",

@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { BadgeCheck, Download, Printer } from 'lucide-react';
 import { PortalBrand, PortalDialog } from '../components/student-dashboard/PortalUI';
 import type { Account, CourseSummary, Enrollment, Receipt, AssessmentResult } from './types';
@@ -6,11 +6,12 @@ import { Button, dateLabel, Empty, FormError, money, Panel } from './ui';
 import { messageFrom } from './api';
 import { useBranding } from './Branding';
 
-export type DocumentInfo =
-  | { kind: 'receipt'; receipt: Receipt }
-  | { kind: 'statement'; enrollment: Enrollment; receipts: Receipt[] }
-  | { kind: 'id'; account: Account; enrollments: Enrollment[] }
-  | { kind: 'letter'; account: Account; enrollment: Enrollment };
+import type { DocumentInfo, DocumentStamp } from './document-types';
+import { buildDocumentPdf } from './document-pdf';
+import { brandLogoData } from './Branding';
+import { api } from './api';
+import { DocumentSeal } from './InstitutionStamp';
+export type { DocumentInfo } from './document-types';
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return <div><dt>{label}</dt><dd>{children}</dd></div>;
@@ -85,65 +86,36 @@ const titles = { receipt: 'Payment receipt', statement: 'Course fee statement', 
 
 export function DocumentDialog({ document, onClose }: { document: DocumentInfo; onClose: () => void }) {
   const { brand } = useBranding();
-  const paper = useRef<HTMLElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  async function download() {
-    if (!paper.current) return;
-    setBusy(true);
-    setError('');
+  async function download(print = false) {
+    const target = print ? window.open('', '_blank') : null;
+    if (target) target.opener = null;
+    setBusy(true); setError('');
     try {
-      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import('html2canvas'), import('jspdf')]);
-      await window.document.fonts.ready;
-      await Promise.all(Array.from(paper.current.querySelectorAll('img')).map(image => image.decode().catch(() => {})));
-      const canvas = await html2canvas(paper.current, { scale: 2, backgroundColor: '#ffffff', logging: false });
-      const landscape = document.kind === 'id';
-      const pdf = new jsPDF({ orientation: landscape ? 'landscape' : 'portrait', unit: 'mm', format: landscape ? 'a5' : 'a4', compress: true });
-      const availableWidth = pdf.internal.pageSize.getWidth() - 24;
-      const availableHeight = pdf.internal.pageSize.getHeight() - 24;
-      if (document.kind === 'statement') {
-        const scale = availableWidth / canvas.width;
-        const maxSlice = Math.floor(availableHeight / scale);
-        const origin = paper.current.getBoundingClientRect().top;
-        const rowStarts = Array.from(paper.current.querySelectorAll('.pbs-doc-payments > div')).map(row => Math.floor((row.getBoundingClientRect().top - origin) * 2));
-        let offset = 0;
-        while (offset < canvas.height) {
-          let end = Math.min(offset + maxSlice, canvas.height);
-          if (end < canvas.height) {
-            const before = rowStarts.filter(y => y > offset + maxSlice / 2 && y < end);
-            if (before.length) end = before[before.length - 1];
-          }
-          const slice = window.document.createElement('canvas'); slice.width = canvas.width; slice.height = end - offset;
-          const context = slice.getContext('2d'); if (!context) throw new Error('Could not prepare the statement pages.');
-          context.drawImage(canvas, 0, offset, canvas.width, slice.height, 0, 0, canvas.width, slice.height);
-          if (offset) pdf.addPage();
-          pdf.addImage(slice.toDataURL('image/png'), 'PNG', 12, 12, availableWidth, slice.height * scale);
-          offset = end;
-        }
-      } else {
-        const scale = Math.min(availableWidth / canvas.width, availableHeight / canvas.height);
-        const width = canvas.width * scale;
-        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', (pdf.internal.pageSize.getWidth() - width) / 2, 12, width, canvas.height * scale);
-      }
+      const stamp = await api<DocumentStamp>('/document-stamp');
+      let logo: string | undefined;
+      try { logo = await brandLogoData(brand); } catch { /* The institution name remains visible. */ }
+      const pdf = await buildDocumentPdf(document, brand, stamp, { logo });
       const reference = document.kind === 'receipt' ? document.receipt.number : document.kind === 'statement' ? document.enrollment.id : document.account.id;
-      pdf.save(`PBS-${document.kind}-${reference}.pdf`);
-    } catch (problem) {
-      setError(messageFrom(problem));
-    } finally {
-      setBusy(false);
-    }
+      if (print && target) {
+        pdf.autoPrint(); const url = URL.createObjectURL(pdf.output('blob')); target.location.replace(url);
+        window.setTimeout(() => URL.revokeObjectURL(url), 120000);
+      } else pdf.save(`PBS-${document.kind}-${reference}.pdf`);
+    } catch (problem) { target?.close(); setError(messageFrom(problem)); }
+    finally { setBusy(false); }
   }
   return <PortalDialog title={titles[document.kind]} className="pbs-dialog-wide pbs-document-dialog" onClose={onClose}>
     <div className="pbs-document-stage">
-      <article className={`pbs-print-document pbs-document-${document.kind}`} ref={paper}>
+      <article className={`pbs-print-document pbs-document-${document.kind}`}>
         <PortalBrand subtitle="Learning records" />
         <DocumentContent document={document} />
-        <footer className="pbs-doc-footer"><span>{brand.academyName}</span><span>{brand.supportEmail}</span></footer>
+        <DocumentSeal /><footer className="pbs-doc-footer"><span>{brand.academyName}</span><span>{brand.supportEmail}</span></footer>
       </article>
     </div>
     <FormError error={error} />
     <footer className="pbs-dialog-actions">
-      <Button quiet onClick={() => window.print()}><Printer size={18} /> Print</Button>
+      <Button quiet disabled={busy} onClick={() => void download(true)}><Printer size={18} /> Print</Button>
       <Button disabled={busy} onClick={() => void download()}><Download size={18} /> {busy ? 'Preparing…' : 'Download PDF'}</Button>
     </footer>
   </PortalDialog>;

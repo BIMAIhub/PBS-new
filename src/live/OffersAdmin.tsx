@@ -3,6 +3,7 @@ import { Gift, Plus, Tag } from 'lucide-react';
 import type { Course, StudentRecord } from './types';
 import type { Promotion } from './experience-types';
 import { send } from './api';
+import { ReferralAdmin } from './Referrals';
 import { Button, dateLabel, DialogForm, Empty, Field, FormError, Input, Panel, Status, useApiResource, value } from './ui';
 
 export function OffersAdmin({ courses, students }: { courses: Course[]; students: StudentRecord[] }) {
@@ -11,6 +12,7 @@ export function OffersAdmin({ courses, students }: { courses: Course[]; students
   return <div className="pbs-live-stack"><section className="pbs-offers-intro"><Tag size={28} /><div><h2>Offers that match your course fees</h2><p>Create a public discount, a private offer code, or a referral code assigned to a student. PBS checks eligibility and saves the agreed fee with each application.</p></div><Button onClick={() => setEditing('new')}><Plus size={16} /> Create offer</Button></section><FormError error={error} />
     <Panel title="Course offers">{!data?.promotions.length && <Empty title="No offers yet">Create a public offer to advertise it in Explore courses.</Empty>}{data?.promotions.map(offer => <article className="pbs-offer-admin-row" key={offer.id}><span className="pbs-offer-percentage">{offer.percent}<small>%</small></span><div><div className="pbs-section-top"><h3>{offer.title}</h3><Status value={offer.active ? 'Enabled' : 'Paused'} /></div><p>{offer.description}</p><div className="pbs-offer-facts"><span>{offer.kind === 'public' ? 'Public course advertisement' : offer.kind === 'referral' ? `Referral · ${offer.code}` : `Private code · ${offer.code}`}</span><span>{courses.find(course => course.id === offer.courseId)?.title || 'All published courses'}</span><span>{offer.uses} applications{offer.maxUses ? ` / ${offer.maxUses}` : ''}</span>{offer.ownerId && <span>Assigned to {students.find(student => student.id === offer.ownerId)?.name || 'student'}</span>}{offer.assignedEmail && <span>For {offer.assignedEmail}</span>}{offer.endsAt && <span>Ends {dateLabel(offer.endsAt)}</span>}</div></div><Button quiet onClick={() => setEditing(offer)}>Edit offer</Button></article>)}</Panel>
     <div className="pbs-inset"><p className="pbs-muted">The highest eligible discount applies; offers do not stack. Existing agreed enrollment fees stay unchanged when you edit an offer. Usage counts non-rejected applications.</p></div>
+    <ReferralAdmin students={students} />
     {editing && <OfferForm offer={editing === 'new' ? undefined : editing} courses={courses} students={students} onClose={() => setEditing(undefined)} onSaved={async () => { await refresh(); setEditing(undefined); }} />}
   </div>;
 }

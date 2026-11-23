@@ -8,6 +8,8 @@ import { Button, dateLabel, DialogForm, Empty, Field, FormError, Input, Panel, S
 import { brandLogoData, useBranding } from './Branding';
 import { defaultBranding, type Branding } from './branding-types';
 import { buildCertificatePdf } from './certificate-pdf';
+import { DocumentSeal, InstitutionStampAdmin } from './InstitutionStamp';
+import type { DocumentStamp } from './document-types';
 
 const initialTemplate: CertificateTemplate = { courseId: '', title: 'Certificate of completion', issuer: 'Pragmatic BIM Solution', signer: 'Academic Director', signerRole: 'Authorized signatory', design: 'architectural', primaryColor: '#176BB7', accentColor: '#D4A94D' };
 export type CertificateView = Pick<CertificateRecord, 'id' | 'studentName' | 'courseTitle' | 'issuedAt' | 'revokedAt' | 'template'>;
@@ -21,7 +23,7 @@ export function CertificatePaper({ record, preview = false }: { record: Certific
     <div className="pbs-cert-corner" aria-hidden="true" /><div className="pbs-cert-header"><img src={brand.logoUrl} width="48" height="48" alt={brand.shortName} /><span>{template.issuer}<small>Professional BIM education</small></span><span className="pbs-cert-seal"><Award size={28} /><small>{brand.shortName}</small></span></div>
     <div className="pbs-cert-content"><p className="pbs-cert-eyebrow">Professional achievement · Learning applied</p><h2>{template.title}</h2><p>This is to certify that</p><h3>{record.studentName}</h3><p>has successfully completed the learning requirements and assessment for</p><h4>{record.courseTitle}</h4><div className="pbs-cert-line" /></div>
     <div className="pbs-cert-bottom"><div><strong>{template.signer}</strong><small>{template.signerRole}</small></div><div><strong>{preview ? 'Issue date' : dateLabel(record.issuedAt)}</strong><small>{preview ? 'Certificate ID assigned on completion' : record.id}</small></div></div>
-    {record.revokedAt && <div className="pbs-cert-revoked">Revoked</div>}
+    <DocumentSeal />{record.revokedAt && <div className="pbs-cert-revoked">Revoked</div>}
   </article>;
 }
 
@@ -31,7 +33,8 @@ export async function downloadCertificate(record: CertificateRecord) {
   try { logo = await brandLogoData(brand); } catch { /* Keep the issuer name on the document. */ }
   const url = record.published && !record.revokedAt ? verificationUrl(record) : undefined;
   const qr = url ? await import('qrcode').then(module => module.toDataURL(url, { margin: 1, width: 200, errorCorrectionLevel: 'M' })) : undefined;
-  const pdf = await buildCertificatePdf(record, brand, { logo, qr, verificationUrl: url });
+  const stamp = await api<DocumentStamp>('/document-stamp');
+  const pdf = await buildCertificatePdf(record, brand, { logo, qr, verificationUrl: url }, stamp);
   pdf.save(`${record.id}.pdf`);
 }
 
@@ -136,6 +139,7 @@ export function CertificateStudio({ courses, records, onSaved }: { courses: Cour
       </form></Panel>
       <div className="pbs-certificate-preview"><p className="pbs-eyebrow">Live preview</p><CertificatePaper preview record={{ id: '', studentName: 'Recipient name', courseTitle: courses.find(item => item.id === courseId)?.title || 'Course title', issuedAt: '', revokedAt: '', template: draft }} /><p className="pbs-muted pbs-small">Recipient details and credential IDs come from actual completed enrollments. Design changes also update certificate downloads.</p></div>
     </div>
+    <InstitutionStampAdmin />
     <Panel title="Issued credentials">{!records.length && <Empty title="No credentials issued yet">Students earn certificates by completing every lesson and passing the assessment.</Empty>}{records.map(record => <article className="pbs-record-row" key={record.id}><div><h3>{record.studentName}</h3><p className="pbs-muted">{record.courseTitle} · {dateLabel(record.issuedAt)}</p><p className="pbs-reference">{record.id}</p></div><div className="pbs-actions"><Status value={record.revokedAt ? 'Revoked' : 'Earned'} /><Button quiet onClick={() => setSelected(record)}>View credential</Button>{!record.revokedAt && <Button quiet onClick={() => setRevoking(record)}>Revoke</Button>}</div></article>)}</Panel>
     {selected && <CertificateDialog record={selected} onClose={() => setSelected(undefined)} />}
     {revoking && <DialogForm title="Revoke this credential" detail={`${revoking.studentName} · ${revoking.courseTitle}`} submit="Revoke credential" onClose={() => setRevoking(undefined)} onSubmit={async form => {

@@ -18,6 +18,10 @@ import { migratePendingAdmissions, mountAdmissions } from './admissions.js';
 import { mountFeedback } from './feedback.js';
 import { mountControls } from './control-routes.js';
 import { mountPlayback } from './playback.js';
+import { mountDocumentStamp } from './document-stamp.js';
+import { mountMail, mountPublicMail } from './mail.js';
+import { mountReferrals } from './referrals.js';
+import { mountEngagementJobs } from './engagement-jobs.js';
 import { apiError, field, limitAttempts, RequestError, route } from './http.js';
 
 export async function createPortalApp(hosted = false) {
@@ -42,6 +46,9 @@ export async function createPortalApp(hosted = false) {
     res.set('Referrer-Policy', 'strict-origin-when-cross-origin');
     next();
   });
+  // Token-only mailing preferences use a native HTML form, without portal cookies.
+  app.use('/api/mail/unsubscribe', (_req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
+  mountPublicMail(app, db);
   app.use('/api', (req, res, next) => {
     res.set('Cache-Control', 'no-store');
     if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
@@ -60,6 +67,7 @@ export async function createPortalApp(hosted = false) {
   }));
   mountAuth(app, db, hosted);
   mountBranding(app, db, hosted);
+  mountDocumentStamp(app, db);
   mountLiveClasses(app, db, hosted);
   mountAdmin(app, db, hosted);
   mountControls(app, db, hosted);
@@ -74,6 +82,9 @@ export async function createPortalApp(hosted = false) {
   mountProfiles(app, db, hosted);
   mountNotifications(app, db);
   mountCurriculum(app, db, hosted);
+  mountMail(app, db, hosted);
+  mountReferrals(app, db);
+  mountEngagementJobs(app, db);
 
   app.post('/api/ask-pbs', limitAttempts(12, hosted ? db : undefined), route(async (req, res) => {
     await requireAccount(db, req);

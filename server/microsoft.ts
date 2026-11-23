@@ -9,6 +9,8 @@ import { badRequest, conflict, field, limitAttempts, notFound, RequestError, rou
 import { verifyPassword } from './passwords.js';
 import { courseById, enrollmentById } from './records.js';
 import { readMicrosoftContentLocation } from './microsoft-content.js';
+import { brandedEmail } from './email-layout.js';
+import { publicBranding } from './branding.js';
 
 const scopes = ['User.Read', 'Files.ReadWrite', 'Mail.Send'];
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -88,9 +90,10 @@ export function portalOrigin(req: Request) {
   return process.env.PBS_PUBLIC_ORIGIN ? new URL(process.env.PBS_PUBLIC_ORIGIN).origin : `${process.env.VERCEL ? 'https' : req.protocol}://${req.get('host')}`;
 }
 
-export async function sendMicrosoftMail(db: Database, adminId: string, email: string, subject: string, body: string) {
+export async function sendMicrosoftMail(db: Database, adminId: string, email: string, subject: string, body: string, options: { unsubscribeUrl?: string } = {}) {
+  const html = brandedEmail(await publicBranding(db), subject, body, options.unsubscribeUrl);
   await graph(db, adminId, '/me/sendMail', { method: 'POST', body: JSON.stringify({
-    message: { subject, body: { contentType: 'Text', content: body }, toRecipients: [{ emailAddress: { address: email } }] },
+    message: { subject, body: { contentType: 'HTML', content: html }, toRecipients: [{ emailAddress: { address: email } }] },
     saveToSentItems: true,
   }) });
 }

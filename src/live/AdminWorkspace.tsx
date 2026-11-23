@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   ArrowDownToLine, ArrowRight, BookOpen, BriefcaseBusiness, CircleHelp, ClipboardList,
-  Activity, Award, Cloud, FilePenLine, Paintbrush, Tag, LayoutDashboard, CreditCard, FileText, IndianRupee, KeyRound, LogOut, MessageSquare, Plus, Search, UserRound, Users, Video
+  Activity, Award, Cloud, FilePenLine, Mail, Paintbrush, Tag, LayoutDashboard, CreditCard, FileText, IndianRupee, KeyRound, LogOut, MessageSquare, Plus, Search, UserRound, Users, Video
 } from 'lucide-react';
 import { PortalDialog } from '../components/student-dashboard/PortalUI';
 import { WorkspaceChrome, type WorkspaceNavGroup } from '../components/student-dashboard/WorkspaceChrome';
@@ -21,6 +21,7 @@ import { ActivityLog, AdminOverview, GrantAccessButton, PaymentLedger, PaymentSe
 import { CertificateStudio } from './Certificates';
 import { Integrations } from './Integrations';
 import { OffersAdmin } from './OffersAdmin';
+import { MailCenter } from './MailCenter';
 import { CurriculumAdmin } from './CurriculumAdmin';
 import { NotificationCenter } from './Notifications';
 import { BrandingAdmin } from './BrandingAdmin';
@@ -29,7 +30,7 @@ import type { AdminAcademyData } from './academy-types';
 import type { Account, AdminWorkspaceData, Assignment, Course, Enrollment, Lesson, Receipt, StudentRecord } from './types';
 import { Button, dateLabel, dateTimeLabel, DialogForm, Empty, ExternalLink, Field, FormError, Input, money, Panel, Status, useApiResource, value } from './ui';
 
-type Page = 'overview' | 'students' | 'courses' | 'sessions' | 'enrollments' | 'payments' | 'projects' | 'placements' | 'messages' | 'certificates' | 'integrations' | 'activity' | 'offers' | 'curriculum' | 'branding' | 'course-feedback';
+type Page = 'overview' | 'students' | 'courses' | 'sessions' | 'enrollments' | 'payments' | 'projects' | 'placements' | 'messages' | 'certificates' | 'integrations' | 'activity' | 'offers' | 'curriculum' | 'branding' | 'course-feedback' | 'mail';
 const groups: WorkspaceNavGroup<Page>[] = [
   { label: 'Administration', pages: [
     { id: 'overview', label: 'Academy overview', icon: LayoutDashboard },
@@ -45,6 +46,7 @@ const groups: WorkspaceNavGroup<Page>[] = [
     { id: 'projects', label: 'Projects & reviews', icon: FileText },
     { id: 'placements', label: 'Placements', icon: BriefcaseBusiness },
     { id: 'messages', label: 'Messages', icon: MessageSquare },
+    { id: 'mail', label: 'Email campaigns', icon: Mail },
     { id: 'certificates', label: 'Certificates', icon: Award },
     { id: 'course-feedback', label: 'Student feedback', icon: MessageSquare },
   ] },
@@ -283,6 +285,7 @@ export function AdminWorkspace({ account, onAccount, onSignOut }: {
       {data && page === 'sessions' && <LiveClassesAdmin courses={data.courses} initialCourseId={liveCourse} createOnOpen={createLive} onChanged={refreshAll} />}
       {data && page === 'curriculum' && <CurriculumAdmin courses={data.courses} onSaved={refreshAll} />}
       {data && page === 'offers' && <OffersAdmin courses={data.courses} students={data.students} />}
+      {data && page === 'mail' && <MailCenter students={data.students} adminId={account.id} />}
       {page === 'branding' && <BrandingAdmin />}
       {data && page === 'enrollments' && <EnrollmentList enrollments={data.enrollments} open={show} />}
       {data && page === 'payments' && <div className="pbs-live-stack">

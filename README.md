@@ -181,6 +181,30 @@ The importer carries over courses, valid lesson links, real student records and 
 
 The interface was refined with [Unslop](https://github.com/heydamir/unslop) by Damir Sokolovsky. The Instrument font licenses are included in `src/assets`.
 
+### Documents and the institution stamp
+
+Receipts, fee statements and bonafide letters export as vector A4 PDFs; student IDs use A5 landscape, and certificates use A4 landscape. Download and Print build the same physical page layout independently of browser width, device pixel density and zoom. Long fee histories paginate automatically. Existing receipt snapshots and certificate records are preserved.
+
+In **Certificates → Institution stamp**, edit the institution, center text, caption, office, seal colors and round/square style, or upload a PNG/JPEG stamp below 100 KB. The stamp appears on every newly downloaded document and each statement page. Admin changes are revision checked and audited. Disable the stamp or return to the generated seal without changing any account credentials.
+
+### Referral rewards and the student wallet
+
+**Refer & earn** creates a stable personal referral code and a complete invitation for copying, native sharing or WhatsApp. A new learner enters the code during the first application; referral attribution is preserved even when a better public discount applies. Self-referrals and matching contact numbers are rejected. Existing enrollments are not backfilled with invented referral records.
+
+The default reward is **INR 1,000 of PBS course credit**, with a **seven-day waiting period** after enrollment approval and verified full payment of all approved course fees by both learners. The default minimum referred course fee is INR 1,000. Admins edit the reward, minimum fee, new-learner discount, payment requirements, waiting period and automatic-credit switch in **Offers & referrals**. New referrals capture those terms; later edits do not rewrite existing applications. Account inactivity or incomplete fee payments hold eligibility. Eligibility is checked again before a reward is credited.
+
+The dashboard displays each application’s steps, waiting-period end, credited total and reward ledger. Admins see the referral leaderboard and can credit an eligible reward when automatic credit is off. Credits are unique per referral. Students can use wallet credit for an approved course balance; the debit and payment receipt are committed together, with an idempotent request key and checks against overspending. Wallet credit is not a cash payout or bank transfer.
+
+### Email templates, campaigns and automatic messages
+
+**Email campaigns** includes editable templates for welcome, login instructions, the portal guide, payment reminders, certificate congratulations, referral-credit confirmations, offers, updates and custom messages. All email sent through the Microsoft integration uses the academy’s current name and blue/gold branding. Text and personalization are escaped before HTML generation. Existing temporary access emails remain private and are not saved in the campaign queue.
+
+Create a campaign for active enrolled students, selected students, or opted-in external contacts. The draft snapshots recipients and supports a sandboxed HTML preview. Sending requires an administrator’s connected Microsoft account with Mail.Send permission. Each click processes up to ten queued messages; the daily job processes up to twenty. Larger campaigns can be continued manually. Marketing requires consent confirmation, includes an unsubscribe link and respects saved opt-outs. Cancel stops pending messages, while already accepted or in-flight messages remain in the delivery record.
+
+The log distinguishes pending, sending, Microsoft-accepted, confirmed failure, uncertain and skipped states. Provider acceptance does not guarantee inbox delivery. Only confirmed failures may be retried; uncertain messages require checking Sent Items to avoid duplicate email. Automatic welcome, earned-certificate and credited-referral messages are queued once for future events when an enabled connected sender is available. No historical events are bulk mailed on upgrade.
+
+Configure a new private **CRON_SECRET** on the host for the protected `/api/jobs/academy` job. Vercel runs it daily at **03:30 UTC / 9:00 AM India time** and supplies the Bearer secret. It reconciles mature referral rewards and sends a limited email batch. Requests without the secret are rejected. On other hosts, schedule the same authenticated endpoint. Dashboard refreshes also check referral maturity; email can be processed manually from the admin mail center. Never put the secret in browser code or a public URL.
+
 
 ### Approval, access sharing and learner feedback
 

@@ -2,7 +2,7 @@ import { StudentCourseFeedback } from './CourseFeedback';
 import { useState } from 'react';
 import {
   ArrowRight, Award, BookOpen, Bot, CalendarDays, Clock, CreditCard, Download, FileText, IdCard,
-  Compass, UserRound, KeyRound, Layers, LayoutDashboard, LogOut, MessageSquare, Play, Plus, Settings, Share2
+  Compass, Gift, UserRound, KeyRound, Layers, LayoutDashboard, LogOut, MessageSquare, Play, Plus, Settings, Share2
 } from 'lucide-react';
 import { PortalDialog } from '../components/student-dashboard/PortalUI';
 import { WorkspaceActionRow, WorkspaceChrome, type WorkspaceNavGroup } from '../components/student-dashboard/WorkspaceChrome';
@@ -13,6 +13,7 @@ import { CatalogDialog, EnrollmentForm, StudentPaymentForm } from './EnrollmentF
 import { StudyTimer } from './StudyTools';
 import { send } from './api';
 import { StudentCertificates } from './Certificates';
+import { StudentReferrals } from './Referrals';
 import { PortfolioHub } from './PortfolioHub';
 import { PortfolioBuilder } from './PortfolioBuilder';
 import { ProfilePage } from './ProfilePage';
@@ -25,7 +26,7 @@ import type { AcademyData } from './academy-types';
 import type { Account, AssessmentQuestion, AssessmentResult, Catalog, Course, CourseSummary, Enrollment, StudentWorkspaceData } from './types';
 import { Button, dateLabel, dateTimeLabel, DialogForm, Empty, ExternalLink, Field, FormError, Input, money, Panel, Status, useApiResource, value } from './ui';
 
-type Page = 'overview' | 'courses' | 'sessions' | 'project' | 'downloads' | 'fees' | 'reviews' | 'messages' | 'certificates' | 'portfolio' | 'profile' | 'explore' | 'course-feedback';
+type Page = 'overview' | 'courses' | 'sessions' | 'project' | 'downloads' | 'fees' | 'reviews' | 'messages' | 'certificates' | 'portfolio' | 'profile' | 'explore' | 'course-feedback' | 'referrals';
 const groups: WorkspaceNavGroup<Page>[] = [
   { label: 'Learning', pages: [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
@@ -37,6 +38,7 @@ const groups: WorkspaceNavGroup<Page>[] = [
   { label: 'Resources', pages: [
     { id: 'downloads', label: 'Downloads', icon: Download },
     { id: 'fees', label: 'Fees & payments', icon: CreditCard },
+    { id: 'referrals', label: 'Refer & earn', icon: Gift },
     { id: 'certificates', label: 'My certificates', icon: Award },
     { id: 'portfolio', label: 'My portfolio', icon: Share2 },
     { id: 'profile', label: 'My profile & CV', icon: UserRound },
@@ -134,11 +136,11 @@ function StudentCourses({ data, account, open, academy }: { data: StudentWorkspa
   </div>;
 }
 
-function StudentFees({ data, catalog, open, academy }: { data: StudentWorkspaceData; catalog?: Catalog; open: (dialog: Dialog) => void; academy?: AcademyData }) {
+function StudentFees({ data, catalog, open, academy, onWallet }: { data: StudentWorkspaceData; catalog?: Catalog; open: (dialog: Dialog) => void; academy?: AcademyData; onWallet: () => void }) {
   const approved = data.enrollments.filter(enrollment => enrollment.status === 'approved');
   return <div className="pbs-live-stack">
     <dl className="pbs-learning-stats"><div><dt>Verified payments</dt><dd>{money(data.receipts.reduce((sum, receipt) => sum + receipt.amount, 0))}</dd></div><div><dt>Remaining course fees</dt><dd>{money(approved.reduce((sum, item) => sum + item.total - item.paid, 0))}</dd></div><div><dt>References in review</dt><dd>{data.enrollments.filter(item => item.requestedPayment > 0).length}</dd></div></dl>
-    <Panel title="Course fees">
+    <Panel title="Course fees" action={<Button quiet onClick={onWallet}><Gift size={16} />Use referral credit</Button>}>
       {!approved.length && <Empty title="No fees yet">Approved enrollments appear here with their balances.</Empty>}
       {approved.map(enrollment => <article className="pbs-record-row" key={enrollment.id}>
         <div><h3>{enrollment.courseTitle}</h3><p className="pbs-muted">{money(enrollment.paid)} paid · {money(enrollment.total)} total</p>
@@ -227,7 +229,8 @@ export function StudentWorkspace({ account, onAccount, onSignOut }: {
       {notice && <p className="pbs-form-status pbs-notice" role="status">{notice}</p>}
       {data && page === 'overview' && <StudentOverview data={data} completed={completed} open={show} navigate={navigate} />}
       {data && page === 'courses' && <StudentCourses data={data} account={account} open={show} academy={academy.data} />}
-      {data && page === 'fees' && <StudentFees data={data} catalog={catalog.data} open={show} academy={academy.data} />}
+      {data && page === 'fees' && <StudentFees data={data} catalog={catalog.data} open={show} academy={academy.data} onWallet={() => navigate('referrals')} />}
+      {data && page === 'referrals' && <StudentReferrals enrollments={data.enrollments} onChanged={refreshAll} />}
       {data && academy.data && page === 'certificates' && <StudentCertificates data={data} academy={academy.data} onSaved={refreshAll} onFeedback={() => navigate('course-feedback')} />}
       {data && page === 'portfolio' && <PortfolioBuilder account={account} portfolio={data.portfolio} certificates={academy.data?.certificates || []} onSaved={refreshAll} />}
       {page === 'profile' && <ProfilePage account={account} onAccount={onAccount} />}

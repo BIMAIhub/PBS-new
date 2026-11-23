@@ -1,7 +1,9 @@
 import type { CertificateRecord } from './academy-types';
 import type { Branding } from './branding-types';
+import { defaultDocumentStamp, type DocumentStamp } from './document-types';
+import { drawPdfStamp } from './pdf-stamp';
 
-export async function buildCertificatePdf(record: CertificateRecord, brand: Branding, assets: { logo?: string; qr?: string; verificationUrl?: string } = {}) {
+export async function buildCertificatePdf(record: CertificateRecord, brand: Branding, assets: { logo?: string; qr?: string; verificationUrl?: string } = {}, stamp: DocumentStamp = defaultDocumentStamp(brand)) {
   const { jsPDF } = await import('jspdf');
   const pdf = new jsPDF({ orientation: 'landscape', format: 'a4', unit: 'mm', compress: true });
   const t = record.template;
@@ -47,6 +49,7 @@ export async function buildCertificatePdf(record: CertificateRecord, brand: Bran
     pdf.addImage(assets.qr, 'PNG', 137, 163, 23, 23); pdf.link(137, 163, 23, 23, { url: assets.verificationUrl });
     pdf.setFontSize(6.5); pdf.text('SCAN TO VERIFY CREDENTIAL', 148.5, 191, { align: 'center' });
   } else { pdf.setFontSize(6.5); pdf.text('Private credential · Public verification can be enabled in the student workspace.', 148.5, 191, { align: 'center' }); }
+  drawPdfStamp(pdf, stamp, 114, 176, 12);
   if (record.revokedAt) { pdf.setTextColor('#B83B34'); pdf.setFont('helvetica', 'bold'); pdf.setFontSize(46); pdf.text('REVOKED', 148.5, 111, { align: 'center' }); }
   return pdf;
 }

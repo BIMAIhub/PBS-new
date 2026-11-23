@@ -5,6 +5,7 @@ import { audit, saveSetting, setting } from './academy-data.js';
 import { badRequest, conflict, emailAddress, field, integer, limitAttempts, notFound, route } from './http.js';
 import { courseById } from './records.js';
 import type { PriceQuote, Promotion } from '../src/live/experience-types.js';
+import { captureReferral, referralCodeOffer } from './referral-data.js';
 
 const fields = `p.id, p.title, p.description, p.kind, p.code, p.percent, p.course_id AS courseId,
   p.owner_id AS ownerId, p.assigned_email AS assignedEmail, p.active, p.starts_at AS startsAt,
@@ -30,21 +31,33 @@ export async function quotePrice(db: Database, courseId: string, rawCode = '', e
   const code = rawCode.trim().toUpperCase();
   const items = await promotions(db);
   let eligible = items.filter(item => item.kind === 'public' && !item.assignedEmail && availablePromotion(item, courseId));
+  let referral: { ownerId: string; code: string; percent: number } | null = null;
   if (code) {
+    referral = await referralCodeOffer(db, code, email, accountId);
+    if (referral) {
+      const quote = priceFromOffers(course, eligible);
+      if (referral.percent > quote.percent) {
+        quote.percent = referral.percent; quote.discount = Math.floor(course.fee * referral.percent / 100);
+        quote.total = course.fee - quote.discount; quote.promotionId = ''; quote.promotionTitle = 'Student referral offer'; quote.code = code;
+      }
+      return { ...quote, referrerId: referral.ownerId, referralCode: code };
+    }
     const offer = items.find(item => item.code.toUpperCase() === code && item.kind !== 'public');
     if (!offer || !availablePromotion(offer, courseId)) throw badRequest('This offer code is unavailable or has reached its usage limit.');
     if (offer.assignedEmail && offer.assignedEmail !== email.toLowerCase()) throw badRequest('This offer is assigned to a different email.');
     if (offer.ownerId && (offer.ownerId === accountId || (email && await db.prepare('SELECT 1 FROM accounts WHERE id = ? AND email = ? COLLATE NOCASE').get(offer.ownerId, email)))) throw badRequest('A referral code is for another student.');
     eligible = [...eligible, offer];
+    if (offer.kind === 'referral' && offer.ownerId) referral = { ownerId: offer.ownerId, code, percent: offer.percent };
   }
-  return priceFromOffers(course, eligible);
+  return { ...priceFromOffers(course, eligible), ...(referral ? { referrerId: referral.ownerId, referralCode: code } : {}) };
 }
 export async function savePrice(db: Database, enrollmentId: string, quote: PriceQuote) {
   const promotion = quote.promotionId ? await db.prepare('SELECT owner_id FROM promotions WHERE id = ?').get(quote.promotionId) : undefined;
   await db.prepare(`INSERT INTO enrollment_prices VALUES (?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(enrollment_id) DO UPDATE SET list_price = excluded.list_price, discount = excluded.discount,
     promotion_id = excluded.promotion_id, promotion_title = excluded.promotion_title, code = excluded.code, referrer_id = excluded.referrer_id`)
-    .run(enrollmentId, quote.listPrice, quote.discount, quote.promotionId, quote.promotionTitle, quote.code, String(promotion?.owner_id || ''));
+    .run(enrollmentId, quote.listPrice, quote.discount, quote.promotionId, quote.promotionTitle, quote.code || quote.referralCode || '', quote.referrerId || String(promotion?.owner_id || ''));
+  if (quote.referrerId) await captureReferral(db, enrollmentId, quote.referrerId, quote.referralCode || quote.code);
 }
 
 export async function provisionReferenceCatalog(db: WritableDatabase) {

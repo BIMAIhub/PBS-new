@@ -3,7 +3,7 @@ export interface Promotion {
   percent: number; courseId: string; ownerId: string; assignedEmail: string; active: boolean;
   startsAt: string; endsAt: string; maxUses: number; uses: number;
 }
-export interface PriceQuote { listPrice: number; discount: number; total: number; promotionId: string; promotionTitle: string; code: string; percent: number }
+export interface PriceQuote { listPrice: number; discount: number; total: number; promotionId: string; promotionTitle: string; code: string; percent: number; referrerId?: string; referralCode?: string }
 export interface CoursePage { level: string; duration: string; audience: string; outcomes: string[]; requirements: string[] }
 export interface CourseOutline { id: string; title: string; description: string; category: string; instructor: string; schedule: string; fee: number; page: CoursePage;
   paused?: boolean; pauseReason?: string; approvedEnrollments?: number; community?: import('./admissions-types').LearnerCommunity; feedback?: import('./admissions-types').PublicFeedback[];
