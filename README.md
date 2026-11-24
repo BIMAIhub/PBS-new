@@ -87,6 +87,8 @@ Deploy the `main` branch in the connected Vercel project. The Vercel configurati
 
 The hosted app sends file uploads directly to private Blob storage. The PBS API verifies the file before attaching it to a lesson and checks enrollment before issuing a playback link.
 
+Production builds verify the saved database connection and apply additive schema migrations before becoming live. A rejected connection fails the build so the working deployment stays available. Preview and local builds do not run this Production check. Vercel environment-variable values can be pasted as raw values or single-line `KEY="value"` snippets; PBS removes the wrapper in server memory without changing saved secrets. Startup diagnostics never print raw provider messages or tokens.
+
 ## Separate OneDrive storage and Microsoft 365 mail
 
 Production uses **https://student.pragmaticbim.com**. Set `PBS_PUBLIC_ORIGIN` to that origin in the Production environment. Register this exact **Web** callback URL in each Microsoft app registration: `https://student.pragmaticbim.com/api/integrations/microsoft/callback`.

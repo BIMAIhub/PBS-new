@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createPortalApp } from '../server/app.js';
+import { safeStartupError } from '../server/database-config.js';
 
 export const config = { helpers: false };
 
@@ -23,7 +24,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     const app = await application;
     app(req, res);
   } catch (error) {
-    console.error('PBS backend startup failed:', error instanceof Error ? error.message : 'unknown error');
+    console.error('PBS backend startup failed:', safeStartupError(error));
     res.writeHead(503, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
     res.end(JSON.stringify({ error: 'The PBS server is unavailable. Contact the site administrator.' }));
   }
