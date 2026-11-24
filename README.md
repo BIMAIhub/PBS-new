@@ -47,6 +47,18 @@ npm run video:add -- --email YOUR_ADMIN_EMAIL --course COURSE_ID --module MODULE
 
 Set `PBS_PORTAL_URL` or pass `--server` to target a running PBS host. The upload limit defaults to 1,024 MB and can be changed with `PBS_MAX_UPLOAD_MB`.
 
+## Background video uploads and diagnostics
+
+From **Courses & videos → Add video lessons**, choose a module, select **Upload to OneDrive** or **Private PBS storage**, and select up to **five MP4/WebM files**. You can edit a title and optional duration for each video before starting the batch. The entry dialog closes immediately and a floating upload panel takes over.
+
+Two videos transfer at a time while the remaining files wait in the queue. You can switch PBS pages or minimize the panel without stopping transfers. Keep the browser tab open: closing, refreshing or signing out stops the in-memory queue and file handles are not retained across visits. The browser warns when leaving with active uploads.
+
+Each file displays actual bytes transferred, transfer speed, estimated remaining time, progress, and a separate verification/saving stage. A lesson is marked saved only after PBS verifies the storage file and attaches it. Refreshing the course list happens separately, so a slow list refresh does not leave a saved video stuck on Saving.
+
+Use **Retry** for interrupted transfers or verification, **Cancel** before verification, and **Activity & errors** for timestamped stage messages. **Download logs** exports a JSON report with error codes, HTTP statuses and available request IDs. Reports omit pre-authorized storage URLs, bearer tokens and credentials. Logs and selected files remain in this tab until cleared or closed.
+
+OneDrive uploads use sequential fragments with automatic retries for connection errors, throttling and transient server errors. Retries check OneDrive's confirmed position. A lost final response is recovered by verifying the uniquely authorized file; repeated save requests do not create duplicate lessons. Private PBS storage and local uploads also retain their upload ID when saving is retried. OneDrive supports up to 8 GB per file; private PBS uploads use the server's configured file-size limit.
+
 ## Enroll students and issue receipts
 
 The course selector includes every course and labels existing enrollments and pending applications. Use **Review application** for a pending request, or **Manage assigned course** for an approved enrollment. The same student/course pair cannot be charged or enrolled twice. Each course card also has an **Enroll student** shortcut.

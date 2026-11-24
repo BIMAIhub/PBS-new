@@ -35,11 +35,12 @@ export function mountDriveUploads(app:Express,db:WritableDatabase,request:typeof
     const original=field(input?.filename,'file name',180),extension=/\.([a-z0-9]{1,8})$/i.exec(original)?.[1].toLowerCase();
     const allowed=kind==='video'?['mp4','webm']:['pdf','zip','rvt','rfa','dwg','ifc','nwd','nwc','png','jpg','jpeg','docx','xlsx','pptx','txt','csv','mp4','webm'];
     if(!extension||!allowed.includes(extension))throw badRequest('Choose a supported project, document, image, ZIP or video file.');
-    const size=integer(input?.size,'file size',1,kind==='video'?8*1024**3:512*1024**2),id=makeId(),filename=`${id.slice(0,8)}-${driveFolderName(original)}`;
+    const size=integer(input?.size,'file size',1,kind==='video'?8*1024**3:512*1024**2),id=makeId(),filename=`${id.slice(0,8)}-${driveFolderName(original.replace(/\.[^.]+$/,'')).slice(0,100)}.${extension}`;
     const contentType=kind==='video'?`video/${extension==='mp4'?'mp4':'webm'}`:field(input?.contentType||'application/octet-stream','file type',100);
     const result=await request(db,adminId,`${itemPath(driveId,parentId)}:/${part(filename)}:/createUploadSession`,{method:'POST',body:JSON.stringify({item:{name:filename,'@microsoft.graph.conflictBehavior':'fail'}})});
-    const url=uploadLocation(result.uploadUrl);await db.prepare('INSERT INTO drive_uploads VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(id,accountId,adminId,kind,courseId,batchId,moduleId,taskId,driveId,parentId,'',filename,size,contentType,seal(url),Date.now()+86400000,'',now());
-    return{uploadId:id,url,filename,size,chunkSize:10*1024**2};
+    const url=uploadLocation(result.uploadUrl),providerExpiry=Date.parse(String(result.expirationDateTime||'')),expiresAt=Number.isFinite(providerExpiry)?Math.min(providerExpiry,Date.now()+86400000):Date.now()+3600000;
+    await db.prepare('INSERT INTO drive_uploads VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(id,accountId,adminId,kind,courseId,batchId,moduleId,taskId,driveId,parentId,'',filename,size,contentType,seal(url),expiresAt,'',now());
+    return{uploadId:id,url,filename,size,expiresAt,chunkSize:10*1024**2};
   }
   app.post('/api/admin/modules/:id/drive-upload',route(async(req,res)=>{
     const admin=await requireAccount(db,req,'admin'),module=await db.prepare('SELECT course_id,title FROM modules WHERE id=?').get(req.params.id);if(!module)throw notFound('This module is unavailable.');
@@ -58,8 +59,13 @@ export function mountDriveUploads(app:Express,db:WritableDatabase,request:typeof
     if(upload.kind==='video'&&account.role!=='admin')throw notFound('This upload is unavailable.');
     if(upload.kind==='assignment')await assignmentContext(db,account.id,String(upload.task_id));
     if(upload.attached_id){res.json({id:upload.attached_id,alreadySaved:true});return;}
-    if(Number(upload.expires_at)<Date.now())throw conflict('This upload expired. Start again.');
-    const itemId=field(req.body?.itemId,'uploaded item',250),item=await request(db,String(upload.admin_id),`${itemPath(String(upload.drive_id),itemId)}?$select=id,name,size,file,video,webUrl,parentReference`);
+    // OneDrive extends session expiry as fragments arrive. A committed file can
+    // still be verified after the initial session timestamp has elapsed.
+    const providedItem=field(req.body?.itemId,'uploaded item',250,false);
+    // Recover a lost final fragment response using only this upload's authorized, unique destination.
+    const filePath=providedItem?itemPath(String(upload.drive_id),providedItem):`${itemPath(String(upload.drive_id),String(upload.parent_id))}:/${part(String(upload.filename))}`;
+    const item=await request(db,String(upload.admin_id),`${filePath}?$select=id,name,size,file,video,webUrl,parentReference`),itemId=String(item.id||'');
+    if(!itemId)throw badRequest('Microsoft did not confirm the uploaded file identity. Retry this upload.');
     if(item.parentReference?.driveId!==upload.drive_id||item.parentReference?.id!==upload.parent_id||item.name!==upload.filename||Number(item.size)!==Number(upload.size)||!item.file||!item.webUrl)throw badRequest('The uploaded file does not match the authorized destination and size.');
     if(upload.kind==='video'&&!item.video&&!String(item.file.mimeType||'').startsWith('video/'))throw badRequest('The uploaded file is not a playable video.');
     const result=await transaction(db,async tx=>{

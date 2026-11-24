@@ -147,7 +147,11 @@ export function mountMedia(app: Express, db: WritableDatabase, hosted: boolean, 
   app.post(`${routes}/upload`, route(async (req, res) => {
     const admin = await requireAccount(db, req, 'admin');
     const moduleId = await getModule(db, req.params.courseId, req.params.moduleId);
-    if (!cloud) return res.json({ storage: 'local' });
+    if (!cloud) {
+      const size = typeof req.body?.size === 'number' ? req.body.size : 0, type = checkFile(req.body?.contentType, size), id = makeId(), expiresAt = Date.now() + 86400000;
+      await db.prepare('INSERT INTO video_uploads (id, account_id, module_id, content_type, size, expires_at) VALUES (?, ?, ?, ?, ?, ?)').run(id,admin.id,moduleId,type,size,expiresAt);
+      return res.json({ storage: 'local', uploadId:id, expiresAt });
+    }
     if (!blobConfigured) throw new RequestError(503, 'Connect private video storage before uploading files. You can add a video link now.');
 
     const size = typeof req.body?.size === 'number' ? req.body.size : 0;
@@ -162,7 +166,7 @@ export function mountMedia(app: Express, db: WritableDatabase, hosted: boolean, 
     });
     await db.prepare('INSERT INTO video_uploads (id, account_id, module_id, content_type, size, expires_at) VALUES (?, ?, ?, ?, ?, ?)')
       .run(id, admin.id, moduleId, contentType, size, validUntil);
-    res.json({ storage: 'blob', uploadId: id, url: presignedUrl });
+    res.json({ storage: 'blob', uploadId: id, url: presignedUrl, expiresAt:validUntil });
   }));
 
   app.post(`${routes}/upload/:id`, route(async (req, res) => {
@@ -188,12 +192,15 @@ export function mountMedia(app: Express, db: WritableDatabase, hosted: boolean, 
   }));
 
   app.post(`${routes}/file`, route(async (req, res) => {
-    await requireAccount(db, req, 'admin');
+    const admin = await requireAccount(db, req, 'admin');
     if (cloud) throw badRequest('Use the cloud upload flow to save videos on this server.');
     const moduleId = await getModule(db, req.params.courseId, req.params.moduleId);
     const lesson = lessonFields(req.query);
     const replace = field(req.query.replaceId, 'lesson ID', 80, false);
     const contentType = checkFile(req.get('content-type')?.split(';')[0], Number(req.get('content-length')));
+    const uploadId = field(req.query.uploadId,'upload session',80,false), upload = uploadId ? await getUpload(db,uploadId,admin.id,moduleId) : undefined;
+    if(upload?.lessonId){req.resume();return res.json({id:upload.lessonId});}
+    if(upload&&(upload.contentType!==contentType||upload.size!==Number(req.get('content-length'))))throw badRequest('This file does not match the prepared upload.');
     const name = `${makeId()}${videoTypes[contentType]}`;
     const target = path.join(videoDirectory, name);
     const temp = `${target}.partial`;
@@ -209,11 +216,14 @@ export function mountMedia(app: Express, db: WritableDatabase, hosted: boolean, 
       }
       if (!matchesVideoFormat(header, contentType)) throw badRequest('The uploaded bytes do not match the video format.');
       await rename(temp, target);
-      const { id, oldFile } = await transaction(db, async tx => {
+      const { id, oldFile, reused } = await transaction(db, async tx => {
         await requireAccount(tx, req, 'admin');
-        return saveLesson(tx, moduleId, lesson, { sourceUrl: '', fileName: name, contentType }, replace);
+        if(uploadId){const latest=await getUpload(tx,uploadId,admin.id,moduleId);if(latest.lessonId)return{id:latest.lessonId,oldFile:'',reused:true};}
+        const result=await saveLesson(tx, moduleId, lesson, { sourceUrl: '', fileName: name, contentType }, replace);
+        if(uploadId)await tx.prepare('UPDATE video_uploads SET lesson_id=? WHERE id=?').run(result.id,uploadId);
+        return {...result,reused:false};
       });
-      saved = true;
+      saved = !reused;
       await removePriorFile(oldFile);
       res.status(replace ? 200 : 201).json({ id });
     } finally {

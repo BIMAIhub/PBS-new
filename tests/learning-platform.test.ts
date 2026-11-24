@@ -17,6 +17,7 @@ test('batch learning, Microsoft roles, OneDrive assignments, bank payouts and re
     if(url.startsWith('/shares/'))return{id:'assignment-root',name:'Assignments',folder:{},webUrl:'https://onedrive.live.com/assignments',parentReference:{driveId:'qa-drive'}};
     if(url.endsWith('/children'))return{id:`folder-${++folderCounter}`,name:body.name,folder:{},parentReference:{driveId:'qa-drive'}};
     if(url.endsWith('/createUploadSession'))return{uploadUrl:'https://qa.up.1drv.com/upload/isolated',expirationDateTime:new Date(Date.now()+3600000).toISOString()};
+    if(url.includes(':/')){const name=decodeURIComponent(url.split(':/').pop()!.split('?')[0]);const found=[...items.values()].find(item=>item.name===name);if(found)return found;}
     const id=/\/items\/([^?]+)/.exec(url)?.[1];if(id&&items.has(id))return items.get(id);
     throw new Error(`Unexpected isolated provider path: ${url}`);
   };
@@ -120,6 +121,20 @@ test('batch learning, Microsoft roles, OneDrive assignments, bank payouts and re
       items.set('video-item',{id:'video-item',name:row!.filename,size:2048,file:{mimeType:'video/mp4'},video:{duration:600000},webUrl:'https://onedrive.live.com/?id=qa-video',parentReference:{driveId:'qa-drive',id:row!.parent_id}});
       const details={itemId:'video-item',title:'OneDrive uploaded video',duration:'10 min',description:'QA upload'};const firstSave=await req(admin,`/drive-uploads/${init.uploadId}/complete`,details);assert.equal((await req(admin,`/drive-uploads/${init.uploadId}/complete`,details)).id,firstSave.id);
       const lesson=(await req(student,'/student/workspace')).courses[0].modules.find((m:any)=>m.id===module2).lessons.find((l:any)=>l.id===firstSave.id);assert.equal(lesson.playback.provider,'microsoft');assert.match(lesson.playback.url,/^\/api\/lessons\//);
+    });
+    await t.test('a lost final upload response recovers only the authorized file and preserves long video extensions',async()=>{
+      const init=await req(admin,`/admin/modules/${module2}/drive-upload`,{filename:'Long lesson '+ 'x'.repeat(140)+'.mp4',size:2048}),row=await db.prepare('SELECT * FROM drive_uploads WHERE id=?').get(init.uploadId);
+      assert.ok(String(row!.filename).endsWith('.mp4'));assert.ok(String(row!.filename).length<130);
+      items.set('recovered-video',{id:'recovered-video',name:row!.filename,size:2048,file:{mimeType:'video/mp4'},video:{duration:600000},webUrl:'https://onedrive.live.com/?id=recovered-video',parentReference:{driveId:'qa-drive',id:row!.parent_id}});
+      await db.prepare('UPDATE drive_uploads SET expires_at=? WHERE id=?').run(Date.now()-1,init.uploadId);
+      const result=await req(admin,`/drive-uploads/${init.uploadId}/complete`,{title:'Recovered lesson',description:'',duration:''});
+      assert.equal((await req(admin,`/drive-uploads/${init.uploadId}/complete`,{title:'Recovered lesson'})).id,result.id);
+    });
+    await t.test('local background file upload retries attach one lesson per owned upload session',async()=>{
+      const route=`/admin/courses/${courseId}/modules/${module2}/lessons`,payload=Buffer.alloc(32);payload.write('ftyp',4,'ascii');
+      const session=await req(admin,route+'/upload',{contentType:'video/mp4',size:payload.length});assert.equal(session.storage,'local');
+      const post=async()=>{const response=await fetch(origin+'/api'+route+'/file?'+new URLSearchParams({title:'Idempotent local lesson',duration:'',description:'',uploadId:session.uploadId}),{method:'POST',headers:{'X-PBS-Request':'1','Content-Type':'video/mp4',Cookie:admin.cookie},body:payload});assert.ok([200,201].includes(response.status),await response.clone().text());return response.json();};
+      const [a,b]=await Promise.all([post(),post()]);assert.equal(a.id,b.id);assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM lessons WHERE title='Idempotent local lesson'").get())!.n,1);
     });
     await t.test('news and notices respect publication time and course/batch audiences',async()=>{
       await req(admin,'/admin/notices',{title:'Batch A project notice',body:'Prepare your model review.',kind:'notice',courseId,batchId:batchA,published:true,startsAt:new Date(Date.now()-1000).toISOString()});

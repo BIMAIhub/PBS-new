@@ -25,6 +25,7 @@ import { MailCenter } from './MailCenter';
 import { BatchStudio } from './Batches';
 import { NoticesAdmin } from './AcademyExperience';
 import { DataReset } from './DataReset';
+import { AdminUploadProvider } from './AdminUploads';
 import { CurriculumAdmin } from './CurriculumAdmin';
 import { NotificationCenter } from './Notifications';
 import { BrandingAdmin } from './BrandingAdmin';
@@ -266,7 +267,7 @@ export function AdminWorkspace({ account, onAccount, onSignOut }: {
     window.scrollTo({ top: 0, behavior: 'instant' });
     void refreshAll();
   }
-  return <>
+  return <AdminUploadProvider onCompleted={refreshAll}>
     <WorkspaceChrome groups={groups} activePage={page} onNavigate={navigate} userName={account.name} workspaceLabel="Administration"
       notifications={<NotificationCenter onNavigate={target => { if (groups.some(group => group.pages.some(item => item.id === target))) navigate(target as Page); }} />}
       onHelp={() => show({ kind: 'help' })}
@@ -393,5 +394,5 @@ export function AdminWorkspace({ account, onAccount, onSignOut }: {
     {dialog?.kind === 'profile' && <AdminProfileForm account={account} onClose={close} onSaved={updated => { onAccount(updated); close(); setNotice('Admin profile updated.'); }} />}
     {dialog?.kind === 'password' && <PasswordForm account={account} onClose={close} onSaved={updated => { onAccount(updated); close(); setNotice('Password changed.'); }} />}
     {dialog?.kind === 'help' && <HelpDialog onClose={close} />}
-  </>;
+  </AdminUploadProvider>;
 }
