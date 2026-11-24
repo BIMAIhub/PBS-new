@@ -4,7 +4,7 @@ import { audit, setting } from './academy-data.js';
 import { badRequest } from './http.js';
 import type { ReferralProgram } from '../src/live/engagement-types.js';
 
-export const defaultReferralProgram: ReferralProgram = { enabled: true, autoCredit: true, rewardAmount: 100000, waitDays: 7, minimumFee: 100000,
+export const defaultReferralProgram: ReferralProgram = { enabled: true, autoCredit: true, bankPayoutsEnabled: true, rewardAmount: 100000, waitDays: 7, minimumFee: 100000,
   requireReferrerPaid: true, requireStudentPaid: true, friendDiscountPercent: 0, revision: '' };
 export async function referralProgram(db: Database): Promise<ReferralProgram> { return { ...defaultReferralProgram, ...JSON.parse(await setting(db,'referral_program') || '{}') }; }
 export async function ensureReferralCode(db: WritableDatabase, accountId: string) {

@@ -15,13 +15,13 @@ export async function mailTemplates(db: Database): Promise<MailTemplate[]> {
   return defaultMailTemplates.map(template => ({ ...template, ...saved.find(item => item.id === template.id), marketing: template.marketing }));
 }
 export async function mailAutomation(db: Database): Promise<MailAutomation> {
-  return { enabled: true, senderId: '', welcome: true, certificate: true, referral_credit: true, ...JSON.parse(await setting(db, 'mail_automation') || '{}') };
+  return { enabled: true, senderId: '', welcome: true, certificate: true, referral_credit: true, payout_paid:true, ...JSON.parse(await setting(db, 'mail_automation') || '{}') };
 }
 async function sender(db: Database) {
   const settings = await mailAutomation(db);
   if (!settings.enabled) return '';
-  if (settings.senderId) return await db.prepare('SELECT 1 FROM microsoft_connections WHERE admin_id = ?').get(settings.senderId) ? settings.senderId : '';
-  const connections = await db.prepare('SELECT admin_id FROM microsoft_connections LIMIT 2').all();
+  if (settings.senderId) return await db.prepare('SELECT 1 FROM microsoft_mail_connections WHERE admin_id = ?').get(settings.senderId) ? settings.senderId : '';
+  const connections = await db.prepare('SELECT admin_id FROM microsoft_mail_connections LIMIT 2').all();
   return connections.length === 1 ? String(connections[0].admin_id) : '';
 }
 const money = (value: number) => `INR ${(value / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -39,9 +39,9 @@ async function ensureContact(db: Database, email: string, name: string, consent 
     .run(email, name, Number(consent), randomBytes(24).toString('base64url'), now());
   if (consent) await db.prepare('UPDATE mail_contacts SET consent = 1, name = ?, updated_at = ? WHERE email = ?').run(name, now(), email);
 }
-export async function queueAutomation(db: WritableDatabase, kind: 'welcome' | 'certificate' | 'referral_credit', eventKey: string, accountId: string, origin: string, extra: Record<string, string> = {}, manualSenderId = '') {
+export async function queueAutomation(db: WritableDatabase, kind: 'welcome' | 'certificate' | 'referral_credit' | 'payout_paid', eventKey: string, accountId: string, origin: string, extra: Record<string, string> = {}, manualSenderId = '') {
   const settings = await mailAutomation(db), adminId = manualSenderId
-    ? (await db.prepare('SELECT 1 FROM microsoft_connections WHERE admin_id=?').get(manualSenderId) ? manualSenderId : '') : await sender(db);
+    ? (await db.prepare('SELECT 1 FROM microsoft_mail_connections WHERE admin_id=?').get(manualSenderId) ? manualSenderId : '') : await sender(db);
   if ((!manualSenderId && !settings[kind]) || !adminId) return { queued: false, reason: 'Choose a connected Microsoft sender in the email settings.' };
   const recipient = await db.prepare(`SELECT a.name, a.email FROM accounts a WHERE a.id = ? AND a.role = 'student'
     AND NOT EXISTS(SELECT 1 FROM account_controls c WHERE c.account_id = a.id AND c.status <> 'active')`).get(accountId);
@@ -109,7 +109,7 @@ export function mountMail(app: Express, db: WritableDatabase, hosted: boolean) {
   app.get('/api/admin/mail', route(async (req, res) => {
     await requireAccount(db, req, 'admin');
     res.json({ templates: await mailTemplates(db), automation: await mailAutomation(db), scheduledProcessing: Boolean(process.env.CRON_SECRET),
-      senders: await db.prepare('SELECT m.admin_id AS id,m.profile_email AS email,m.profile_name AS name FROM microsoft_connections m').all(),
+      senders: await db.prepare('SELECT m.admin_id AS id,m.profile_email AS email,m.profile_name AS name FROM microsoft_mail_connections m').all(),
       campaigns: await db.prepare(`${campaignSql} ORDER BY c.created_at DESC LIMIT 100`).all(),
       deliveries: await db.prepare('SELECT id,email,name,subject,status,error,created_at AS createdAt,sent_at AS sentAt FROM mail_outbox ORDER BY created_at DESC LIMIT 100').all() });
   }));
@@ -122,8 +122,8 @@ export function mountMail(app: Express, db: WritableDatabase, hosted: boolean) {
   app.put('/api/admin/mail/automation', route(async (req, res) => {
     const admin = await requireAccount(db, req, 'admin');
     for (const key of ['enabled','welcome','certificate','referral_credit']) if (typeof req.body?.[key] !== 'boolean') throw badRequest('Choose valid email automation settings.');
-    const next = { enabled: Boolean(req.body?.enabled), senderId: field(req.body?.senderId, 'sender', 80, false), welcome: Boolean(req.body?.welcome), certificate: Boolean(req.body?.certificate), referral_credit: Boolean(req.body?.referral_credit) };
-    if (next.senderId && !await db.prepare('SELECT 1 FROM microsoft_connections WHERE admin_id=?').get(next.senderId)) throw badRequest('Choose a connected Microsoft sender.');
+    const next = { enabled: Boolean(req.body?.enabled), senderId: field(req.body?.senderId, 'sender', 80, false), welcome: Boolean(req.body?.welcome), certificate: Boolean(req.body?.certificate), referral_credit: Boolean(req.body?.referral_credit),payout_paid:req.body?.payout_paid!==false };
+    if (next.senderId && !await db.prepare('SELECT 1 FROM microsoft_mail_connections WHERE admin_id=?').get(next.senderId)) throw badRequest('Choose a connected Microsoft sender.');
     await transaction(db, async tx => { await saveSetting(tx,'mail_automation',JSON.stringify(next)); await audit(tx,admin.id,'Email automation settings saved','',next.enabled ? 'Enabled' : 'Paused'); }); res.json(next);
   }));
   app.post('/api/admin/mail/preview', route(async (req, res) => {
@@ -160,7 +160,7 @@ export function mountMail(app: Express, db: WritableDatabase, hosted: boolean) {
   }));
   app.post('/api/admin/mail/campaigns/:id/send',limitAttempts(20,hosted?db:undefined),route(async(req,res)=>{
     const admin=await requireAccount(db,req,'admin');
-    if(!await db.prepare('SELECT 1 FROM microsoft_connections WHERE admin_id=?').get(admin.id)) throw conflict('Connect Microsoft in OneDrive & email before sending.');
+    if(!await db.prepare('SELECT 1 FROM microsoft_mail_connections WHERE admin_id=?').get(admin.id)) throw conflict('Connect Microsoft in OneDrive & email before sending.');
     const campaign=await db.prepare('SELECT * FROM mail_campaigns WHERE id=?').get(req.params.id); if(!campaign) throw notFound('This campaign is unavailable.');
     if(campaign.revision!==req.body?.revision) throw conflict('Refresh the campaign before sending.');
     const recipients=await db.prepare('SELECT * FROM mail_campaign_recipients WHERE campaign_id=?').all(req.params.id);

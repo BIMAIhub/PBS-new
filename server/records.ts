@@ -9,6 +9,7 @@ import { videoPlayback, videoSourceKey } from './video.js';
 import { audit } from './academy-data.js';
 import { studentLiveData } from './live-classes.js';
 import { activeCourseAccess } from './access-controls.js';
+import { moduleAccess } from './learning-access.js';
 
 const courseFields = `id, title, description, category, instructor, schedule, fee, published,
   COALESCE((SELECT paused FROM course_controls WHERE course_id = courses.id), 0) AS paused,
@@ -21,6 +22,8 @@ const enrollmentFields = `e.id, e.account_id AS studentId, a.name AS studentName
   COALESCE((SELECT paused FROM course_controls WHERE course_id = e.course_id), 0) AS coursePaused,
   COALESCE(ep.list_price, e.total) AS listPrice, COALESCE(ep.discount, 0) AS discount,
   COALESCE(ep.promotion_title, '') AS promotionTitle, COALESCE(ep.code, '') AS promotionCode,
+  COALESCE((SELECT b.name FROM course_batches b JOIN enrollment_batches eb ON eb.batch_id=b.id WHERE eb.enrollment_id=e.id),'') AS batchName,
+  COALESCE((SELECT batch_id FROM enrollment_batches WHERE enrollment_id=e.id),'') AS batchId,
   COALESCE((SELECT SUM(r.amount) FROM receipts r WHERE r.enrollment_id = e.id), 0) AS paid`;
 const enrollmentJoin = `FROM enrollments e JOIN accounts a ON a.id = e.account_id JOIN courses c ON c.id = e.course_id
   LEFT JOIN enrollment_prices ep ON ep.enrollment_id = e.id LEFT JOIN enrollment_details ed ON ed.enrollment_id = e.id`;
@@ -48,23 +51,26 @@ export async function courseById(db: Database, id: string) {
 
 type LessonRow = { id: string; title: string; duration: string; description: string; sourceUrl: string; fileName: string };
 
-export async function courseDetails(db: Database, course: CourseSummary, includeSources = false): Promise<Course> {
+export async function courseDetails(db: Database, course: CourseSummary, includeSources = false, studentId = ''): Promise<Course> {
   const modules = await db.prepare('SELECT id, title FROM modules WHERE course_id = ? ORDER BY position').all(course.id) as { id: string; title: string }[];
   const links = await db.prepare('SELECT id, kind, title, url, starts_at AS startsAt FROM course_links WHERE course_id = ? ORDER BY starts_at, title')
     .all(course.id) as { id: string; kind: 'resource' | 'session'; title: string; url: string; startsAt: string }[];
   return {
     ...course,
-    modules: await Promise.all(modules.map(async module => ({
+    modules: await Promise.all(modules.map(async module => {
+      const release=studentId?await moduleAccess(db,studentId,module.id):{unlocked:true,reason:'',releaseAt:''};
+      return ({
       ...module,
+      ...release,
       lessons: (await db.prepare(`SELECT id, title, duration, description, source_url AS sourceUrl, file_name AS fileName
         FROM lessons WHERE module_id = ? ORDER BY position`).all(module.id) as LessonRow[])
         .map(({ sourceUrl, fileName, ...lesson }) => {
           const playback: Lesson['playback'] = fileName ? { kind: 'video', url: `/api/lessons/${lesson.id}/video` } : videoPlayback(sourceUrl);
           if (playback.provider === 'microsoft') playback.url = `/api/lessons/${lesson.id}/video`;
           if (!includeSources) delete playback.source;
-          return { ...lesson, mediaKey: videoSourceKey(sourceUrl, fileName), playback };
+          return { ...lesson, mediaKey: videoSourceKey(sourceUrl, fileName), playback:release.unlocked?playback:{kind:'link' as const,url:''},locked:!release.unlocked,lockReason:release.reason };
         }),
-    }))),
+    });})),
     resources: links.filter(link => link.kind === 'resource').map(({ id, title, url }) => ({ id, title, url })),
     sessions: [],
     assessmentAvailable: Boolean(await db.prepare('SELECT 1 FROM assessments WHERE course_id = ?').get(course.id)),
@@ -156,7 +162,7 @@ export async function studentWorkspace(db: Database, account: Account) {
     enrollments: list,
     live: await studentLiveData(db, account.id),
     courses: await Promise.all(list.filter(enrollment => enrollment.status === 'approved' && !enrollment.accessPaused && !enrollment.coursePaused)
-      .map(async enrollment => courseDetails(db, await courseById(db, enrollment.courseId)))),
+      .map(async enrollment => courseDetails(db, await courseById(db, enrollment.courseId),false,account.id))),
     receipts: await receipts(db, account.id),
     completions: await db.prepare(`SELECT m.course_id AS courseId, p.lesson_id AS lessonId FROM completions p
       JOIN lessons l ON l.id = p.lesson_id JOIN modules m ON m.id = l.module_id

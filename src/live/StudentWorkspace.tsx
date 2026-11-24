@@ -1,8 +1,8 @@
 import { StudentCourseFeedback } from './CourseFeedback';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ArrowRight, Award, BookOpen, Bot, CalendarDays, Clock, CreditCard, Download, FileText, IdCard,
-  Compass, Gift, UserRound, KeyRound, Layers, LayoutDashboard, LogOut, MessageSquare, Play, Plus, Settings, Share2
+  Compass, Gift, Megaphone, Route, UserRound, KeyRound, Layers, LayoutDashboard, LogOut, MessageSquare, Play, Plus, Settings, Share2
 } from 'lucide-react';
 import { PortalDialog } from '../components/student-dashboard/PortalUI';
 import { WorkspaceActionRow, WorkspaceChrome, type WorkspaceNavGroup } from '../components/student-dashboard/WorkspaceChrome';
@@ -14,6 +14,7 @@ import { StudyTimer } from './StudyTools';
 import { send } from './api';
 import { StudentCertificates } from './Certificates';
 import { StudentReferrals } from './Referrals';
+import { LearningRoadmap,StudentNotices } from './AcademyExperience';
 import { PortfolioHub } from './PortfolioHub';
 import { PortfolioBuilder } from './PortfolioBuilder';
 import { ProfilePage } from './ProfilePage';
@@ -26,13 +27,15 @@ import type { AcademyData } from './academy-types';
 import type { Account, AssessmentQuestion, AssessmentResult, Catalog, Course, CourseSummary, Enrollment, StudentWorkspaceData } from './types';
 import { Button, dateLabel, dateTimeLabel, DialogForm, Empty, ExternalLink, Field, FormError, Input, money, Panel, Status, useApiResource, value } from './ui';
 
-type Page = 'overview' | 'courses' | 'sessions' | 'project' | 'downloads' | 'fees' | 'reviews' | 'messages' | 'certificates' | 'portfolio' | 'profile' | 'explore' | 'course-feedback' | 'referrals';
+type Page = 'overview' | 'courses' | 'sessions' | 'project' | 'downloads' | 'fees' | 'reviews' | 'messages' | 'certificates' | 'portfolio' | 'profile' | 'explore' | 'course-feedback' | 'referrals' | 'roadmap' | 'notices';
 const groups: WorkspaceNavGroup<Page>[] = [
   { label: 'Learning', pages: [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
     { id: 'courses', label: 'My courses', icon: BookOpen },
+    { id: 'roadmap', label: 'My learning roadmap', icon: Route },
     { id: 'explore', label: 'Explore courses', icon: Compass },
     { id: 'sessions', label: 'Live sessions', icon: CalendarDays },
+    { id: 'notices', label: 'News & notices', icon: Megaphone },
     { id: 'project', label: 'Capstone project', icon: Layers },
   ] },
   { label: 'Resources', pages: [
@@ -85,7 +88,7 @@ function StudentOverview({ data, completed, open, navigate }: {
         <div className="pbs-course-feature-image" aria-hidden="true" />
       </section>
       <Panel title="Study tools">
-        <WorkspaceActionRow action={{ label: 'Study timer', detail: 'Start a focus session', icon: Clock, run: () => open({ kind: 'timer' }) }} />
+        <WorkspaceActionRow action={{label:'My learning roadmap',detail:'Your modules, live sessions and course credential',icon:Route,run:()=>navigate('roadmap')}}/><WorkspaceActionRow action={{ label: 'Study timer', detail: 'Start a focus session', icon: Clock, run: () => open({ kind: 'timer' }) }} />
         <WorkspaceActionRow action={{ label: 'Capstone project', detail: 'Submit or review your project', icon: Layers, run: () => navigate('project') }} />
         <WorkspaceActionRow action={{ label: 'BIM assistant', detail: 'Ask about a BIM workflow', icon: Bot, run: () => open({ kind: 'assistant' }) }} />
         <WorkspaceActionRow action={{ label: 'Student documents', detail: 'View and print your student ID', icon: IdCard, run: () => navigate('courses') }} />
@@ -194,6 +197,12 @@ export function StudentWorkspace({ account, onAccount, onSignOut }: {
   const { data, error, refresh } = useApiResource<StudentWorkspaceData>('/student/workspace');
   const catalog = useApiResource<Catalog>('/catalog');
   const academy = useApiResource<AcademyData>('/student/academy');
+  useEffect(() => {
+    const update = () => { if (document.visibilityState === 'visible') void refresh(); };
+    const timer = setInterval(update, 60000);
+    document.addEventListener('visibilitychange', update);
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', update); };
+  }, [refresh]);
   async function refreshAll() { await Promise.all([refresh(), academy.refresh(), catalog.refresh()]); }
   const completed = new Set(data?.completions.map(completion => completion.lessonId));
   const course = dialog && 'courseId' in dialog ? data?.courses.find(course => course.id === dialog.courseId) : undefined;
@@ -227,10 +236,12 @@ export function StudentWorkspace({ account, onAccount, onSignOut }: {
       <FormError error={error || academy.error} />
       {!data && !error && <p className="pbs-muted" role="status">Loading your workspace…</p>}
       {notice && <p className="pbs-form-status pbs-notice" role="status">{notice}</p>}
-      {data && page === 'overview' && <StudentOverview data={data} completed={completed} open={show} navigate={navigate} />}
+      {data && page === 'overview' && <div className="pbs-live-stack"><StudentOverview data={data} completed={completed} open={show} navigate={navigate} /><StudentNotices compact/></div>}
       {data && page === 'courses' && <StudentCourses data={data} account={account} open={show} academy={academy.data} />}
       {data && page === 'fees' && <StudentFees data={data} catalog={catalog.data} open={show} academy={academy.data} onWallet={() => navigate('referrals')} />}
       {data && page === 'referrals' && <StudentReferrals enrollments={data.enrollments} onChanged={refreshAll} />}
+      {page === 'roadmap' && <LearningRoadmap onCourses={()=>navigate('courses')} onCertificates={()=>navigate('certificates')}/>}
+      {page === 'notices' && <StudentNotices/>}
       {data && academy.data && page === 'certificates' && <StudentCertificates data={data} academy={academy.data} onSaved={refreshAll} onFeedback={() => navigate('course-feedback')} />}
       {data && page === 'portfolio' && <PortfolioBuilder account={account} portfolio={data.portfolio} certificates={academy.data?.certificates || []} onSaved={refreshAll} />}
       {page === 'profile' && <ProfilePage account={account} onAccount={onAccount} />}

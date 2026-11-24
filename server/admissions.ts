@@ -58,7 +58,7 @@ export async function accessPackage(db: Database, studentId: string, origin: str
 
 // Delivery records contain status and a digest, never the temporary password or message body.
 export async function deliverAccessEmail(db: WritableDatabase, adminId: string, kit: AccessPackage, requestKey: string, sendMail = sendMicrosoftMail): Promise<AccessDelivery> {
-  if (!await db.prepare('SELECT 1 FROM microsoft_connections WHERE admin_id = ?').get(adminId)) {
+  if (!await db.prepare('SELECT 1 FROM microsoft_mail_connections WHERE admin_id = ?').get(adminId)) {
     return { status: 'unconfigured', error: 'Email was not sent. Connect Microsoft in OneDrive & email to send directly, or use the email draft or WhatsApp button.' };
   }
   const contentHash = createHash('sha256').update(`${kit.studentId}\n${kit.email}\n${kit.body}`).digest('hex');

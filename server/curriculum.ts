@@ -1,4 +1,5 @@
 import type { Express } from 'express';
+import { moduleAccess } from './learning-access.js';
 import { requireAccount } from './auth.js';
 import { type WritableDatabase, makeId, now, transaction } from './database.js';
 import { audit } from './academy-data.js';
@@ -116,14 +117,15 @@ export function mountCurriculum(app: Express, db: WritableDatabase, hosted: bool
       AND NOT EXISTS (SELECT 1 FROM course_controls cc WHERE cc.course_id = t.course_id AND cc.paused = 1)
       AND NOT EXISTS (SELECT 1 FROM enrollment_controls ec WHERE ec.enrollment_id = e.id AND ec.paused = 1)
       ORDER BY t.created_at`).all(account.id, account.id);
-    res.json({ tasks: rows.map(({ submissionId, url, note, feedback, submittedAt, reviewedAt, ...task }) => ({ ...task, published: true, deliverables: JSON.parse(String(task.deliverables)),
-      submission: submissionId ? { id: submissionId, url, note, feedback, submittedAt, reviewedAt } : undefined })) });
+    res.json({ tasks: await Promise.all(rows.map(async({ submissionId, url, note, feedback, submittedAt, reviewedAt, ...task }) => {const access=task.moduleId?await moduleAccess(db,account.id,String(task.moduleId)):{unlocked:true,reason:''};return({ ...task,locked:!access.unlocked,lockReason:access.reason,published: true, deliverables: JSON.parse(String(task.deliverables)),
+      submission: access.unlocked&&submissionId ? { id: submissionId, url, note, feedback, submittedAt, reviewedAt } : undefined });})) });
   }));
   app.post('/api/student/tasks/:id/submit', route(async (req, res) => {
     const account = await requireAccount(db, req, 'student'), url = httpsLink(req.body?.url, 'submission link'), note = field(req.body?.note, 'submission note', 2000, false);
     await transaction(db, async tx => {
-      const task = await tx.prepare('SELECT course_id FROM learning_tasks WHERE id = ? AND published = 1').get(req.params.id);
+      const task = await tx.prepare('SELECT course_id,module_id FROM learning_tasks WHERE id = ? AND published = 1').get(req.params.id);
       if (!task || !await hasCourseAccess(tx, account, String(task.course_id))) throw notFound('This assignment is unavailable.');
+      if(task.module_id&&!(await moduleAccess(tx,account.id,String(task.module_id))).unlocked)throw conflict('This assignment opens with its module.');
       await tx.prepare(`INSERT INTO task_submissions (id, task_id, account_id, url, note, submitted_at) VALUES (?, ?, ?, ?, ?, ?)
         ON CONFLICT(task_id, account_id) DO UPDATE SET url = excluded.url, note = excluded.note, submitted_at = excluded.submitted_at, feedback = '', reviewed_at = ''`)
         .run(makeId(), req.params.id, account.id, url, note, now());

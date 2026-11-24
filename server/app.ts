@@ -6,7 +6,7 @@ import { mountAdmin } from './admin.js';
 import { mountStudent } from './student.js';
 import { mountMedia } from './media.js';
 import { mountAcademy } from './academy.js';
-import { mountMicrosoft } from './microsoft.js';
+import { migrateMicrosoftRoles, mountMicrosoft } from './microsoft.js';
 import { mountCommerce, provisionReferenceCatalog } from './commerce.js';
 import { mountProfiles } from './profiles.js';
 import { mountNotifications } from './notifications.js';
@@ -22,9 +22,16 @@ import { mountDocumentStamp } from './document-stamp.js';
 import { mountMail, mountPublicMail } from './mail.js';
 import { mountReferrals } from './referrals.js';
 import { mountEngagementJobs } from './engagement-jobs.js';
+import { mountBatches } from './batches.js';
+import { mountLearningProgress } from './learning-progress.js';
+import { mountDriveUploads } from './drive-uploads.js';
+import { mountAcademyLife } from './academy-life.js';
+import { mountReferralPayouts } from './referral-payouts.js';
+import { mountAcademyReset } from './academy-reset.js';
+import type { graph } from './microsoft.js';
 import { apiError, field, limitAttempts, RequestError, route } from './http.js';
 
-export async function createPortalApp(hosted = false) {
+export async function createPortalApp(hosted = false, dependencies: {microsoftGraph?:typeof graph} = {}) {
   const app = express();
   const publicOrigin = process.env.PBS_PUBLIC_ORIGIN ? new URL(process.env.PBS_PUBLIC_ORIGIN).origin : '';
   const db = await openDatabase(hosted);
@@ -34,6 +41,7 @@ export async function createPortalApp(hosted = false) {
     await provisionReferenceCatalog(db);
     await migrateLegacyLiveClasses(db);
     await migratePendingAdmissions(db);
+    await migrateMicrosoftRoles(db);
   } catch (error) {
     db.close();
     throw error;
@@ -85,6 +93,12 @@ export async function createPortalApp(hosted = false) {
   mountMail(app, db, hosted);
   mountReferrals(app, db);
   mountEngagementJobs(app, db);
+  mountBatches(app,db);
+  mountLearningProgress(app,db,hosted);
+  mountDriveUploads(app,db,dependencies.microsoftGraph);
+  mountAcademyLife(app,db);
+  mountReferralPayouts(app,db);
+  mountAcademyReset(app,db,hosted);
 
   app.post('/api/ask-pbs', limitAttempts(12, hosted ? db : undefined), route(async (req, res) => {
     await requireAccount(db, req);

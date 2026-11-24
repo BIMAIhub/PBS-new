@@ -11,6 +11,7 @@ import { httpsLink } from './inputs.js';
 import { hasCourseAccess } from './records.js';
 import { isMicrosoftVideo, videoPlayback } from './video.js';
 import { resolveMicrosoftVideo } from './microsoft-video.js';
+import { requireLessonRelease } from './learning-access.js';
 
 const videoTypes = { 'video/mp4': '.mp4', 'video/webm': '.webm' } as const;
 const routes = '/api/admin/courses/:courseId/modules/:moduleId/lessons';
@@ -226,6 +227,7 @@ export function mountMedia(app: Express, db: WritableDatabase, hosted: boolean, 
     const lesson = await db.prepare(`SELECT l.source_url AS sourceUrl, m.course_id AS courseId
       FROM lessons l JOIN modules m ON m.id = l.module_id WHERE l.id = ?`).get(req.params.id);
     if (!lesson || !await hasCourseAccess(db, account, String(lesson.courseId))) throw notFound('This video is unavailable.');
+    await requireLessonRelease(db,account,req.params.id);
     if (lesson.sourceUrl && isMicrosoftVideo(String(lesson.sourceUrl))) await microsoftVideo(db, String(lesson.courseId), req.params.id, String(lesson.sourceUrl));
     res.json({ ready: true });
   }));
@@ -236,6 +238,7 @@ export function mountMedia(app: Express, db: WritableDatabase, hosted: boolean, 
       FROM lessons l JOIN modules m ON m.id = l.module_id WHERE l.id = ?`).get(req.params.id) as
       { fileName: string; sourceUrl: string; contentType: string; courseId: string } | undefined;
     if (!lesson || !await hasCourseAccess(db, account, lesson.courseId)) throw notFound('This video is unavailable.');
+    await requireLessonRelease(db,account,req.params.id);
     if (!lesson.fileName && lesson.sourceUrl && isMicrosoftVideo(lesson.sourceUrl)) {
       // A video-element redirect stays inside the player and lets Microsoft serve
       // byte ranges for seeking without buffering an entire lesson in Vercel.

@@ -135,7 +135,7 @@ test('PBS document settings, verified referrals, wallet ledger and mail campaign
       const token=String((await db.prepare('SELECT unsubscribe_token FROM mail_contacts WHERE email=?').get('optedin@example.invalid'))!.unsubscribe_token);
       const unsubscribe=await fetch(`${base}/mail/unsubscribe/${token}`,{method:'POST'});assert.equal(unsubscribe.status,200);
       assert.equal((await db.prepare('SELECT unsubscribed FROM mail_contacts WHERE email=?').get('optedin@example.invalid'))!.unsubscribed,1);
-      await db.prepare('INSERT INTO microsoft_connections VALUES (?,?,?,?,?)').run(adminId,'isolated-sender@example.invalid','QA sender','not-a-real-token-cache',new Date().toISOString());
+      await db.prepare('INSERT INTO microsoft_mail_connections VALUES (?,?,?,?,?)').run(adminId,'isolated-sender@example.invalid','QA sender','not-a-real-token-cache',new Date().toISOString());
       const sent=await req(admin,`/admin/mail/campaigns/${draft.id}/send`,{revision:draft.revision});assert.equal(sent.skipped,1);assert.equal(sent.accepted,0);
       assert.match(String((await db.prepare('SELECT body FROM mail_outbox WHERE campaign_id=?').get(draft.id))!.body),/Verified QA offer text/);
       await req(admin,`/admin/mail/campaigns/${draft.id}/send`,{revision:draft.revision});assert.equal((await db.prepare('SELECT COUNT(*) AS n FROM mail_outbox WHERE campaign_id=?').get(draft.id))!.n,1);

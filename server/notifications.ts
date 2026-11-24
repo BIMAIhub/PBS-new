@@ -2,6 +2,7 @@ import type { Express } from 'express';
 import { requireAccount } from './auth.js';
 import { type Database, type WritableDatabase, now } from './database.js';
 import { field, notFound, route } from './http.js';
+import { ensureNoticeNotifications } from './academy-life.js';
 
 export async function syncNotifications(db: Database, account: { id: string; role: string }) {
   const insert = `INSERT OR IGNORE INTO notifications (id, account_id, title, body, kind, page, created_at)`;
@@ -21,6 +22,7 @@ export async function syncNotifications(db: Database, account: { id: string; rol
     await db.prepare(`${insert} SELECT 'task-submission:' || s.id || ':' || s.submitted_at || ':' || ?, ?, 'Assignment submitted', a.name || ' submitted ' || t.title,
       'assignment', 'curriculum', s.submitted_at FROM task_submissions s JOIN learning_tasks t ON t.id = s.task_id JOIN accounts a ON a.id = s.account_id WHERE s.reviewed_at = ''`).run(account.id, account.id);
   } else {
+    await ensureNoticeNotifications(db,account.id);
     await db.prepare(`${insert} SELECT 'course-review:' || f.id || ':' || f.reviewed_at, ?, 'PBS reviewed your course feedback', c.title,
       'feedback', 'course-feedback', f.reviewed_at FROM course_feedback f JOIN courses c ON c.id = f.course_id WHERE f.account_id = ? AND f.reviewed_at <> ''`).run(account.id, account.id);
     const knownLive = new Set((await db.prepare("SELECT id FROM notifications WHERE account_id = ? AND id LIKE 'live-%'").all(account.id)).map(item => String(item.id)));
@@ -28,6 +30,7 @@ export async function syncNotifications(db: Database, account: { id: string; rol
       FROM live_classes l JOIN enrollments e ON e.course_id = l.course_id WHERE e.account_id = ? AND e.status = 'approved'
       AND NOT EXISTS (SELECT 1 FROM course_controls cc WHERE cc.course_id = e.course_id AND cc.paused = 1)
       AND NOT EXISTS (SELECT 1 FROM enrollment_controls ec WHERE ec.enrollment_id = e.id AND ec.paused = 1)
+      AND (NOT EXISTS(SELECT 1 FROM live_class_batches cb WHERE cb.class_id=l.id) OR EXISTS(SELECT 1 FROM live_class_batches cb JOIN enrollment_batches eb ON eb.batch_id=cb.batch_id WHERE cb.class_id=l.id AND eb.enrollment_id=e.id))
       AND l.published = 1 AND (l.ends_at >= ? OR l.status = 'cancelled') ORDER BY l.starts_at LIMIT 100`).all(account.id, new Date(Date.now() - 24 * 60 * 60_000).toISOString());
     for (const session of liveClasses) {
       const time = new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kolkata' }).format(new Date(String(session.starts_at)));

@@ -4,11 +4,12 @@ import { DatabaseSync, type SQLOutputValue } from 'node:sqlite';
 import type { Client, Transaction } from '@libsql/client/web';
 import { randomUUID } from 'node:crypto';
 import { engagementSchema } from './engagement-schema.js';
+import { academyUpgradeSchema } from './academy-upgrade-schema.js';
 
 export const dataDirectory = path.resolve(process.env.PBS_DATA_DIR || 'data');
 export const videoDirectory = path.join(dataDirectory, 'videos');
 
-const schema = engagementSchema + `
+const schema = academyUpgradeSchema + engagementSchema + `
     CREATE TABLE IF NOT EXISTS lesson_progress (
       account_id TEXT NOT NULL REFERENCES accounts(id), lesson_id TEXT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
       source_key TEXT NOT NULL, position REAL NOT NULL DEFAULT 0, duration REAL NOT NULL DEFAULT 0,

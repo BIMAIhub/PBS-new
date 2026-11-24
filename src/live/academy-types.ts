@@ -23,5 +23,6 @@ export interface CourseStorage { courseId: string; driveId: string; itemId: stri
 export interface IntegrationStatus {
   encryptionReady: boolean; configured: boolean; clientId: string; tenant: string; secretSaved: boolean;
   redirectUri: string; connected?: { email: string; name: string; connectedAt: string };
+  mail: {clientId:string;tenant:string;secretSaved:boolean;configured:boolean;connected?:{email:string;name:string;connectedAt:string}};
   storage: CourseStorage[];
 }

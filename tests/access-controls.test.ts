@@ -1,3 +1,4 @@
+import { previouslyWatched } from './viewing-fixtures.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -46,6 +47,7 @@ test('course assignment, payment choices and account lifecycle use real records 
         await req(client, '/auth/password', { current: record.temporaryPassword, next: password });
       }
       pending = await req(visitor, '/enrollments', { courseId, name: 'Isolated applicant', email: 'controls-applicant@example.invalid', phone: '9899999993', amount: 0 }, 'POST', 201);
+      await previouslyWatched(db,first.student.id,lessonId);
       await req(student, `/student/lessons/${lessonId}/completion`, { completed: true }, 'POST', 204);
       await req(student, '/student/portfolio', { headline: 'Isolated QA portfolio', bio: 'Temporary record', projectUrl: 'https://example.org/qa', published: true }, 'PATCH');
     });

@@ -6,6 +6,7 @@ import { processMailQueue } from './mail.js';
 import { portalOrigin } from './microsoft.js';
 import { reconcileReferrals } from './referral-data.js';
 import { notifyReferralCredits } from './referrals.js';
+import { cleanupPrivateFiles } from './private-files.js';
 
 export function mountEngagementJobs(app: Express, db: WritableDatabase) {
   app.get('/api/jobs/academy', route(async (req, res) => {
@@ -16,6 +17,7 @@ export function mountEngagementJobs(app: Express, db: WritableDatabase) {
     const rewards = await reconcileReferrals(db);
     await notifyReferralCredits(db, rewards, portalOrigin(req));
     const mail = await processMailQueue(db, undefined, 20);
-    res.json({ credited: rewards.length, mail });
+    const privateFiles = await cleanupPrivateFiles(db);
+    res.json({ credited: rewards.length, mail, privateFiles });
   }));
 }

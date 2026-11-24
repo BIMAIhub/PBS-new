@@ -64,7 +64,7 @@ export function mountAcademy(app: Express, db: WritableDatabase, hosted: boolean
       }
       const enrollment = await enrollmentById(tx, req.params.id);
       if (enrollment.status !== 'approved' || enrollment.paid >= enrollment.total) throw conflict('There is no approved outstanding balance to remind.');
-      if (channel === 'email' && !await tx.prepare('SELECT 1 FROM microsoft_connections WHERE admin_id = ?').get(admin.id)) throw conflict('Connect Microsoft to send email reminders, or choose portal message.');
+      if (channel === 'email' && !await tx.prepare('SELECT 1 FROM microsoft_mail_connections WHERE admin_id = ?').get(admin.id)) throw conflict('Connect your Microsoft email account to send reminders, or choose portal message.');
       const date = now();
       await tx.prepare('INSERT INTO payment_reminders VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(id, enrollment.id, requestKey, channel, channel === 'portal' ? 'posted' : 'pending', body, date, '');
       await tx.prepare("INSERT INTO messages VALUES (?, ?, 'admin', ?, ?, ?)").run(makeId(), enrollment.studentId, 'Course fee reminder', body, date);

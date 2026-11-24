@@ -4,9 +4,10 @@ import type { Course } from './types';
 import type { CoursePage, CurriculumDraft, LearningTask } from './experience-types';
 import { messageFrom, send } from './api';
 import { Button, dateLabel, DialogForm, Empty, ExternalLink, Field, FormError, Input, Panel, Status, useApiResource, value } from './ui';
+import { AssignmentReviewFiles } from './AssignmentReviewFiles';
 import { PortalDialog } from '../components/student-dashboard/PortalUI';
 
-type Submission = { id: string; studentName: string; taskTitle: string; courseTitle: string; url: string; note: string; feedback: string; submittedAt: string; reviewedAt: string };
+type Submission = { id: string; taskId:string; studentName: string; taskTitle: string; courseTitle: string; url: string; note: string; feedback: string; submittedAt: string; reviewedAt: string };
 type SavedDraft = { id: string; courseId: string; courseTitle: string; content: CurriculumDraft | null; status: string; model: string; error: string; createdAt: string };
 export function CurriculumAdmin({ courses, onSaved }: { courses: Course[]; onSaved: () => Promise<unknown> }) {
   const { data, error, refresh } = useApiResource<{ aiConfigured: boolean; tasks: LearningTask[]; submissions: Submission[]; drafts: SavedDraft[] }>('/admin/curriculum');
@@ -28,7 +29,7 @@ export function CurriculumAdmin({ courses, onSaved }: { courses: Course[]; onSav
     {draft?.content && <DraftReview draft={draft} onClose={() => setDraft(undefined)} onSaved={async () => { await saved(); setDraft(undefined); }} />}
     {task && course && <TaskForm course={course} task={task === 'new' ? undefined : task} onClose={() => setTask(undefined)} onSaved={async () => { await saved(); setTask(undefined); }} />}
     {page && course && <CoursePageForm course={course} onClose={() => setPage(false)} onSaved={async () => { await saved(); setPage(false); }} />}
-    {review && <DialogForm title="Assignment feedback" detail={`${review.studentName} · ${review.taskTitle}`} submit="Publish feedback" onClose={() => setReview(undefined)} onSubmit={async form => { await send(`/admin/task-submissions/${review.id}`, { feedback: value(form, 'feedback') }, 'PATCH'); setReview(undefined); await saved(); }}><ExternalLink href={review.url}>Open submission</ExternalLink>{review.note && <p className="pbs-muted">{review.note}</p>}<Field label="Feedback"><textarea name="feedback" maxLength={4000} rows={5} defaultValue={review.feedback} required /></Field></DialogForm>}
+    {review && <DialogForm title="Assignment feedback" detail={`${review.studentName} · ${review.taskTitle}`} submit="Publish feedback" onClose={() => setReview(undefined)} onSubmit={async form => { await send(`/admin/task-submissions/${review.id}`, { feedback: value(form, 'feedback') }, 'PATCH'); setReview(undefined); await saved(); }}><ExternalLink href={review.url}>Open submission</ExternalLink><AssignmentReviewFiles taskId={review.taskId}/>{review.note && <p className="pbs-muted">{review.note}</p>}<Field label="Feedback"><textarea name="feedback" maxLength={4000} rows={5} defaultValue={review.feedback} required /></Field></DialogForm>}
   </div>;
 }
 function DraftReview({ draft, onClose, onSaved }: { draft: SavedDraft; onClose: () => void; onSaved: () => Promise<void> }) {
