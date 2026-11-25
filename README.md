@@ -258,8 +258,10 @@ Configure a new private **CRON_SECRET** on the host for the protected `/api/jobs
 
 ### Edit and organize course modules
 
-In **Courses & videos → Curriculum and materials**, use **Edit module** to rename a module. Drag its handle to reorder it, use the up/down buttons, or focus the handle and use the arrow keys. The order saves automatically and is shared by the public outline and student classroom. Concurrent edits are checked before saving.
+In **Courses & videos → Curriculum and materials**, use **Edit module** to rename a module. Drag its handle to reorder it; keyboard users can focus the handle and use the arrow keys. There are no separate up/down buttons. The order saves automatically and is shared by the public outline and student classroom. Concurrent edits are checked before saving.
 
 **Edit video** changes a lesson's title, notes, duration or video source. Choose **Keep current video** for text edits, **Paste link** for a replacement link, or an upload option for a replacement file. **Move video** appends the same lesson to another module in the same course, retaining its link, owner, watch progress and completion records. It follows the destination module's unlock schedule; moving does not rename or move the underlying OneDrive file.
 
-**Delete module** only removes an empty module after confirmation. Move its videos and assignment briefs first; unfinished uploads also block deletion. The server rechecks these conditions inside the deletion transaction. This upgrade adds no schema migration, data reset, student seed or account/password change.
+**Remove video** removes the chosen lesson and its dependent watch/completion records after confirmation. **Delete module** can remove a populated module and all of its video entries after a confirmation showing the current video count. The server checks the exact video IDs again inside the transaction, so a newly added video cannot be deleted by an outdated confirmation. Linked assignments are retained as course assignments, preserving their submissions and reviews. Unfinished uploads still block module deletion until they finish or expire.
+
+These actions remove course entries; original OneDrive, private Blob and local video files stay in storage because they may be shared by another lesson. Removal is limited to the selected content, never accounts, credentials, fees or other courses. Deploying this update adds no schema migration, reset or seeded records, and does not itself delete any live content.

@@ -26,7 +26,7 @@ import { BatchStudio } from './Batches';
 import { NoticesAdmin } from './AcademyExperience';
 import { DataReset } from './DataReset';
 import { AdminUploadProvider } from './AdminUploads';
-import { DeleteModuleForm, ModuleEditor, MoveVideoForm } from './ModuleEditor';
+import { DeleteModuleForm, ModuleEditor, MoveVideoForm, RemoveVideoForm } from './ModuleEditor';
 import { CurriculumAdmin } from './CurriculumAdmin';
 import { NotificationCenter } from './Notifications';
 import { BrandingAdmin } from './BrandingAdmin';
@@ -71,7 +71,7 @@ type Dialog = AccessControlDialog
   | { kind: 'assessment' | 'preview'; course: Course }
   | { kind: 'module'; course: Course; module?: Module }
   | { kind: 'delete-module'; course: Course; module: Module }
-  | { kind: 'move-video'; course: Course; module: Module; lesson: Lesson }
+  | { kind: 'move-video' | 'remove-video'; course: Course; module: Module; lesson: Lesson }
   | { kind: 'video'; course: Course; moduleId?: string; lesson?: Lesson }
   | { kind: 'link'; course: Course; type: 'session' | 'resource' }
   | { kind: 'enroll'; student?: StudentRecord; courseId?: string }
@@ -154,6 +154,7 @@ function CourseManager({ courses, open, onSessions, onChanged }: { courses: Cour
             remove: module => open({ kind: 'delete-module', course, module }),
             video: (module, lesson) => open({ kind: 'video', course, moduleId: module.id, lesson }),
             move: (module, lesson) => open({ kind: 'move-video', course, module, lesson }),
+            removeVideo: (module, lesson) => open({ kind: 'remove-video', course, module, lesson }),
           }}/>
           <div className="pbs-actions">
             <Button quiet onClick={() => open({ kind: 'link', course, type: 'resource' })}>Add resource</Button>
@@ -332,8 +333,9 @@ export function AdminWorkspace({ account, onAccount, onSignOut }: {
     {dialog?.kind === 'payment-settings' && academy.data && <PaymentSettingsForm payment={academy.data.payment} onClose={close} onSaved={() => saved('Student payment destination saved.')} />}
     {dialog?.kind === 'course' && <CourseForm course={dialog.course} onClose={close} onSaved={() => { navigate('courses'); return saved('Course saved.'); }} />}
     {dialog?.kind === 'module' && <ModuleForm course={dialog.course} module={dialog.module} onClose={close} onSaved={() => saved(dialog.module ? 'Module updated.' : 'Module added.')} />}
-    {dialog?.kind === 'delete-module' && <DeleteModuleForm course={dialog.course} module={dialog.module} onClose={close} onSaved={() => saved('Empty module deleted.')} />}
+    {dialog?.kind === 'delete-module' && <DeleteModuleForm course={dialog.course} module={dialog.module} onClose={close} onSaved={() => saved('Module and its video lessons deleted.')} />}
     {dialog?.kind === 'move-video' && <MoveVideoForm course={dialog.course} module={dialog.module} lesson={dialog.lesson} onClose={close} onSaved={() => saved('Video moved.')} />}
+    {dialog?.kind === 'remove-video' && <RemoveVideoForm course={dialog.course} module={dialog.module} lesson={dialog.lesson} onClose={close} onSaved={() => saved('Video removed from the course.')} />}
     {dialog?.kind === 'video' && <VideoForm course={dialog.course} moduleId={dialog.moduleId} lesson={dialog.lesson} onClose={close} onSaved={() => saved(dialog.lesson ? 'Video lesson updated.' : 'Video lesson added.')} />}
     {dialog?.kind === 'link' && <CourseLinkForm course={dialog.course} kind={dialog.type} onClose={close} onSaved={() => saved('Course materials saved.')} />}
     {dialog?.kind === 'assessment' && <AssessmentForm course={dialog.course} onClose={close} onSaved={() => saved('Assessment published.')} />}

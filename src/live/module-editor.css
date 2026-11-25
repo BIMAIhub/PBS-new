@@ -3,7 +3,7 @@
 .pbs-module-sort-list { display:grid; gap:12px; padding:0; margin:0; list-style:none; }
 .pbs-module-sort-item { position:relative; list-style:none; }
 .pbs-module-editor-header { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
-.pbs-module-drag,.pbs-module-arrow { display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; min-width:32px; min-height:36px; color:var(--studio-accent); border:1px solid var(--studio-border); border-radius:8px; }
+.pbs-module-drag { display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; min-width:32px; min-height:36px; color:var(--studio-accent); border:1px solid var(--studio-border); border-radius:8px; }
 .pbs-module-drag { touch-action:none; cursor:grab; user-select:none; }
 .pbs-module-drag:active { cursor:grabbing; }
 .pbs-module-editor :is(button:disabled) { opacity:.45; cursor:default; }

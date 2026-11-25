@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createElement } from 'react';
@@ -36,6 +36,25 @@ test('course content editing preserves existing media, progress and academy reco
   };
   const order = async () => (await req(admin, '/admin/workspace')).courses.find((c: any) => c.id === course).modules.map((m: any) => m.id);
   const base = () => `/admin/courses/${course}/modules`;
+  async function seedPlayback(id: string) {
+    const { videoSourceKey } = await import('../server/video.js');
+    const row = await db.prepare('SELECT source_url,file_name FROM lessons WHERE id=?').get(id);
+    const key = videoSourceKey(String(row!.source_url), String(row!.file_name)), at = new Date().toISOString();
+    await previouslyWatched(db, studentId, id);
+    await db.prepare('INSERT INTO completions VALUES (?,?,?)').run(studentId, id, at);
+    await db.prepare('INSERT INTO lesson_video_owners VALUES (?,?)').run(id, adminId);
+    await db.prepare('INSERT INTO lesson_media_durations VALUES (?,?,?)').run(id, key, 100);
+    await db.prepare('INSERT INTO lesson_progress VALUES (?,?,?,?,?,?,?,?,?)').run(studentId, id, key, 80, 100, 'existing-revision', 'existing-writer', 1, at);
+    await db.prepare('INSERT INTO lesson_watch_sessions VALUES (?,?,?,?,?,?,?,?)').run(crypto.randomUUID(), studentId, id, key, 100, 80, Date.now(), 1);
+    return key;
+  }
+  async function assertRemoved(id: string) {
+    assert.equal(await db.prepare('SELECT 1 FROM lessons WHERE id=?').get(id), undefined);
+    for (const table of ['lesson_watch_sessions','lesson_watch_totals','lesson_media_durations','lesson_progress','lesson_video_owners','completions','video_uploads']) {
+      assert.equal((await db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE lesson_id=?`).get(id))!.n, 0, `${table} still refers to removed lesson`);
+    }
+    assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM drive_uploads WHERE kind='video' AND attached_id=?").get(id))!.n, 0);
+  }
   try {
     await t.test('isolated setup records an existing video, learner and configured course folder', async () => {
       adminId = (await req(admin, '/auth/login', { identifier: process.env.PBS_BOOTSTRAP_ADMIN_EMAIL, password: process.env.PBS_BOOTSTRAP_ADMIN_PASSWORD, role: 'admin' })).account.id;
@@ -111,7 +130,7 @@ test('course content editing preserves existing media, progress and academy reco
       assert.equal((await db.prepare('SELECT source_url FROM lessons WHERE id=?').get(lesson))!.source_url, 'https://example.org/replacement.mp4');
       assert.equal((await db.prepare('SELECT COUNT(*) AS n FROM lessons').get())!.n, 1);
     });
-    await t.test('deletion never cascades into videos, assignments or active upload sessions', async () => {
+    await t.test('module removal requires explicit content confirmation and blocks unfinished uploads', async () => {
       const deletion = { confirm: true, expectedTitle: 'Coordination' };
       await req(admin, `${base()}/${second}`, deletion, 'DELETE', 409);
       await db.prepare('INSERT INTO learning_tasks (id,course_id,module_id,title,brief,created_at) VALUES (?,?,?,?,?,?)').run('existing-task', course, empty, 'Existing assignment', 'Keep this task', new Date().toISOString());
@@ -132,12 +151,72 @@ test('course content editing preserves existing media, progress and academy reco
       assert.ok(await db.prepare('SELECT 1 FROM learning_tasks WHERE id=?').get('existing-task'));
       await req(admin, `${base()}/${empty}/lessons`, { title: 'Late request', url: 'https://example.org/late.mp4' }, 'POST', 404);
     });
-    await t.test('the editor exposes named handles, keyboard alternatives, video edits and moves', async () => {
+    await t.test('removing one video validates the latest item and leaves shared source files and other lessons intact', async () => {
+      const retained = await db.prepare('SELECT * FROM lessons WHERE id=?').get(lesson);
+      const retainedWatch = await db.prepare('SELECT * FROM lesson_watch_totals WHERE lesson_id=?').all(lesson);
+      const id = (await req(admin, `${base()}/${first}/lessons`, { title: 'Remove this video', duration: '10 min', url: 'https://example.org/shared.mp4' }, 'POST', 201)).id;
+      const { videoDirectory } = await import('../server/database.js');
+      const file = `${crypto.randomUUID()}.mp4`, location = path.join(videoDirectory, file);
+      writeFileSync(location, Buffer.from('000000186674797069736f6d0000000069736f6d6d703432', 'hex'));
+      await db.prepare("UPDATE lessons SET source_url='',file_name=?,content_type='video/mp4' WHERE id=?").run(file, id);
+      const sharedId = crypto.randomUUID();
+      await db.prepare('INSERT INTO lessons VALUES (?,?,?,?,?,?,?,?,?)').run(sharedId, first, 'Keep shared file lesson', '', '', '', file, 'video/mp4', 2);
+      const key = await seedPlayback(id), url = `/admin/courses/${course}/lessons/${id}`;
+      const body = { confirm: true, expectedModuleId: first, expectedTitle: 'Remove this video', expectedMediaKey: key };
+      await db.prepare('INSERT INTO video_uploads VALUES (?,?,?,?,?,?,?)').run('removed-video-upload', adminId, first, 'video/mp4', 24, Date.now() + 10000, id);
+      await db.prepare('INSERT INTO drive_uploads VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run('completed-video-upload',adminId,adminId,'video',course,'',first,'','existing-drive','existing-folder','existing-item','existing.mp4',24,'video/mp4','',Date.now()-1,id,new Date().toISOString());
+      await req(visitor, url, body, 'DELETE', 401); await req(student, url, body, 'DELETE', 403);
+      await req(admin, `/admin/courses/${otherCourse}/lessons/${id}`, body, 'DELETE', 404);
+      await req(admin, url, { ...body, confirm: false }, 'DELETE', 400);
+      await req(admin, url, { ...body, expectedModuleId: second }, 'DELETE', 409);
+      await req(admin, url, { ...body, expectedMediaKey: 'old-video' }, 'DELETE', 409);
+      await req(admin, url, body, 'DELETE', 204); await assertRemoved(id);
+      assert.ok(existsSync(location), 'Deleting a course entry must keep its original file');
+      assert.ok(await db.prepare('SELECT 1 FROM lessons WHERE id=?').get(sharedId));
+      assert.deepEqual(await db.prepare('SELECT * FROM lessons WHERE id=?').get(lesson), retained);
+      assert.deepEqual(await db.prepare('SELECT * FROM lesson_watch_totals WHERE lesson_id=?').all(lesson), retainedWatch);
+      await req(student, `/lessons/${id}/video`, undefined, 'GET', 404);
+    });
+    await t.test('a populated module can be deleted atomically while assignments and their reviews are kept', async () => {
+      const id = (await req(admin, base(), { title: 'Remove populated module' }, 'POST', 201)).id;
+      const videos: string[] = [];
+      for (const title of ['First removed recording', 'Second removed recording']) {
+        const video = (await req(admin, `${base()}/${id}/lessons`, { title, url: 'https://example.org/kept-original.mp4' }, 'POST', 201)).id;
+        videos.push(video); await seedPlayback(video);
+      }
+      await db.prepare('INSERT INTO module_details VALUES (?,?,?)').run(id, 'Removed module description', '[]');
+      await db.prepare('INSERT INTO module_releases VALUES (?,?,?,?,?,?,?)').run(id, '', 'manual', '', '', 0, 'removed-rule');
+      await db.prepare('INSERT INTO learning_tasks (id,course_id,module_id,title,brief,published,created_at) VALUES (?,?,?,?,?,1,?)').run('keep-submitted-task', course, id, 'Keep this assignment', 'Keep brief and submitted work', new Date().toISOString());
+      await db.prepare('INSERT INTO task_submissions (id,task_id,account_id,url,note,feedback,submitted_at,reviewed_at) VALUES (?,?,?,?,?,?,?,?)').run('keep-reviewed-submission','keep-submitted-task',studentId,'https://example.org/student-work','Existing work','Existing review',new Date().toISOString(),new Date().toISOString());
+      const task = await db.prepare('SELECT * FROM learning_tasks WHERE id=?').get('keep-submitted-task');
+      const submission = await db.prepare('SELECT * FROM task_submissions WHERE id=?').get('keep-reviewed-submission');
+      const retained = await db.prepare('SELECT * FROM lessons WHERE id=?').get(lesson);
+      const url = `${base()}/${id}`, usage = await req(admin, `${url}/usage`);
+      const body = { confirm: true, expectedTitle: usage.title, includeVideos: true, expectedLessonIds: usage.lessonIds, keepAssignments: true };
+      assert.equal(usage.lessons, 2); assert.equal(usage.assignments, 1);
+      await req(student, url, body, 'DELETE', 403);
+      await req(admin, url, { ...body, expectedLessonIds: [videos[0]] }, 'DELETE', 409);
+      await req(admin, url, { ...body, expectedLessonIds: [videos[0], videos[0]] }, 'DELETE', 400);
+      await req(admin, url, { ...body, keepAssignments: false }, 'DELETE', 409);
+      for (const video of videos) assert.ok(await db.prepare('SELECT 1 FROM lessons WHERE id=?').get(video));
+      await req(admin, url, body, 'DELETE', 204);
+      assert.equal(await db.prepare('SELECT 1 FROM modules WHERE id=?').get(id), undefined);
+      assert.equal(await db.prepare('SELECT 1 FROM module_releases WHERE module_id=?').get(id), undefined);
+      assert.equal(await db.prepare('SELECT 1 FROM module_details WHERE module_id=?').get(id), undefined);
+      for (const video of videos) await assertRemoved(video);
+      assert.deepEqual({ ...await db.prepare('SELECT * FROM learning_tasks WHERE id=?').get('keep-submitted-task') }, { ...task, module_id: '' });
+      assert.deepEqual(await db.prepare('SELECT * FROM task_submissions WHERE id=?').get('keep-reviewed-submission'), submission);
+      assert.deepEqual(await db.prepare('SELECT * FROM lessons WHERE id=?').get(lesson), retained);
+      const publicOutline = await req(visitor, `/catalog/${course}`);
+      assert.ok(!publicOutline.modules.some((module: any) => module.id === id));
+    });
+    await t.test('the editor keeps drag handles and video controls without up/down buttons', async () => {
       const { ModuleEditor } = await import('../src/live/ModuleEditor.js');
       const details = (await req(admin, '/admin/workspace')).courses.find((c: any) => c.id === course);
-      const html = renderToStaticMarkup(createElement(ModuleEditor, { course: details, actions: { edit() {}, remove() {}, video() {}, move() {} }, onChanged: async () => {} }));
-      assert.match(html, /Reorder module 1/); assert.match(html, /Move Coordination down/);
-      for (const label of ['Edit module','Delete module','Edit video','Move video']) assert.ok(html.includes(label));
+      const html = renderToStaticMarkup(createElement(ModuleEditor, { course: details, actions: { edit() {}, remove() {}, video() {}, move() {}, removeVideo() {} }, onChanged: async () => {} }));
+      assert.match(html, /Reorder module 1/); assert.doesNotMatch(html, /pbs-module-arrow|up\/down buttons/);
+      assert.doesNotMatch(html, /aria-label="Move [^"]+ (up|down)"/);
+      for (const label of ['Edit module','Delete module','Edit video','Move video','Remove video']) assert.ok(html.includes(label));
     });
     await t.test('accounts, password hashes, settings, enrollments, receipts and Microsoft mappings remain identical', async () => {
       assert.deepEqual(await snapshot(), preserved);

@@ -3,6 +3,7 @@ import { requireAccount } from './auth.js';
 import { audit } from './academy-data.js';
 import { type Database, type WritableDatabase, transaction } from './database.js';
 import { badRequest, conflict, field, notFound, route } from './http.js';
+import { videoSourceKey } from './video.js';
 
 async function moduleInCourse(db: Database, courseId: string, moduleId: string) {
   const module = await db.prepare('SELECT id,title FROM modules WHERE id=? AND course_id=?').get(moduleId, courseId);
@@ -12,21 +13,38 @@ async function moduleInCourse(db: Database, courseId: string, moduleId: string) 
 
 async function moduleUsage(db: Database, moduleId: string) {
   const count = async (sql: string, ...args: (string | number)[]) => Number((await db.prepare(sql).get(...args))?.n || 0);
+  const lessonIds = (await db.prepare('SELECT id FROM lessons WHERE module_id=? ORDER BY position,id').all(moduleId)).map(row => String(row.id));
   return {
-    lessons: await count('SELECT COUNT(*) AS n FROM lessons WHERE module_id=?', moduleId),
+    lessons: lessonIds.length,
+    lessonIds,
     assignments: await count('SELECT COUNT(*) AS n FROM learning_tasks WHERE module_id=?', moduleId),
     uploads: await count("SELECT COUNT(*) AS n FROM video_uploads WHERE module_id=? AND lesson_id='' AND expires_at>?", moduleId, Date.now())
       + await count("SELECT COUNT(*) AS n FROM drive_uploads WHERE module_id=? AND kind='video' AND attached_id='' AND (expires_at>? OR created_at>?)", moduleId, Date.now(), new Date(Date.now() - 86400000).toISOString()),
   };
 }
 
-function ids(value: unknown): string[] {
+function ids(value: unknown, kind: 'module' | 'video' = 'module'): string[] {
   if (!Array.isArray(value) || value.length > 2000 || value.some(id => typeof id !== 'string' || !id || id.length > 80) || new Set(value).size !== value.length) {
-    throw badRequest('Include every module once in the new order.');
+    throw badRequest(kind === 'video' ? 'Confirm the current list of videos before deleting this module.' : 'Include every module once in the new order.');
   }
   return value;
 }
 const same = (a: string[], b: string[]) => a.length === b.length && a.every((id, i) => id === b[i]);
+
+async function removeLessons(db: Database, lessonIds: string[]) {
+  // Only remove this course entry and its dependent playback records. Original
+  // OneDrive/Blob/local files may be shared by other entries and must stay intact.
+  for (let start = 0; start < lessonIds.length; start += 200) {
+    const batch = lessonIds.slice(start, start + 200), placeholders = batch.map(() => '?').join(',');
+    for (const table of ['lesson_watch_sessions', 'lesson_watch_totals', 'lesson_media_durations']) {
+      await db.prepare(`DELETE FROM ${table} WHERE lesson_id IN (${placeholders})`).run(...batch);
+    }
+    await db.prepare(`DELETE FROM video_uploads WHERE lesson_id IN (${placeholders})`).run(...batch);
+    await db.prepare(`DELETE FROM drive_uploads WHERE kind='video' AND attached_id IN (${placeholders})`).run(...batch);
+    // Foreign keys cascade only the selected lessons' owners, resume and completion rows.
+    await db.prepare(`DELETE FROM lessons WHERE id IN (${placeholders})`).run(...batch);
+  }
+}
 
 export function mountCourseContent(app: Express, db: WritableDatabase) {
   const base = '/api/admin/courses/:courseId/modules';
@@ -63,18 +81,39 @@ export function mountCourseContent(app: Express, db: WritableDatabase) {
 
   app.delete(`${base}/:moduleId`, route(async (req, res) => {
     const admin = await requireAccount(db, req, 'admin');
-    if (req.body?.confirm !== true) throw badRequest('Confirm deletion of this empty module.');
+    if (req.body?.confirm !== true) throw badRequest('Confirm deletion of this module.');
     await transaction(db, async tx => {
       const module = await moduleInCourse(tx, req.params.courseId, req.params.moduleId);
       if (req.body?.expectedTitle !== module.title) throw conflict('This module was edited elsewhere. Refresh before deleting it.');
       const usage = await moduleUsage(tx, req.params.moduleId);
-      if (usage.lessons) throw conflict('Move every video to another module before deleting this module. No videos have been deleted.');
-      if (usage.assignments) throw conflict('Move the assignments to another module in Assignments before deleting this module. No assignments have been deleted.');
+      if (usage.lessons && req.body?.includeVideos !== true) throw conflict('Confirm removal of this module and all of its videos.');
+      if (usage.lessons || req.body?.expectedLessonIds !== undefined) {
+        const expectedLessons = ids(req.body?.expectedLessonIds, 'video');
+        if (!same([...usage.lessonIds].sort(), [...expectedLessons].sort())) throw conflict('The videos in this module changed. Reopen the confirmation before deleting it.');
+      }
+      if (usage.assignments && req.body?.keepAssignments !== true) throw conflict('Confirm keeping the module assignments as course assignments before deleting this module.');
       if (usage.uploads) throw conflict('This module has an unfinished upload. Finish it or wait for its upload session to expire before deleting the module.');
-      // Deletion is deliberately limited to an empty module and its own descriptive/release metadata.
+      await removeLessons(tx, usage.lessonIds);
+      // Preserve assignment identities, submissions and reviews when their module is removed.
+      await tx.prepare("UPDATE learning_tasks SET module_id='' WHERE module_id=? AND course_id=?").run(module.id, req.params.courseId);
       await tx.prepare('DELETE FROM module_releases WHERE module_id=?').run(module.id);
       await tx.prepare('DELETE FROM modules WHERE id=?').run(module.id);
-      await audit(tx, admin.id, 'Empty module deleted', String(module.id), String(module.title));
+      await audit(tx, admin.id, 'Module deleted', String(module.id), `${module.title} · ${usage.lessons} videos removed · ${usage.assignments} assignments kept`);
+    });
+    res.status(204).end();
+  }));
+
+  app.delete('/api/admin/courses/:courseId/lessons/:lessonId', route(async (req, res) => {
+    const admin = await requireAccount(db, req, 'admin');
+    if (req.body?.confirm !== true) throw badRequest('Confirm removal of this video.');
+    await transaction(db, async tx => {
+      const lesson = await tx.prepare('SELECT l.* FROM lessons l JOIN modules m ON m.id=l.module_id WHERE l.id=? AND m.course_id=?').get(req.params.lessonId, req.params.courseId);
+      if (!lesson) throw notFound('This course video is unavailable.');
+      if (req.body?.expectedModuleId !== lesson.module_id || req.body?.expectedTitle !== lesson.title || req.body?.expectedMediaKey !== videoSourceKey(String(lesson.source_url), String(lesson.file_name))) {
+        throw conflict('This video was changed or moved. Reopen the confirmation before removing it.');
+      }
+      await removeLessons(tx, [String(lesson.id)]);
+      await audit(tx, admin.id, 'Video removed from course', String(lesson.id), String(lesson.title));
     });
     res.status(204).end();
   }));
