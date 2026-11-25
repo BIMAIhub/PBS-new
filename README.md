@@ -255,3 +255,11 @@ Configure a new private **CRON_SECRET** on the host for the protected `/api/jobs
 - **Student feedback** gives admins a private review queue, replies and publication controls. Publishing requires student permission and the administrator’s verification. Edits return to review; withdrawing permission removes the public review immediately. Website comments, emails and phone numbers are excluded from public reviews. Replies on a published course review are public.
 - Public course counts include approved enrollments only and refresh every minute while the page is visible. The starting **25 historical learners reported by PBS** is displayed separately from live approved learners and can be corrected in **Student feedback → Community & placement information**. This baseline does not create student accounts or payment records. Placement-assistance copy is editable in the same panel and does not imply a job guarantee.
 - `npm test` includes isolated admission, delivery deduplication, review consent/moderation, financial snapshot and legacy-gate checks. Tests use temporary databases and mocked email delivery; they never seed production students, reviews or sessions.
+
+### Edit and organize course modules
+
+In **Courses & videos → Curriculum and materials**, use **Edit module** to rename a module. Drag its handle to reorder it, use the up/down buttons, or focus the handle and use the arrow keys. The order saves automatically and is shared by the public outline and student classroom. Concurrent edits are checked before saving.
+
+**Edit video** changes a lesson's title, notes, duration or video source. Choose **Keep current video** for text edits, **Paste link** for a replacement link, or an upload option for a replacement file. **Move video** appends the same lesson to another module in the same course, retaining its link, owner, watch progress and completion records. It follows the destination module's unlock schedule; moving does not rename or move the underlying OneDrive file.
+
+**Delete module** only removes an empty module after confirmation. Move its videos and assignment briefs first; unfinished uploads also block deletion. The server rechecks these conditions inside the deletion transaction. This upgrade adds no schema migration, data reset, student seed or account/password change.

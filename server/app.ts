@@ -3,6 +3,7 @@ import { openDatabase } from './database.js';
 import { provisionInitialAdministrator } from './administrators.js';
 import { mountAuth, requireAccount } from './auth.js';
 import { mountAdmin } from './admin.js';
+import { mountCourseContent } from './course-content.js';
 import { mountStudent } from './student.js';
 import { mountMedia } from './media.js';
 import { mountAcademy } from './academy.js';
@@ -78,6 +79,7 @@ export async function createPortalApp(hosted = false, dependencies: {microsoftGr
   mountDocumentStamp(app, db);
   mountLiveClasses(app, db, hosted);
   mountAdmin(app, db, hosted);
+  mountCourseContent(app, db);
   mountControls(app, db, hosted);
   mountPlayback(app, db, hosted);
   mountAdmissions(app, db, hosted);

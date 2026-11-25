@@ -6,7 +6,7 @@ import { PortalDialog } from '../components/student-dashboard/PortalUI';
 import { send } from './api';
 import { BatchEnrollmentSelect } from './Batches';
 import { useAdminUploads } from './AdminUploads';
-import type { Account, AssessmentQuestion, Course, Enrollment, Lesson, Receipt, StudentRecord } from './types';
+import type { Account, AssessmentQuestion, Course, Enrollment, Lesson, Module, Receipt, StudentRecord } from './types';
 import { Button, DialogForm, Empty, Field, Input, money, paise, useApiResource, value } from './ui';
 
 type Save = () => Promise<void>;
@@ -34,10 +34,10 @@ export function CourseForm({ course, onClose, onSaved }: FormProps & { course?: 
   </DialogForm>;
 }
 
-export function ModuleForm({ course, onClose, onSaved }: FormProps & { course: Course }) {
-  return <DialogForm title="Add a module" detail={course.title} submit="Add module" onClose={onClose}
-    onSubmit={async form => { await send(`/admin/courses/${course.id}/modules`, { title: value(form, 'title') }); await onSaved(); }}>
-    <Input label="Module title" name="title" maxLength={160} required />
+export function ModuleForm({ course, module, onClose, onSaved }: FormProps & { course: Course; module?: Module }) {
+  return <DialogForm title={module ? 'Edit module' : 'Add a module'} detail={course.title} submit={module ? 'Save module' : 'Add module'} onClose={onClose}
+    onSubmit={async form => { await send(`/admin/courses/${course.id}/modules${module ? `/${module.id}` : ''}`, { title: value(form, 'title'), ...(module ? { expectedTitle: module.title } : {}) }, module ? 'PATCH' : 'POST'); await onSaved(); }}>
+    <Input label="Module title" name="title" defaultValue={module?.title} maxLength={160} required />
   </DialogForm>;
 }
 

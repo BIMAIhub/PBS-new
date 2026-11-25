@@ -26,12 +26,13 @@ import { BatchStudio } from './Batches';
 import { NoticesAdmin } from './AcademyExperience';
 import { DataReset } from './DataReset';
 import { AdminUploadProvider } from './AdminUploads';
+import { DeleteModuleForm, ModuleEditor, MoveVideoForm } from './ModuleEditor';
 import { CurriculumAdmin } from './CurriculumAdmin';
 import { NotificationCenter } from './Notifications';
 import { BrandingAdmin } from './BrandingAdmin';
 import { LiveClassesAdmin } from './LiveClassesAdmin';
 import type { AdminAcademyData } from './academy-types';
-import type { Account, AdminWorkspaceData, Assignment, Course, Enrollment, Lesson, Receipt, StudentRecord } from './types';
+import type { Account, AdminWorkspaceData, Assignment, Course, Enrollment, Lesson, Module, Receipt, StudentRecord } from './types';
 import { Button, dateLabel, dateTimeLabel, DialogForm, Empty, ExternalLink, Field, FormError, Input, money, Panel, Status, useApiResource, value } from './ui';
 
 type Page = 'overview' | 'students' | 'courses' | 'sessions' | 'enrollments' | 'payments' | 'projects' | 'placements' | 'messages' | 'certificates' | 'integrations' | 'activity' | 'offers' | 'curriculum' | 'branding' | 'course-feedback' | 'mail' | 'batches' | 'notices' | 'data-reset';
@@ -67,7 +68,10 @@ const groups: WorkspaceNavGroup<Page>[] = [
 type Dialog = AccessControlDialog
   | { kind: 'payment-settings' }
   | { kind: 'course'; course?: Course }
-  | { kind: 'module' | 'assessment' | 'preview'; course: Course }
+  | { kind: 'assessment' | 'preview'; course: Course }
+  | { kind: 'module'; course: Course; module?: Module }
+  | { kind: 'delete-module'; course: Course; module: Module }
+  | { kind: 'move-video'; course: Course; module: Module; lesson: Lesson }
   | { kind: 'video'; course: Course; moduleId?: string; lesson?: Lesson }
   | { kind: 'link'; course: Course; type: 'session' | 'resource' }
   | { kind: 'enroll'; student?: StudentRecord; courseId?: string }
@@ -125,7 +129,7 @@ function Roster({ data, open, onCreateCourse }: { data: AdminWorkspaceData; open
   </div>;
 }
 
-function CourseManager({ courses, open, onSessions }: { courses: Course[]; open: (dialog: Dialog) => void; onSessions: (courseId: string, create: boolean) => void }) {
+function CourseManager({ courses, open, onSessions, onChanged }: { courses: Course[]; open: (dialog: Dialog) => void; onSessions: (courseId: string, create: boolean) => void; onChanged: () => Promise<void> }) {
   return <Panel title="Course library" action={<Button onClick={() => open({ kind: 'course' })}><Plus size={18} /> Create course</Button>}>
     {!courses.length && <Empty title="Create your first course">Add a course, create a module and upload a lesson.</Empty>}
     {courses.map(course => <article className="pbs-course-admin" key={course.id}>
@@ -145,16 +149,12 @@ function CourseManager({ courses, open, onSessions }: { courses: Course[]; open:
       <details className="pbs-course-details">
         <summary>Curriculum and materials</summary>
         <div className="pbs-course-modules">
-          {course.modules.length === 0 && <p className="pbs-muted">Add a module to organize your lessons.</p>}
-          {course.modules.map(module => <div className="pbs-inset" key={module.id}>
-            <div className="pbs-section-top"><strong>{module.title}</strong><button className="pbs-text-button" type="button"
-              onClick={() => open({ kind: 'video', course, moduleId: module.id })}>Add video <Plus /></button></div>
-            {module.lessons.map(lesson => <div className="pbs-content-line" key={lesson.id}><Video size={16} />
-              <span>{lesson.title}</span><small>{lesson.duration}</small>
-              <button className="pbs-text-button" type="button" onClick={() => open({ kind: 'video', course, moduleId: module.id, lesson })}>Edit lesson</button>
-            </div>)}
-            {!module.lessons.length && <p className="pbs-muted">No lessons in this module.</p>}
-          </div>)}
+          <ModuleEditor course={course} onChanged={onChanged} actions={{
+            edit: module => open({ kind: 'module', course, module }),
+            remove: module => open({ kind: 'delete-module', course, module }),
+            video: (module, lesson) => open({ kind: 'video', course, moduleId: module.id, lesson }),
+            move: (module, lesson) => open({ kind: 'move-video', course, module, lesson }),
+          }}/>
           <div className="pbs-actions">
             <Button quiet onClick={() => open({ kind: 'link', course, type: 'resource' })}>Add resource</Button>
             <Button quiet onClick={() => onSessions(course.id, true)}>Schedule live session</Button>
@@ -288,7 +288,7 @@ export function AdminWorkspace({ account, onAccount, onSignOut }: {
       {academy.data && !academy.data.payment.paymentUpiId && ['overview', 'students', 'courses', 'enrollments'].includes(page) && <div className="pbs-inset pbs-payment-setup pbs-section-top"><div><strong>Enable scan-to-pay & UPI app payments</strong><p className="pbs-muted">Add your verified business UPI ID and payee name. Students can apply while payment setup is pending.</p></div><Button onClick={() => show({ kind: 'payment-settings' })}>Set up student payments</Button></div>}
       {data && page === 'overview' && <AdminOverview data={data} academy={academy.data} navigate={navigate} onEnroll={() => data.courses.length ? show({ kind: 'enroll' }) : show({ kind: 'course' })} />}
       {data && page === 'students' && <Roster data={data} open={show} onCreateCourse={() => show({ kind: 'course' })} />}
-      {data && page === 'courses' && <CourseManager courses={data.courses} open={show} onSessions={(courseId, create) => { navigate('sessions'); setLiveCourse(courseId); setCreateLive(create); }} />}
+      {data && page === 'courses' && <CourseManager courses={data.courses} open={show} onChanged={refreshAll} onSessions={(courseId, create) => { navigate('sessions'); setLiveCourse(courseId); setCreateLive(create); }} />}
       {data && page === 'sessions' && <LiveClassesAdmin courses={data.courses} initialCourseId={liveCourse} createOnOpen={createLive} onChanged={refreshAll} />}
       {data && page === 'curriculum' && <CurriculumAdmin courses={data.courses} onSaved={refreshAll} />}
       {data && page === 'offers' && <OffersAdmin courses={data.courses} students={data.students} />}
@@ -331,7 +331,9 @@ export function AdminWorkspace({ account, onAccount, onSignOut }: {
     {dialog && ['student-status', 'delete-student', 'restore-student', 'pause-course', 'pause-enrollment'].includes(dialog.kind) && <AccessControlForm control={dialog as AccessControlDialog} onClose={close} onSaved={saved} />}
     {dialog?.kind === 'payment-settings' && academy.data && <PaymentSettingsForm payment={academy.data.payment} onClose={close} onSaved={() => saved('Student payment destination saved.')} />}
     {dialog?.kind === 'course' && <CourseForm course={dialog.course} onClose={close} onSaved={() => { navigate('courses'); return saved('Course saved.'); }} />}
-    {dialog?.kind === 'module' && <ModuleForm course={dialog.course} onClose={close} onSaved={() => saved('Module added.')} />}
+    {dialog?.kind === 'module' && <ModuleForm course={dialog.course} module={dialog.module} onClose={close} onSaved={() => saved(dialog.module ? 'Module updated.' : 'Module added.')} />}
+    {dialog?.kind === 'delete-module' && <DeleteModuleForm course={dialog.course} module={dialog.module} onClose={close} onSaved={() => saved('Empty module deleted.')} />}
+    {dialog?.kind === 'move-video' && <MoveVideoForm course={dialog.course} module={dialog.module} lesson={dialog.lesson} onClose={close} onSaved={() => saved('Video moved.')} />}
     {dialog?.kind === 'video' && <VideoForm course={dialog.course} moduleId={dialog.moduleId} lesson={dialog.lesson} onClose={close} onSaved={() => saved(dialog.lesson ? 'Video lesson updated.' : 'Video lesson added.')} />}
     {dialog?.kind === 'link' && <CourseLinkForm course={dialog.course} kind={dialog.type} onClose={close} onSaved={() => saved('Course materials saved.')} />}
     {dialog?.kind === 'assessment' && <AssessmentForm course={dialog.course} onClose={close} onSaved={() => saved('Assessment published.')} />}

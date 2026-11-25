@@ -39,7 +39,10 @@ export function mountDriveUploads(app:Express,db:WritableDatabase,request:typeof
     const contentType=kind==='video'?`video/${extension==='mp4'?'mp4':'webm'}`:field(input?.contentType||'application/octet-stream','file type',100);
     const result=await request(db,adminId,`${itemPath(driveId,parentId)}:/${part(filename)}:/createUploadSession`,{method:'POST',body:JSON.stringify({item:{name:filename,'@microsoft.graph.conflictBehavior':'fail'}})});
     const url=uploadLocation(result.uploadUrl),providerExpiry=Date.parse(String(result.expirationDateTime||'')),expiresAt=Number.isFinite(providerExpiry)?Math.min(providerExpiry,Date.now()+86400000):Date.now()+3600000;
-    await db.prepare('INSERT INTO drive_uploads VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(id,accountId,adminId,kind,courseId,batchId,moduleId,taskId,driveId,parentId,'',filename,size,contentType,seal(url),expiresAt,'',now());
+    await transaction(db,async tx=>{
+      if(kind==='video'&&!await tx.prepare('SELECT 1 FROM modules WHERE id=? AND course_id=?').get(moduleId,courseId))throw notFound('This course module is unavailable.');
+      await tx.prepare('INSERT INTO drive_uploads VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(id,accountId,adminId,kind,courseId,batchId,moduleId,taskId,driveId,parentId,'',filename,size,contentType,seal(url),expiresAt,'',now());
+    });
     return{uploadId:id,url,filename,size,expiresAt,chunkSize:10*1024**2};
   }
   app.post('/api/admin/modules/:id/drive-upload',route(async(req,res)=>{
@@ -72,6 +75,7 @@ export function mountDriveUploads(app:Express,db:WritableDatabase,request:typeof
       const latest=await tx.prepare('SELECT attached_id FROM drive_uploads WHERE id=?').get(upload.id);if(latest?.attached_id)return String(latest.attached_id);
       let id:string=makeId();
       if(upload.kind==='video'){
+        if(!await tx.prepare('SELECT 1 FROM modules WHERE id=? AND course_id=?').get(upload.module_id,upload.course_id))throw notFound('This course module is unavailable.');
         const replace=field(req.body?.replaceId,'lesson',80,false);if(replace&&!await tx.prepare('SELECT 1 FROM lessons WHERE id=? AND module_id=?').get(replace,upload.module_id))throw notFound('This lesson is unavailable.');
         const title=field(req.body?.title,'lesson title',160),duration=field(req.body?.duration,'duration',40,false),description=field(req.body?.description,'lesson notes',3000,false);
         if(replace){id=replace;await tx.prepare('UPDATE lessons SET title=?,duration=?,description=?,source_url=?,file_name=?,content_type=? WHERE id=?').run(title,duration,description,item.webUrl,'','',id);await tx.prepare('DELETE FROM completions WHERE lesson_id=?').run(id);await tx.prepare('DELETE FROM lesson_watch_totals WHERE lesson_id=?').run(id);}

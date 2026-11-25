@@ -1,0 +1,24 @@
+.pbs-module-editor { min-width:0; }
+.pbs-module-order-status { color:var(--studio-muted); font-size:12px; min-height:16px; margin:4px 0 8px; }
+.pbs-module-sort-list { display:grid; gap:12px; padding:0; margin:0; list-style:none; }
+.pbs-module-sort-item { position:relative; list-style:none; }
+.pbs-module-editor-header { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.pbs-module-drag,.pbs-module-arrow { display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; min-width:32px; min-height:36px; color:var(--studio-accent); border:1px solid var(--studio-border); border-radius:8px; }
+.pbs-module-drag { touch-action:none; cursor:grab; user-select:none; }
+.pbs-module-drag:active { cursor:grabbing; }
+.pbs-module-editor :is(button:disabled) { opacity:.45; cursor:default; }
+.pbs-module-editor button:focus-visible { outline:2px solid var(--studio-accent); outline-offset:3px; }
+.pbs-module-editor-title { flex:1 1 200px; min-width:0; }
+.pbs-module-editor-title small { display:block; color:var(--studio-muted); font-size:12px; margin-bottom:4px; }
+.pbs-module-editor-title strong { display:block; overflow-wrap:anywhere; font-size:15px; line-height:1.5; }
+.pbs-module-editor-actions { display:flex; align-items:center; flex-wrap:wrap; gap:12px; }
+.pbs-module-editor-actions .pbs-text-button,.pbs-module-lesson-actions .pbs-text-button { display:inline-flex; align-items:center; gap:6px; font-size:12px; }
+.pbs-module-lesson-list { margin-top:12px; border-top:1px solid var(--studio-border); }
+.pbs-module-lesson-list > p { margin-top:12px; }
+.pbs-module-lesson-row { display:flex; gap:12px; align-items:center; padding:12px 0; border-bottom:1px solid var(--studio-border); }
+.pbs-module-lesson-row:last-child { border-bottom:0; padding-bottom:0; }
+.pbs-module-lesson-row > svg { flex-shrink:0; color:var(--studio-accent); }
+.pbs-module-lesson-row > span { flex:1; min-width:0; overflow-wrap:anywhere; font-size:14px; line-height:1.5; }
+.pbs-module-lesson-row small { display:block; color:var(--studio-muted); font-size:12px; }
+.pbs-module-lesson-actions { display:flex; flex-wrap:wrap; align-items:center; gap:16px; }
+@media(max-width:700px) { .pbs-module-editor-actions { flex:1 0 100%; padding-left:44px; gap:12px; } .pbs-module-lesson-row { flex-wrap:wrap; } .pbs-module-lesson-actions { padding-left:28px; flex:1 0 100%; } }

@@ -133,6 +133,7 @@ export function mountMedia(app: Express, db: WritableDatabase, hosted: boolean, 
     }
     const { id, oldFile } = await transaction(db, async tx => {
       await requireAccount(tx, req, 'admin');
+      await getModule(tx, req.params.courseId, moduleId);
       const saved = await saveLesson(tx, moduleId, lesson, source ? { sourceUrl: source, fileName: '', contentType: '' } : null, replace);
       if (source) {
         await tx.prepare('DELETE FROM lesson_video_owners WHERE lesson_id = ?').run(saved.id);
@@ -149,7 +150,10 @@ export function mountMedia(app: Express, db: WritableDatabase, hosted: boolean, 
     const moduleId = await getModule(db, req.params.courseId, req.params.moduleId);
     if (!cloud) {
       const size = typeof req.body?.size === 'number' ? req.body.size : 0, type = checkFile(req.body?.contentType, size), id = makeId(), expiresAt = Date.now() + 86400000;
-      await db.prepare('INSERT INTO video_uploads (id, account_id, module_id, content_type, size, expires_at) VALUES (?, ?, ?, ?, ?, ?)').run(id,admin.id,moduleId,type,size,expiresAt);
+      await transaction(db, async tx => {
+        await getModule(tx, req.params.courseId, moduleId);
+        await tx.prepare('INSERT INTO video_uploads (id, account_id, module_id, content_type, size, expires_at) VALUES (?, ?, ?, ?, ?, ?)').run(id,admin.id,moduleId,type,size,expiresAt);
+      });
       return res.json({ storage: 'local', uploadId:id, expiresAt });
     }
     if (!blobConfigured) throw new RequestError(503, 'Connect private video storage before uploading files. You can add a video link now.');
@@ -164,8 +168,11 @@ export function mountMedia(app: Express, db: WritableDatabase, hosted: boolean, 
     const { presignedUrl } = await presignUrl(token, {
       access: 'private', operation: 'put', pathname, validUntil, ...constraints,
     });
-    await db.prepare('INSERT INTO video_uploads (id, account_id, module_id, content_type, size, expires_at) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(id, admin.id, moduleId, contentType, size, validUntil);
+    await transaction(db, async tx => {
+      await getModule(tx, req.params.courseId, moduleId);
+      await tx.prepare('INSERT INTO video_uploads (id, account_id, module_id, content_type, size, expires_at) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(id, admin.id, moduleId, contentType, size, validUntil);
+    });
     res.json({ storage: 'blob', uploadId: id, url: presignedUrl, expiresAt:validUntil });
   }));
 
@@ -181,6 +188,7 @@ export function mountMedia(app: Express, db: WritableDatabase, hosted: boolean, 
     await verifyBlob(fileName, upload);
     const result = await transaction(db, async tx => {
       await requireAccount(tx, req, 'admin');
+      await getModule(tx, req.params.courseId, moduleId);
       const current = await getUpload(tx, req.params.id, admin.id, moduleId);
       if (current.lessonId) return { id: current.lessonId, oldFile: '' };
       const lesson = await saveLesson(tx, moduleId, details, { sourceUrl: '', fileName, contentType: current.contentType }, replace);
@@ -218,6 +226,7 @@ export function mountMedia(app: Express, db: WritableDatabase, hosted: boolean, 
       await rename(temp, target);
       const { id, oldFile, reused } = await transaction(db, async tx => {
         await requireAccount(tx, req, 'admin');
+        await getModule(tx, req.params.courseId, moduleId);
         if(uploadId){const latest=await getUpload(tx,uploadId,admin.id,moduleId);if(latest.lessonId)return{id:latest.lessonId,oldFile:'',reused:true};}
         const result=await saveLesson(tx, moduleId, lesson, { sourceUrl: '', fileName: name, contentType }, replace);
         if(uploadId)await tx.prepare('UPDATE video_uploads SET lesson_id=? WHERE id=?').run(result.id,uploadId);
