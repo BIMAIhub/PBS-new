@@ -1,9 +1,10 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import {
   ArrowUpRight, ChevronDown, ChevronRight, CircleHelp,
-  Menu, Search, type LucideIcon
+  House, Menu, Search, type LucideIcon
 } from 'lucide-react';
 import { PortalBrand, PortalDialog } from './PortalUI';
+import { useAppAppearance } from '../../live/AppAppearance';
 
 export interface WorkspaceAction {
   label: string;
@@ -21,6 +22,15 @@ export interface WorkspacePage<Page extends string> {
 export interface WorkspaceNavGroup<Page extends string> {
   label: string;
   pages: WorkspacePage<Page>[];
+}
+
+export function appNavigation<Page extends string>(groups: WorkspaceNavGroup<Page>[]) {
+  const pages = groups.flatMap(group => group.pages);
+  const admin = pages.some(page => page.id === 'students');
+  const ids = admin ? ['overview', 'students', 'courses', 'sessions'] : ['overview', 'courses', 'sessions', 'roadmap'];
+  const labels: Record<string, string> = { overview: 'Home', students: 'Students', courses: 'Courses', sessions: 'Live', roadmap: 'Progress' };
+  return ids.map(id => pages.find(page => page.id === id)).filter((page): page is WorkspacePage<Page> => Boolean(page))
+    .map(page => ({ ...page, label: labels[page.id], icon: page.id === 'overview' ? House : page.icon }));
 }
 
 interface WorkspaceChromeProps<Page extends string> {
@@ -69,8 +79,11 @@ export function WorkspaceChrome<Page extends string>({
 }: WorkspaceChromeProps<Page>) {
   const [dialog, setDialog] = useState<'navigation' | 'search' | 'account' | null>(null);
   const [query, setQuery] = useState('');
+  const { appLayout } = useAppAppearance();
   const pages = groups.flatMap(group => group.pages);
   const pageName = pages.find(page => page.id === activePage)?.label ?? 'Overview';
+  const tabs = appNavigation(groups);
+  const moreActive = !tabs.some(tab => tab.id === activePage);
   const initials = userName.trim().split(/\s+/).slice(0, 2).map(word => word[0]?.toUpperCase()).join('');
   const terms = query.trim().toLowerCase().split(/\s+/);
   const searchResults = [
@@ -96,34 +109,34 @@ export function WorkspaceChrome<Page extends string>({
   }
 
   return (
-    <div className="pbs-workspace">
+    <div className={`pbs-workspace ${appLayout ? 'pbs-app-shell' : ''}`}>
       <a href="#workspace-content" className="pbs-skip-link">Skip to content</a>
-      <aside className="pbs-sidebar">
+      {!appLayout && <aside className="pbs-sidebar">
         <PortalBrand workspace subtitle={workspaceLabel} />
         <WorkspaceNav workspaceLabel={workspaceLabel} groups={groups} activePage={activePage} onNavigate={onNavigate} />
         <button className="pbs-sidebar-help" type="button" onClick={onHelp}>
           <CircleHelp /> <span>Help and FAQs</span> <ArrowUpRight />
         </button>
-      </aside>
+      </aside>}
 
       <div className="pbs-workspace-body">
         <header className="pbs-topbar">
-          <div className="pbs-breadcrumb">
+          {appLayout ? <div className="pbs-app-brand"><PortalBrand workspace subtitle={workspaceLabel || 'Student portal'} /></div> : <div className="pbs-breadcrumb">
             <button type="button" className="pbs-icon-button pbs-mobile-menu" onClick={() => setDialog('navigation')} aria-label="Open navigation">
               <Menu />
             </button>
             <span>Workspace</span>
             <ChevronRight />
             <strong>{pageName}</strong>
-          </div>
+          </div>}
           <div className="pbs-topbar-controls">
             {notifications}
-            <button type="button" className="pbs-search-trigger" aria-label="Search workspace" onClick={() => {
+            {!appLayout && <button type="button" className="pbs-search-trigger" aria-label="Search workspace" onClick={() => {
               setQuery('');
               setDialog('search');
             }}>
               <Search /> <span>Search workspace</span> <kbd>Ctrl K</kbd>
-            </button>
+            </button>}
             <button type="button" className="pbs-account-trigger" aria-label="Open account menu" onClick={() => setDialog('account')}>
               <span className="pbs-account-avatar" aria-hidden="true">{initials || 'S'}</span>
               <span className="pbs-account-name">{userName}</span>
@@ -138,8 +151,16 @@ export function WorkspaceChrome<Page extends string>({
         </main>
       </div>
 
+      {appLayout && <nav className="pbs-app-tabs" aria-label="App navigation">
+        {tabs.map(({ id, label, icon: Icon }) => <button key={id} type="button" aria-current={activePage === id && dialog !== 'navigation' ? 'page' : undefined}
+          onClick={() => { setDialog(null); onNavigate(id); }}><Icon aria-hidden="true" /><span>{label}</span></button>)}
+        <button type="button" aria-label="More tools" aria-expanded={dialog === 'navigation'} aria-current={moreActive || dialog === 'navigation' ? 'page' : undefined}
+          onClick={() => setDialog('navigation')}><Menu aria-hidden="true" /><span>More</span></button>
+      </nav>}
+
       {dialog === 'navigation' && (
-        <PortalDialog title="Workspace navigation" onClose={() => setDialog(null)} className="pbs-navigation-dialog">
+        <PortalDialog title={appLayout ? 'More tools' : 'Workspace navigation'} onClose={() => setDialog(null)} className={`pbs-navigation-dialog ${appLayout ? 'pbs-app-navigation-dialog' : ''}`}>
+          {appLayout && <button type="button" className="pbs-app-find" onClick={() => { setQuery(''); setDialog('search'); }}><Search aria-hidden="true" /><span>Find a page or tool</span></button>}
           <WorkspaceNav workspaceLabel={workspaceLabel} groups={groups} activePage={activePage} onNavigate={(page) => {
             setDialog(null);
             onNavigate(page);
