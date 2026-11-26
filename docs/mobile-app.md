@@ -33,16 +33,6 @@ VAPID application keys are generated once and stored encrypted in the **current 
 
 ## App behavior
 
-### Reading and navigation
-
-The installed app uses a full-width touch layout even when the device reports a desktop-sized viewport. Phones, smaller browser windows (up to 1024 CSS pixels) and portrait touch screens use this layout automatically as well. The desktop sidebar is replaced by five bottom tabs, with all the existing tools available through **More** and its search. Students get Home, Courses, Live, Progress and More; administrators get Home, Students, Courses, Live and More.
-
-The app defaults to 18px reading text, 36px page titles and controls at least 48–52px high. **PBS app & alerts → Text & layout** lets a person choose extra-large text or keep the app layout in a wider browser. These are local device display preferences; no academy settings, credentials or student records are updated. Bottom padding accounts for phone safe areas, and notification toasts/background upload controls stay above the bottom navigation.
-
-The app sign-in screen uses the same larger controls and a compact account form below the PBS brand. The website's introductory course hero remains available in the regular browser layout.
-
-After this update, tap **Update app** if it appears, or close and reopen PBS. Only public offline assets are refreshed by the service worker; private records and videos are not cached or cleared.
-
 - Student and admin tools, the video player, progress, enrollment, uploads, payments and documents remain the existing website functions.
 - Navigation from a phone notification reuses the open portal, avoiding an unnecessary page reload during an upload. Page names are validated; push links cannot redirect to an external provider or website.
 - A public reconnect screen is available offline. APIs, videos, documents and private account data are **never** put in the service worker cache. Protected videos still require connectivity and the existing account permissions.
