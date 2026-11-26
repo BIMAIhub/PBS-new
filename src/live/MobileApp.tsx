@@ -3,7 +3,8 @@ import { ArrowRight, BellRing, BookOpen, CalendarDays, Check, Download, External
 import { PortalBrand } from '../components/student-dashboard/PortalUI';
 import { messageFrom, send } from './api';
 import { useBranding } from './Branding';
-import { Button, dateTimeLabel, FormError, Panel, useApiResource } from './ui';
+import { Button, dateTimeLabel, Field, FormError, Panel, useApiResource } from './ui';
+import { AppAppearanceProvider, useAppAppearance } from './AppAppearance';
 import './mobile-app.css';
 
 interface InstallPrompt extends Event { prompt(): Promise<void>; userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }> }
@@ -66,23 +67,23 @@ export function MobileAppProvider({ children }: { children: ReactNode }) {
     await prompt.prompt(); const choice = await prompt.userChoice; setPrompt(undefined);
     if (choice.outcome === 'accepted') setInstalled(standalone());
   }
-  return <MobileContext.Provider value={{ registration, installed, prompt, install, issue }}>{children}
+  return <AppAppearanceProvider installed={installed}><MobileContext.Provider value={{ registration, installed, prompt, install, issue }}>{children}
     {offline && <div className="pbs-app-status" role="status"><WifiOff size={17} /> You’re offline. Reconnect to use PBS.</div>}
     {waiting && <aside className="pbs-app-update" aria-label="App update"><RefreshCw size={20} /><div><strong>A PBS update is ready</strong><p>Finish uploads and save your work before refreshing.</p></div><Button quiet onClick={() => { reloadForUpdate.current = true; waiting.postMessage({ type: 'PBS_ACTIVATE_UPDATE' }); }}>Update app</Button><button className="pbs-text-button" onClick={() => setWaiting(undefined)}>Later</button></aside>}
-  </MobileContext.Provider>;
+  </MobileContext.Provider></AppAppearanceProvider>;
 }
 
 export function InstallAppPanel() {
   const { installed, prompt, install, issue } = useContext(MobileContext);
   const isIOS = ios();
-  return <section className="pbs-app-install" aria-label="Install PBS app">
-    <div className="pbs-app-install-heading"><span className="pbs-app-symbol"><Smartphone /></span><div><h2>{installed ? 'PBS is on your Home Screen' : 'Take PBS with you'}</h2><p>One app for your student or administrator account.</p></div>{installed && <Check className="pbs-app-check" />}</div>
+  return <section className={`pbs-app-install ${installed ? 'pbs-app-installed' : ''}`} aria-label="Install PBS app">
+    <div className="pbs-app-install-heading"><span className="pbs-app-symbol"><Smartphone /></span><div><h2>{installed ? 'PBS app' : 'Take PBS with you'}</h2><p>{installed ? 'Installed on this device' : 'One app for your student or administrator account.'}</p></div>{installed && <Check className="pbs-app-check" />}</div>
     <FormError error={issue} />
     {!installed && <>{prompt && <Button onClick={() => void install()}><Download size={18} /> Install PBS app</Button>}
       <ol className="pbs-app-steps">{isIOS ? <><li>Open this website in <strong>Safari</strong> on your iPhone or iPad.</li><li>Tap <strong>Share <Share2 size={14} /></strong>, then <strong>Add to Home Screen</strong> and <strong>Add</strong>.</li><li>Open PBS from the new icon and sign in with your existing account.</li></> : <><li>Open this website in <strong>Chrome</strong> on Android.</li><li>{prompt ? 'Tap Install PBS app above, or ' : 'Open the browser menu and '}choose <strong>Install app</strong> or <strong>Add to Home screen</strong>.</li><li>Open the PBS icon and sign in with your existing account.</li></>}</ol>
       <p className="pbs-muted pbs-small">{isIOS ? 'iOS / iPadOS 16.4 or later supports phone notifications for Home Screen apps.' : 'On iPhone: open in Safari → Share → Add to Home Screen. A desktop browser can install PBS from its address bar or menu.'}</p>
     </>}
-    <p className="pbs-muted pbs-small">Use “Keep me signed in” on your own device. An internet connection is required for courses, uploads and records.</p>
+    {!installed && <p className="pbs-muted pbs-small">Use “Keep me signed in” on your own device. An internet connection is required for courses, uploads and records.</p>}
   </section>;
 }
 
@@ -149,7 +150,16 @@ function PushDiagnostics() {
 }
 
 export function MobileAppPage({ admin = false }: { admin?: boolean }) {
-  return <div className="pbs-live-stack"><InstallAppPanel /><Panel title="Stay up to date"><PushDeviceSettings /></Panel>{admin && <PushDiagnostics />}</div>;
+  return <div className="pbs-live-stack"><InstallAppPanel /><AppReadingSettings /><Panel title="Stay up to date"><PushDeviceSettings /></Panel>{admin && <PushDiagnostics />}</div>;
+}
+
+export function AppReadingSettings() {
+  const { textSize, setTextSize, layoutChoice, setLayoutChoice } = useAppAppearance();
+  return <Panel title="Text & layout"><p className="pbs-muted">Choose a comfortable reading size for this device</p>
+    <div className="pbs-app-display-grid"><Field label="Text size"><select value={textSize} onChange={event => setTextSize(event.target.value === 'extra-large' ? 'extra-large' : 'large')}><option value="large">Large</option><option value="extra-large">Extra large</option></select></Field>
+      <Field label="Layout"><select value={layoutChoice} onChange={event => setLayoutChoice(event.target.value === 'app' ? 'app' : 'auto')}><option value="auto">Automatic</option><option value="app">App layout in this browser</option></select></Field></div>
+    <p className="pbs-muted pbs-small">The installed app uses bottom navigation. Automatic also uses this layout on phones and smaller screens.</p>
+  </Panel>;
 }
 
 export function PublicMobileApp() {
