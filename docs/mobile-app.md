@@ -39,6 +39,8 @@ The installed app uses a full-width touch layout even when the device reports a 
 
 The app defaults to 18px reading text, 36px page titles and controls at least 48–52px high. **PBS app & alerts → Text & layout** lets a person choose extra-large text or keep the app layout in a wider browser. These are local device display preferences; no academy settings, credentials or student records are updated. Bottom padding accounts for phone safe areas, and notification toasts/background upload controls stay above the bottom navigation.
 
+The app sign-in screen uses the same larger controls and a compact account form below the PBS brand. The website's introductory course hero remains available in the regular browser layout.
+
 After this update, tap **Update app** if it appears, or close and reopen PBS. Only public offline assets are refreshed by the service worker; private records and videos are not cached or cleared.
 
 - Student and admin tools, the video player, progress, enrollment, uploads, payments and documents remain the existing website functions.
