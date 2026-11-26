@@ -23,10 +23,11 @@ export async function findAccount(db: Database, id: string) {
   return await db.prepare(`SELECT ${accountFields} FROM accounts WHERE id = ?`).get(id) as unknown as AccountRow | undefined;
 }
 
-function requestToken(req: Request) {
+export function requestSessionHash(req: Request) {
   const value = req.headers.cookie?.split(/;\s*/).find(cookie => cookie.startsWith(`${cookieName}=`))?.slice(cookieName.length + 1);
   return value && /^[\w-]{43}$/.test(value) ? tokenHash(value) : '';
 }
+const requestToken = requestSessionHash;
 
 function cookieSettings(req: Request) {
   const host = req.hostname;

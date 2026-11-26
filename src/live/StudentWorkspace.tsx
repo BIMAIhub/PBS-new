@@ -2,7 +2,7 @@ import { StudentCourseFeedback } from './CourseFeedback';
 import { useEffect, useState } from 'react';
 import {
   ArrowRight, Award, BookOpen, Bot, CalendarDays, Clock, CreditCard, Download, FileText, IdCard,
-  Compass, Gift, Megaphone, Route, UserRound, KeyRound, Layers, LayoutDashboard, LogOut, MessageSquare, Play, Plus, Settings, Share2
+  Compass, Gift, Megaphone, Route, Smartphone, UserRound, KeyRound, Layers, LayoutDashboard, LogOut, MessageSquare, Play, Plus, Settings, Share2
 } from 'lucide-react';
 import { PortalDialog } from '../components/student-dashboard/PortalUI';
 import { WorkspaceActionRow, WorkspaceChrome, type WorkspaceNavGroup } from '../components/student-dashboard/WorkspaceChrome';
@@ -19,6 +19,7 @@ import { PortfolioHub } from './PortfolioHub';
 import { PortfolioBuilder } from './PortfolioBuilder';
 import { ProfilePage } from './ProfilePage';
 import { NotificationCenter } from './Notifications';
+import { initialWorkspacePage, MobileAppPage } from './MobileApp';
 import { CatalogBrowser } from './Catalog';
 import { TaskAssignments } from './TaskAssignments';
 import { CourseInformation } from './CourseInformation';
@@ -27,7 +28,7 @@ import type { AcademyData } from './academy-types';
 import type { Account, AssessmentQuestion, AssessmentResult, Catalog, Course, CourseSummary, Enrollment, StudentWorkspaceData } from './types';
 import { Button, dateLabel, dateTimeLabel, DialogForm, Empty, ExternalLink, Field, FormError, Input, money, Panel, Status, useApiResource, value } from './ui';
 
-type Page = 'overview' | 'courses' | 'sessions' | 'project' | 'downloads' | 'fees' | 'reviews' | 'messages' | 'certificates' | 'portfolio' | 'profile' | 'explore' | 'course-feedback' | 'referrals' | 'roadmap' | 'notices';
+type Page = 'overview' | 'courses' | 'sessions' | 'project' | 'downloads' | 'fees' | 'reviews' | 'messages' | 'certificates' | 'portfolio' | 'profile' | 'explore' | 'course-feedback' | 'referrals' | 'roadmap' | 'notices' | 'mobile-app';
 const groups: WorkspaceNavGroup<Page>[] = [
   { label: 'Learning', pages: [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
@@ -39,6 +40,7 @@ const groups: WorkspaceNavGroup<Page>[] = [
     { id: 'project', label: 'Capstone project', icon: Layers },
   ] },
   { label: 'Resources', pages: [
+    { id: 'mobile-app', label: 'PBS app & alerts', icon: Smartphone },
     { id: 'downloads', label: 'Downloads', icon: Download },
     { id: 'fees', label: 'Fees & payments', icon: CreditCard },
     { id: 'referrals', label: 'Refer & earn', icon: Gift },
@@ -191,7 +193,7 @@ function CourseAssessment({ course, onClose, onSaved, onCertificate }: { course:
 export function StudentWorkspace({ account, onAccount, onSignOut }: {
   account: Account; onAccount: (account: Account) => void; onSignOut: () => void;
 }) {
-  const [page, setPage] = useState<Page>(() => new URLSearchParams(location.search).get('page') === 'sessions' ? 'sessions' : 'overview');
+  const [page, setPage] = useState<Page>(() => initialWorkspacePage(groups.flatMap(group => group.pages.map(page => page.id)), 'overview'));
   const [dialog, setDialog] = useState<Dialog>();
   const [notice, setNotice] = useState('');
   const { data, error, refresh } = useApiResource<StudentWorkspaceData>('/student/workspace');
@@ -245,6 +247,7 @@ export function StudentWorkspace({ account, onAccount, onSignOut }: {
       {data && academy.data && page === 'certificates' && <StudentCertificates data={data} academy={academy.data} onSaved={refreshAll} onFeedback={() => navigate('course-feedback')} />}
       {data && page === 'portfolio' && <PortfolioBuilder account={account} portfolio={data.portfolio} certificates={academy.data?.certificates || []} onSaved={refreshAll} />}
       {page === 'profile' && <ProfilePage account={account} onAccount={onAccount} />}
+      {page === 'mobile-app' && <MobileAppPage />}
       {page === 'explore' && catalog.data && <CatalogBrowser catalog={catalog.data} onChoose={course => show({ kind: 'course-info', course })} />}
       {page === 'course-feedback' && <StudentCourseFeedback account={account} />}
       {page === 'sessions' && <LiveClassesStudent />}

@@ -18,6 +18,7 @@ export function mountEngagementJobs(app: Express, db: WritableDatabase) {
     await notifyReferralCredits(db, rewards, portalOrigin(req));
     const mail = await processMailQueue(db, undefined, 20);
     const privateFiles = await cleanupPrivateFiles(db);
-    res.json({ credited: rewards.length, mail, privateFiles });
+    const push = await app.locals.runPushCycle?.();
+    res.json({ credited: rewards.length, mail, privateFiles, push });
   }));
 }

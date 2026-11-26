@@ -30,7 +30,7 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
     root.style.setProperty('--pbs-hero-image', `url("${brand.heroUrl}")`);
     root.dataset.pbsGlass = String(brand.glassEnabled); root.dataset.pbsMotion = String(brand.motionEnabled);
     document.title = `${brand.shortName} Learning Portal | ${brand.academyName}`;
-    document.querySelectorAll<HTMLLinkElement>('link[rel="icon"], link[rel="apple-touch-icon"]').forEach(link => { link.href = brand.logoUrl; link.removeAttribute('type'); });
+    document.querySelectorAll<HTMLLinkElement>('link[rel="icon"]').forEach(link => { link.href = brand.logoUrl; link.removeAttribute('type'); });
   }, [brand]);
   return <BrandingContext.Provider value={{ brand, apply, refresh }}>{children}</BrandingContext.Provider>;
 }

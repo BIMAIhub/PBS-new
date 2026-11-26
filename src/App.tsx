@@ -6,6 +6,7 @@ import { SignIn } from './live/SignIn';
 import type { Account, Portfolio } from './live/types';
 import { Button, ExternalLink, FormError, useApiResource } from './live/ui';
 import { PublicCertificate } from './live/Certificates';
+import { clearPhoneNotifications, PublicMobileApp } from './live/MobileApp';
 
 const PublicExplore = lazy(() => import('./live/Explore').then(module => ({ default: module.PublicExplore })));
 const PublicPortfolio = lazy(() => import('./live/PublicPortfolio').then(module => ({ default: module.PublicPortfolioPage })));
@@ -34,6 +35,7 @@ function Portal() {
   async function signOut() {
     try {
       await send('/auth/logout');
+      await clearPhoneNotifications();
       setError('');
       setAccount(null);
       setPasswordOpen(true);
@@ -61,6 +63,7 @@ function Portal() {
 }
 
 export default function App() {
+  if (window.location.pathname.replace(/\/$/, '') === '/app') return <PublicMobileApp />;
   const courseId = window.location.pathname.match(/^\/courses\/([\w-]+)\/?$/)?.[1];
   if (courseId || window.location.pathname === '/explore' || window.location.pathname === '/explore/') return <Suspense fallback={<p className="pbs-route-loading" role="status">Opening courses…</p>}><PublicExplore courseId={courseId} /></Suspense>;
   const certificateToken = window.location.pathname.match(/^\/verify\/certificate\/([\w-]+)$/)?.[1];

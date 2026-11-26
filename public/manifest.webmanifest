@@ -1,0 +1,22 @@
+{
+  "id": "/",
+  "name": "Pragmatic BIM Solution — PBS",
+  "short_name": "PBS",
+  "description": "Courses, live sessions and your PBS learning workspace. Student and administrator access.",
+  "lang": "en-IN",
+  "start_url": "/?source=app",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#071D30",
+  "theme_color": "#0A2845",
+  "categories": ["education", "productivity"],
+  "icons": [
+    { "src": "/app-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/app-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/app-icon-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "My courses", "url": "/?page=courses", "icons": [{ "src": "/app-icon-192.png", "sizes": "192x192" }] },
+    { "name": "Live sessions", "url": "/?page=sessions" }
+  ]
+}

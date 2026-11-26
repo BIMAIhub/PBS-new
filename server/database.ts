@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { engagementSchema } from './engagement-schema.js';
 import { academyUpgradeSchema } from './academy-upgrade-schema.js';
 import { databaseConfiguration } from './database-config.js';
+import { pushSchema } from './push-schema.js';
 
 export const dataDirectory = path.resolve(process.env.PBS_DATA_DIR || 'data');
 export const videoDirectory = path.join(dataDirectory, 'videos');
@@ -277,7 +278,7 @@ const schema = academyUpgradeSchema + engagementSchema + `
       account_id TEXT PRIMARY KEY REFERENCES accounts(id),
       status TEXT NOT NULL, target_role TEXT NOT NULL, notes TEXT NOT NULL
     );
-`;
+` + pushSchema;
 
 type Row = Record<string, SQLOutputValue>;
 type Parameter = string | number | bigint | Uint8Array | null;

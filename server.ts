@@ -9,11 +9,14 @@ async function startServer() {
   if (production) process.env.NODE_ENV = 'production';
   const port = Number(process.env.PORT || '3000');
   const host = process.env.PBS_HOST || '127.0.0.1';
-  const app = await createPortalApp();
+  const app = await createPortalApp(false, { defer: task => { void task; } });
+  setInterval(() => { void app.locals.runPushCycle().catch(() => console.warn('PBS phone notification check will retry.')); }, 60_000).unref();
   if (production) {
     const dist = path.resolve('dist');
     app.use('/assets', express.static(path.join(dist, 'assets'), { immutable: true, maxAge: '1y' }));
-    app.get(['/pbs-logo.svg', '/favicon.svg', '/bim-study-model.webp'], (req, res) => res.sendFile(req.path.slice(1), { root: dist }));
+    app.use(express.static(dist, { index: false, setHeaders: (res, file) => {
+      if (file.endsWith('/sw.js') || file.endsWith('/manifest.webmanifest')) res.set('Cache-Control', 'no-cache');
+    } }));
     app.get('*', (_req, res) => res.sendFile('index.html', { root: dist }));
   } else {
     const { createServer } = await import('vite');

@@ -29,14 +29,16 @@ import { mountDriveUploads } from './drive-uploads.js';
 import { mountAcademyLife } from './academy-life.js';
 import { mountReferralPayouts } from './referral-payouts.js';
 import { mountAcademyReset } from './academy-reset.js';
+import { mountPush, runPushCycle, type PushSender } from './push.js';
 import type { graph } from './microsoft.js';
 import { apiError, field, limitAttempts, RequestError, route } from './http.js';
 
-export async function createPortalApp(hosted = false, dependencies: {microsoftGraph?:typeof graph} = {}) {
+export async function createPortalApp(hosted = false, dependencies: {microsoftGraph?:typeof graph; defer?:(task:Promise<unknown>)=>void; pushSender?:PushSender} = {}) {
   const app = express();
   const publicOrigin = process.env.PBS_PUBLIC_ORIGIN ? new URL(process.env.PBS_PUBLIC_ORIGIN).origin : '';
   const db = await openDatabase(hosted);
   app.locals.portalDatabase = db;
+  app.locals.runPushCycle = () => runPushCycle(db, dependencies.pushSender);
   try {
     await provisionInitialAdministrator(db);
     await provisionReferenceCatalog(db);
@@ -70,6 +72,21 @@ export async function createPortalApp(hosted = false, dependencies: {microsoftGr
     next();
   });
   app.use('/api', express.json({ limit: '256kb' }));
+  app.use('/api', (req, res, next) => {
+    const change = !['GET','HEAD','OPTIONS'].includes(req.method) &&
+      !/^\/(auth|push|notifications|jobs)(\/|$)/.test(req.path) && !/\/(watch|progress|playback)(\/|$)/.test(req.path);
+    if (dependencies.defer && (change || req.path === '/notifications')) {
+      const finished = new Promise<boolean>(resolve => {
+        res.once('finish', () => resolve(res.statusCode < 400));
+        res.once('close', () => resolve(false));
+      });
+      dependencies.defer(finished.then(ok => ok ? app.locals.runPushCycle() : undefined).catch(() => {
+        // Provider errors are sanitized in the delivery log. Never log subscription addresses or keys.
+        console.warn('PBS phone notification processing will retry on the next check.');
+      }));
+    }
+    next();
+  });
   app.get('/api/health', route(async (_req, res) => {
     await db.prepare('SELECT 1').get();
     res.json({ status: 'ok' });
@@ -91,6 +108,7 @@ export async function createPortalApp(hosted = false, dependencies: {microsoftGr
   mountCommerce(app, db, hosted);
   mountProfiles(app, db, hosted);
   mountNotifications(app, db);
+  mountPush(app, db, hosted, dependencies.pushSender);
   mountCurriculum(app, db, hosted);
   mountMail(app, db, hosted);
   mountReferrals(app, db);

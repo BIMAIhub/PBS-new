@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createPortalApp } from '../server/app.js';
 import { safeStartupError } from '../server/database-config.js';
+import { waitUntil } from '@vercel/functions';
 
 export const config = { helpers: false };
 
@@ -8,7 +9,7 @@ let application: ReturnType<typeof createPortalApp> | undefined;
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   if (!application) {
-    application = createPortalApp(true).catch(error => {
+    application = createPortalApp(true, { defer: waitUntil }).catch(error => {
       application = undefined;
       throw error;
     });

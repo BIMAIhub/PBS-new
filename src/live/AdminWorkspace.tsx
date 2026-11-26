@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   ArrowDownToLine, ArrowRight, BookOpen, BriefcaseBusiness, CircleHelp, ClipboardList,
-  Activity, Award, CalendarDays, Cloud, FilePenLine, Mail, Megaphone, Paintbrush, Tag, Trash2, LayoutDashboard, CreditCard, FileText, IndianRupee, KeyRound, LogOut, MessageSquare, Plus, Search, UserRound, Users, Video
+  Activity, Award, CalendarDays, Cloud, FilePenLine, Mail, Megaphone, Paintbrush, Smartphone, Tag, Trash2, LayoutDashboard, CreditCard, FileText, IndianRupee, KeyRound, LogOut, MessageSquare, Plus, Search, UserRound, Users, Video
 } from 'lucide-react';
 import { PortalDialog } from '../components/student-dashboard/PortalUI';
 import { WorkspaceChrome, type WorkspaceNavGroup } from '../components/student-dashboard/WorkspaceChrome';
@@ -29,13 +29,14 @@ import { AdminUploadProvider } from './AdminUploads';
 import { DeleteModuleForm, ModuleEditor, MoveVideoForm, RemoveVideoForm } from './ModuleEditor';
 import { CurriculumAdmin } from './CurriculumAdmin';
 import { NotificationCenter } from './Notifications';
+import { initialWorkspacePage, MobileAppPage } from './MobileApp';
 import { BrandingAdmin } from './BrandingAdmin';
 import { LiveClassesAdmin } from './LiveClassesAdmin';
 import type { AdminAcademyData } from './academy-types';
 import type { Account, AdminWorkspaceData, Assignment, Course, Enrollment, Lesson, Module, Receipt, StudentRecord } from './types';
 import { Button, dateLabel, dateTimeLabel, DialogForm, Empty, ExternalLink, Field, FormError, Input, money, Panel, Status, useApiResource, value } from './ui';
 
-type Page = 'overview' | 'students' | 'courses' | 'sessions' | 'enrollments' | 'payments' | 'projects' | 'placements' | 'messages' | 'certificates' | 'integrations' | 'activity' | 'offers' | 'curriculum' | 'branding' | 'course-feedback' | 'mail' | 'batches' | 'notices' | 'data-reset';
+type Page = 'overview' | 'students' | 'courses' | 'sessions' | 'enrollments' | 'payments' | 'projects' | 'placements' | 'messages' | 'certificates' | 'integrations' | 'activity' | 'offers' | 'curriculum' | 'branding' | 'course-feedback' | 'mail' | 'batches' | 'notices' | 'data-reset' | 'mobile-app';
 const groups: WorkspaceNavGroup<Page>[] = [
   { label: 'Administration', pages: [
     { id: 'overview', label: 'Academy overview', icon: LayoutDashboard },
@@ -58,6 +59,7 @@ const groups: WorkspaceNavGroup<Page>[] = [
     { id: 'course-feedback', label: 'Student feedback', icon: MessageSquare },
   ] },
   { label: 'Academy settings', pages: [
+    { id: 'mobile-app', label: 'PBS app & alerts', icon: Smartphone },
     { id: 'branding', label: 'Branding & appearance', icon: Paintbrush },
     { id: 'integrations', label: 'OneDrive & email', icon: Cloud },
     { id: 'activity', label: 'Activity log', icon: Activity },
@@ -238,7 +240,7 @@ export function AdminWorkspace({ account, onAccount, onSignOut }: {
 }) {
   const [page, setPage] = useState<Page>(() => {
     const query = new URLSearchParams(location.search);
-    return query.has('integration') ? 'integrations' : query.get('page') === 'sessions' ? 'sessions' : 'overview';
+    return query.has('integration') ? 'integrations' : initialWorkspacePage(groups.flatMap(group => group.pages.map(page => page.id)), 'overview');
   });
   const [dialog, setDialog] = useState<Dialog>();
   const [notice, setNotice] = useState('');
@@ -298,6 +300,7 @@ export function AdminWorkspace({ account, onAccount, onSignOut }: {
       {data && page === 'notices' && <NoticesAdmin courses={data.courses}/>}
       {page === 'data-reset' && <DataReset onReset={refreshAll}/>}
       {page === 'branding' && <BrandingAdmin />}
+      {page === 'mobile-app' && <MobileAppPage admin />}
       {data && page === 'enrollments' && <EnrollmentList enrollments={data.enrollments} open={show} />}
       {data && page === 'payments' && <div className="pbs-live-stack">
         {academy.data && <PaymentLedger data={data} academy={academy.data} open={(kind, enrollment) => show({ kind, enrollment })} onSaved={refreshAll} />}
