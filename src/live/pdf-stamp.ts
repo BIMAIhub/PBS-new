@@ -1,10 +1,11 @@
 import type { jsPDF } from 'jspdf';
 import type { DocumentStamp } from './document-types';
+import { fitPdfImage } from './pdf-image';
 
 export function drawPdfStamp(pdf: jsPDF, stamp: DocumentStamp, x: number, y: number, radius = 14) {
   if (!stamp.enabled) return;
   if (stamp.imageData) {
-    try { pdf.addImage(stamp.imageData, stamp.imageData.startsWith('data:image/jpeg') ? 'JPEG' : 'PNG', x - radius, y - radius, radius * 2, radius * 2, undefined, 'FAST'); return; }
+    try { fitPdfImage(pdf,stamp.imageData,x-radius,y-radius,radius*2,radius*2); return; }
     catch { /* Keep a legible institutional seal if an older image is invalid. */ }
   }
   pdf.setDrawColor(stamp.color); pdf.setLineWidth(.5);

@@ -1,3 +1,4 @@
+import { drawPdfBrand } from './pdf-image';
 import { installPdfFonts } from './pdf-fonts';
 import type { CourseBrochure } from './education-types';
 import type { DocumentStamp } from './document-types';
@@ -10,7 +11,7 @@ export async function buildBrochurePdf(course:CourseBrochure,origin:string,stamp
   const clean=(s:string)=>s.replace(/₹/g,'INR ').replace(/[–—•]/g,'-');
   function header(){
     pdf.setFillColor('#F4F7FA');pdf.rect(0,0,210,297,'F');pdf.setFillColor(brand.primaryColor);pdf.rect(0,0,210,38,'F');
-    let left=margin;if(logo){try{pdf.addImage(logo,'PNG',margin,9,18,18);left+=24;}catch{}}
+    drawPdfBrand(pdf,margin,8,30,23,logo);const left=margin+37;
     pdf.setFont('helvetica','bold');pdf.setFontSize(14);pdf.setTextColor('#F4F7FA');pdf.text(pdf.splitTextToSize(clean(brand.academyName),193-left),left,16);
     pdf.setFont('helvetica','normal');pdf.setFontSize(8);pdf.text('COURSE BROCHURE  |  LEARN - INNOVATE - SUCCEED',left,31);
     pdf.setFillColor(brand.accentColor);pdf.rect(margin,38,28,1.2,'F');y=49;
@@ -33,7 +34,7 @@ export async function buildBrochurePdf(course:CourseBrochure,origin:string,stamp
   write('The fee and any offer shown reflect the brochure request date. Confirm the current price and available batch before applying.',8);
   if(course.batches.length){section('Upcoming batches');for(const b of course.batches)write(`${b.name}\nStarts ${date(b.startsAt)} | Apply by ${date(b.deadline)} | ${b.seatsLeft} places available`);}
   if(course.page.requirements.length){section('Before you begin');for(const item of course.page.requirements)write(`- ${item}`);}
-  section('Curriculum');for(const [i,module] of course.modules.entries()){
+  ensure(42);section('Curriculum');for(const [i,module] of course.modules.entries()){
     ensure(20);write(`${String(i+1).padStart(2,'0')}  ${module.title}`,12,true,brand.primaryColor);
     if(module.summary)write(module.summary,10);for(const item of module.objectives)write(`- ${item}`,9);
     for(const [n,lesson] of module.lessons.entries())write(`  ${n+1}. ${lesson.title}${lesson.duration?` (${lesson.duration})`:''}`,9);

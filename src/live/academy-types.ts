@@ -1,6 +1,7 @@
 export interface CertificateTemplate {
   courseId: string; title: string; issuer: string; signer: string; signerRole: string;
   design: 'architectural' | 'classic' | 'minimal'; primaryColor: string; accentColor: string;
+  logoImage?:string; signatureImage?:string; detailText?:string; durationLabel?:string;
 }
 export interface CertificateRecord {
   id: string; studentId: string; courseId: string; studentName: string; courseTitle: string;

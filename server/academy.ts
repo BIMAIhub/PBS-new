@@ -1,3 +1,4 @@
+import { saveCertificateDesign } from './certificate-documents.js';
 import { randomBytes } from 'node:crypto';
 import type { Express } from 'express';
 import { requireAccount } from './auth.js';
@@ -124,6 +125,7 @@ export function mountAcademy(app: Express, db: WritableDatabase, hosted: boolean
         signer_role = excluded.signer_role, design = excluded.design, primary_color = excluded.primary_color, accent_color = excluded.accent_color`)
         .run(courseId, field(req.body?.title, 'certificate title', 120), field(req.body?.issuer, 'issuer', 120),
           field(req.body?.signer, 'signer name', 120), field(req.body?.signerRole, 'signer role', 120), design, color('primaryColor'), color('accentColor'));
+      await saveCertificateDesign(tx,courseId,req.body||{});
       await audit(tx, admin.id, 'Certificate design saved', courseId, design);
     });
     res.json(await certificateTemplate(db, courseId));

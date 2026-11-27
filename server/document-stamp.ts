@@ -17,11 +17,11 @@ export function mountDocumentStamp(app: Express, db: WritableDatabase) {
     const admin = await requireAccount(db, req, 'admin');
     if (typeof req.body?.enabled !== 'boolean' || !['round', 'square'].includes(req.body?.design)) throw badRequest('Choose valid stamp options.');
     const color = (key: string) => { const v = field(req.body?.[key], 'stamp color', 7); if (!/^#[a-f0-9]{6}$/i.test(v)) throw badRequest('Choose six-digit stamp colors.'); return v; };
-    const imageData = field(req.body?.imageData, 'stamp image', 150000, false);
+    const imageData = field(req.body?.imageData, 'stamp image', 190000, false);
     if (imageData) {
       const match = /^data:(image\/(?:png|jpeg));base64,([A-Za-z0-9+/]+={0,2})$/.exec(imageData);
       if (!match) throw badRequest('Choose a PNG or JPEG stamp image.');
-      const bytes = Buffer.from(match[2], 'base64'); if (bytes.length > 100000) throw badRequest('Choose a stamp image below 100 KB.');
+      const bytes = Buffer.from(match[2], 'base64'); if (bytes.length > 125000) throw badRequest('Choose a stamp image below 125 KB.');
       imageExtension(bytes, match[1]);
     }
     const next: DocumentStamp = { enabled: req.body.enabled, design: req.body.design,

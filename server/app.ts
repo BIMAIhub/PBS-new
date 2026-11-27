@@ -1,6 +1,7 @@
 import express from 'express';
 import { openDatabase } from './database.js';
 import { provisionInitialAdministrator } from './administrators.js';
+import { mountCertificateDocuments } from './certificate-documents.js';
 import { mountAuth, requireAccount } from './auth.js';
 import { mountAdmin } from './admin.js';
 import { mountCourseContent } from './course-content.js';
@@ -35,10 +36,10 @@ import { mountLearningFiles } from './learning-files.js';
 import { mountLearningResources } from './learning-resources.js';
 import { mountAcademyReset } from './academy-reset.js';
 import { mountPush, runPushCycle, type PushSender } from './push.js';
-import type { graph } from './microsoft.js';
+import type { graph,sendMicrosoftMail } from './microsoft.js';
 import { apiError, field, limitAttempts, RequestError, route } from './http.js';
 
-export async function createPortalApp(hosted = false, dependencies: {microsoftGraph?:typeof graph; defer?:(task:Promise<unknown>)=>void; pushSender?:PushSender} = {}) {
+export async function createPortalApp(hosted = false, dependencies: {microsoftGraph?:typeof graph; defer?:(task:Promise<unknown>)=>void;microsoftMail?:typeof sendMicrosoftMail; pushSender?:PushSender} = {}) {
   const app = express();
   const publicOrigin = process.env.PBS_PUBLIC_ORIGIN ? new URL(process.env.PBS_PUBLIC_ORIGIN).origin : '';
   const db = await openDatabase(hosted);
@@ -77,6 +78,7 @@ export async function createPortalApp(hosted = false, dependencies: {microsoftGr
     next();
   });
   app.use('/api/admin/learning-quizzes',express.json({limit:'768kb'}));
+  app.use('/api/admin/certificate-template',express.json({limit:'512kb'}));
   app.use('/api', express.json({ limit: '256kb' }));
   app.use('/api', (req, res, next) => {
     const change = !['GET','HEAD','OPTIONS'].includes(req.method) &&
@@ -127,6 +129,7 @@ export async function createPortalApp(hosted = false, dependencies: {microsoftGr
   mountAcademyReset(app,db,hosted);
   mountLeads(app,db,hosted);
   mountHistoricalStudents(app,db);
+  mountCertificateDocuments(app,db,hosted,dependencies.microsoftMail);
   mountLearningFiles(app,db,dependencies.microsoftGraph);
   mountLearningResources(app,db);
   mountLearningQuizzes(app,db);

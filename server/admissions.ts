@@ -3,6 +3,7 @@ import type { Express } from 'express';
 import { findAccount, requireAccount } from './auth.js';
 import { type Database, type WritableDatabase, makeId, now, transaction } from './database.js';
 import { audit, saveSetting, setting } from './academy-data.js';
+import { manualMailSender } from './mail.js';
 import { publicBranding } from './branding.js';
 import { conflict, field, limitAttempts, notFound, RequestError, route } from './http.js';
 import { verifyPassword } from './passwords.js';
@@ -59,7 +60,8 @@ export async function accessPackage(db: Database, studentId: string, origin: str
 
 // Delivery records contain status and a digest, never the temporary password or message body.
 export async function deliverAccessEmail(db: WritableDatabase, adminId: string, kit: AccessPackage, requestKey: string, sendMail = sendMicrosoftMail): Promise<AccessDelivery> {
-  if (!await db.prepare('SELECT 1 FROM microsoft_mail_connections WHERE admin_id = ?').get(adminId)) {
+  const sendingAccount=await manualMailSender(db,adminId);
+  if (!sendingAccount) {
     return { status: 'unconfigured', error: 'Email was not sent. Connect Microsoft in OneDrive & email to send directly, or use the email draft or WhatsApp button.' };
   }
   const contentHash = createHash('sha256').update(`${kit.studentId}\n${kit.email}\n${kit.body}`).digest('hex');
@@ -80,7 +82,7 @@ export async function deliverAccessEmail(db: WritableDatabase, adminId: string, 
   });
   if (prepared.prior) return prepared.prior;
   let status: AccessDelivery['status'] = 'accepted', error = '';
-  try { await sendMail(db, adminId, kit.email, kit.subject, kit.body); }
+  try { await sendMail(db, sendingAccount, kit.email, kit.subject, kit.body); }
   catch (problem) {
     status = problem instanceof RequestError ? 'failed' : 'unknown';
     error = problem instanceof RequestError ? problem.message : 'Delivery is uncertain. Check Microsoft Sent Items before sending another message.';

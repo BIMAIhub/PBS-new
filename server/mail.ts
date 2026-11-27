@@ -5,7 +5,7 @@ import { type Database, type WritableDatabase, makeId, now, transaction } from '
 import { audit, saveSetting, setting } from './academy-data.js';
 import { publicBranding } from './branding.js';
 import { brandedEmail, escapeHtml } from './email-layout.js';
-import { portalOrigin, sendMicrosoftMail } from './microsoft.js';
+import { checkMicrosoftMail,portalOrigin, sendMicrosoftMail } from './microsoft.js';
 import { badRequest, conflict, emailAddress, field, limitAttempts, notFound, RequestError, route } from './http.js';
 import { defaultMailTemplates, fillMailTemplate } from '../src/live/mail-templates.js';
 import type { MailAutomation, MailTemplate, MailTemplateId } from '../src/live/engagement-types.js';
@@ -23,6 +23,11 @@ async function sender(db: Database) {
   if (settings.senderId) return await db.prepare('SELECT 1 FROM microsoft_mail_connections WHERE admin_id = ?').get(settings.senderId) ? settings.senderId : '';
   const connections = await db.prepare('SELECT admin_id FROM microsoft_mail_connections LIMIT 2').all();
   return connections.length === 1 ? String(connections[0].admin_id) : '';
+}
+export async function manualMailSender(db:Database,preferred='') {
+  if(preferred&&await db.prepare('SELECT 1 FROM microsoft_mail_connections WHERE admin_id=?').get(preferred))return preferred;
+  const options=await mailAutomation(db);if(options.senderId&&await db.prepare('SELECT 1 FROM microsoft_mail_connections WHERE admin_id=?').get(options.senderId))return options.senderId;
+  const connections=await db.prepare('SELECT admin_id FROM microsoft_mail_connections LIMIT 2').all();return connections.length===1?String(connections[0].admin_id):'';
 }
 const money = (value: number) => `INR ${(value / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 export async function templateVariables(db: Database, origin: string, accountId = '', extra: Record<string, string> = {}) {
@@ -107,12 +112,17 @@ const campaignSql = `SELECT c.id,c.title,c.template_id AS templateId,c.subject,c
   (SELECT COUNT(*) FROM mail_outbox o WHERE o.campaign_id=c.id AND o.status IN ('sending','unknown')) AS uncertain FROM mail_campaigns c`;
 
 export function mountMail(app: Express, db: WritableDatabase, hosted: boolean) {
+  app.post('/api/admin/mail/check-connection',route(async(req,res)=>{const admin=await requireAccount(db,req,'admin'),id=await manualMailSender(db,admin.id);if(!id)throw conflict('Connect or select the institution mailing account in OneDrive & email.');res.json(await checkMicrosoftMail(db,id));}));
   app.get('/api/admin/mail', route(async (req, res) => {
-    await requireAccount(db, req, 'admin');
-    res.json({ templates: await mailTemplates(db), automation: await mailAutomation(db), scheduledProcessing: Boolean(process.env.CRON_SECRET),
+    const admin=await requireAccount(db, req, 'admin');
+    res.json({ effectiveSenderId:await manualMailSender(db,admin.id),templates: await mailTemplates(db), automation: await mailAutomation(db), scheduledProcessing: Boolean(process.env.CRON_SECRET),
       senders: await db.prepare('SELECT m.admin_id AS id,m.profile_email AS email,m.profile_name AS name FROM microsoft_mail_connections m').all(),
       campaigns: await db.prepare(`${campaignSql} ORDER BY c.created_at DESC LIMIT 100`).all(),
-      deliveries: await db.prepare('SELECT id,email,name,subject,status,error,created_at AS createdAt,sent_at AS sentAt FROM mail_outbox ORDER BY created_at DESC LIMIT 100').all() });
+      deliveries: await db.prepare(`SELECT * FROM (
+        SELECT id,email,name,subject,status,error,created_at AS createdAt,sent_at AS sentAt,'campaign' AS kind FROM mail_outbox
+        UNION ALL SELECT d.id,d.email,c.student_name AS name,'Certificate PDF' AS subject,d.status,d.error,d.created_at AS createdAt,d.sent_at AS sentAt,'certificate' AS kind FROM certificate_mail_deliveries d JOIN certificates c ON c.id=d.certificate_id
+        UNION ALL SELECT d.id,d.email,a.name,'Student access details' AS subject,d.status,d.error,d.created_at AS createdAt,CASE WHEN d.status='accepted' THEN d.created_at ELSE '' END AS sentAt,'access' AS kind FROM access_deliveries d JOIN accounts a ON a.id=d.account_id
+      ) ORDER BY createdAt DESC LIMIT 100`).all() });
   }));
   app.put('/api/admin/mail/templates/:id', route(async (req, res) => {
     const admin = await requireAccount(db, req, 'admin'), id = req.params.id as MailTemplateId;
@@ -170,7 +180,7 @@ export function mountMail(app: Express, db: WritableDatabase, hosted: boolean) {
   }));
   app.post('/api/admin/mail/campaigns/:id/send',limitAttempts(20,hosted?db:undefined),route(async(req,res)=>{
     const admin=await requireAccount(db,req,'admin');
-    if(!await db.prepare('SELECT 1 FROM microsoft_mail_connections WHERE admin_id=?').get(admin.id)) throw conflict('Connect Microsoft in OneDrive & email before sending.');
+    const sendingAccount=await manualMailSender(db,admin.id);if(!sendingAccount)throw conflict('Connect or select the PBS mailing account in OneDrive & email before sending.');
     const campaign=await db.prepare('SELECT * FROM mail_campaigns WHERE id=?').get(req.params.id); if(!campaign) throw notFound('This campaign is unavailable.');
     if(campaign.revision!==req.body?.revision) throw conflict('Refresh the campaign before sending.');
     const recipients=await db.prepare('SELECT * FROM mail_campaign_recipients WHERE campaign_id=?').all(req.params.id);
@@ -182,13 +192,13 @@ export function mountMail(app: Express, db: WritableDatabase, hosted: boolean) {
     }
     await transaction(db,async tx=>{
       const current=await tx.prepare('SELECT status FROM mail_campaigns WHERE id=?').get(req.params.id); if(current?.status==='cancelled') throw conflict('This campaign is cancelled.');
-      for(const {r,subject,body} of prepared) await tx.prepare('INSERT OR IGNORE INTO mail_outbox (id,event_key,campaign_id,admin_id,account_id,email,name,subject,body,marketing,origin,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)').run(makeId(),`campaign:${campaign.id}:${r.email}`,campaign.id,admin.id,r.account_id,r.email,r.name,subject,body,campaign.marketing,portalOrigin(req),now());
+      for(const {r,subject,body} of prepared) await tx.prepare('INSERT OR IGNORE INTO mail_outbox (id,event_key,campaign_id,admin_id,account_id,email,name,subject,body,marketing,origin,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)').run(makeId(),`campaign:${campaign.id}:${r.email}`,campaign.id,sendingAccount,r.account_id,r.email,r.name,subject,body,campaign.marketing,portalOrigin(req),now());
       await tx.prepare("UPDATE mail_campaigns SET status='queued' WHERE id=?").run(req.params.id);
       await audit(tx,admin.id,'Email campaign queued',req.params.id,`${recipients.length} recipient snapshots`);
     });
-    res.json(await processMailQueue(db,admin.id));
+    res.json(await processMailQueue(db,sendingAccount));
   }));
-  app.post('/api/admin/mail/process',limitAttempts(30,hosted?db:undefined),route(async(req,res)=>{const admin=await requireAccount(db,req,'admin');res.json(await processMailQueue(db,admin.id));}));
+  app.post('/api/admin/mail/process',limitAttempts(30,hosted?db:undefined),route(async(req,res)=>{const admin=await requireAccount(db,req,'admin'),sendingAccount=await manualMailSender(db,admin.id);if(!sendingAccount)throw conflict('Connect or select the PBS mailing account before processing queued emails.');res.json(await processMailQueue(db,sendingAccount));}));
   app.post('/api/admin/mail/campaigns/:id/cancel',route(async(req,res)=>{
     const admin=await requireAccount(db,req,'admin');
     await transaction(db,async tx=>{
@@ -202,7 +212,8 @@ export function mountMail(app: Express, db: WritableDatabase, hosted: boolean) {
   }));
   app.post('/api/admin/mail/deliveries/:id/retry',route(async(req,res)=>{
     const admin=await requireAccount(db,req,'admin');const row=await db.prepare('SELECT status,admin_id FROM mail_outbox WHERE id=?').get(req.params.id);
-    if(!row||row.admin_id!==admin.id) throw notFound('This delivery is unavailable.'); if(row.status!=='failed') throw conflict('Only confirmed failures can be retried. Check Sent Items for uncertain delivery.');
-    await db.prepare("UPDATE mail_outbox SET status='pending',error='' WHERE id=? AND status='failed'").run(req.params.id);res.json({queued:true});
+    if(!row) throw notFound('This delivery is unavailable.'); if(row.status!=='failed') throw conflict('Only confirmed failures can be retried. Check Sent Items for uncertain delivery.');
+    const sendingAccount=await manualMailSender(db,admin.id);if(!sendingAccount)throw conflict('Reconnect or select a mailing account before retrying.');
+    await db.prepare("UPDATE mail_outbox SET status='pending',error='',admin_id=? WHERE id=? AND status='failed'").run(sendingAccount,req.params.id);res.json({queued:true});
   }));
 }

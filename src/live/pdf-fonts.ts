@@ -1,7 +1,7 @@
 import type { jsPDF } from 'jspdf';
 
 let fonts:Promise<string[]>|undefined;
-const sources=[
+const sources=()=>[
   new URL('../assets/pdf-fonts/LiberationSans-Regular.ttf',import.meta.url),
   new URL('../assets/pdf-fonts/LiberationSans-Bold.ttf',import.meta.url),
   new URL('../assets/pdf-fonts/LiberationSerif-Regular.ttf',import.meta.url),
@@ -12,9 +12,9 @@ async function fontData(url:URL) {
   let data='';for(let i=0;i<bytes.length;i+=8192)data+=String.fromCharCode(...bytes.subarray(i,i+8192));return btoa(data);
 }
 // Embed the same glyphs and metrics in the PDF; viewer substitutions must not change its layout.
-export async function installPdfFonts(pdf:jsPDF) {
-  fonts??=Promise.all(sources.map(fontData)).catch(error=>{fonts=undefined;throw error;});
-  const data=await fonts;
+export async function installPdfFonts(pdf:jsPDF,supplied?:string[]) {
+  if(!supplied)fonts??=Promise.all(sources().map(fontData)).catch(error=>{fonts=undefined;throw error;});
+  const data=supplied||await fonts;
   const styles=[['helvetica','normal'],['helvetica','bold'],['times','normal'],['times','italic']] as const;
   for(const [index,[family,style]] of styles.entries()) {const filename=`Liberation-${family}-${style}.ttf`;pdf.addFileToVFS(filename,data[index]);pdf.addFont(filename,family,style);}
 }

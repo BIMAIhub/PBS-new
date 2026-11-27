@@ -37,8 +37,8 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
 
 export async function brandLogoData(brand: Branding): Promise<string> {
   const image = new Image(); image.src = brand.logoUrl; await image.decode();
-  const canvas = document.createElement('canvas'); canvas.width = 240; canvas.height = 240;
+  const scale=Math.min(1,720/Math.max(image.naturalWidth,image.naturalHeight));
+  const canvas = document.createElement('canvas'); canvas.width = Math.max(1,Math.round(image.naturalWidth*scale)); canvas.height = Math.max(1,Math.round(image.naturalHeight*scale));
   const context = canvas.getContext('2d'); if (!context) throw new Error('Image export is unavailable.');
-  const scale = Math.min(240 / image.naturalWidth, 240 / image.naturalHeight), width = image.naturalWidth * scale, height = image.naturalHeight * scale;
-  context.drawImage(image, (240 - width) / 2, (240 - height) / 2, width, height); return canvas.toDataURL('image/png');
+  context.drawImage(image, 0,0,canvas.width,canvas.height); return canvas.toDataURL('image/png');
 }

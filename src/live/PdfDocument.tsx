@@ -5,11 +5,11 @@ import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { messageFrom } from './api';
 import { Button, FormError } from './ui';
 
-export function PdfDocument({load,filename,label='Document'}:{load:()=>Promise<jsPDF>;filename:string;label?:string}) {
+export function PdfDocument({load,filename,label='Document'}:{load:()=>Promise<jsPDF|Blob>;filename:string;label?:string}) {
   const [file,setFile]=useState<{blob:Blob;url:string}>(),[error,setError]=useState(''),[revision,setRevision]=useState(0);
   useEffect(()=>{
     let active=true,url='';setFile(undefined);setError('');
-    void load().then(pdf=>{if(!active)return;const blob=pdf.output('blob');url=URL.createObjectURL(blob);setFile({blob,url});}).catch(e=>{if(active)setError(messageFrom(e));});
+    void load().then(pdf=>{if(!active)return;const blob=pdf instanceof Blob?pdf:pdf.output('blob');url=URL.createObjectURL(blob);setFile({blob,url});}).catch(e=>{if(active)setError(messageFrom(e));});
     return()=>{active=false;if(url)URL.revokeObjectURL(url);};
   },[load,revision]);
   const shareFile=file?new File([file.blob],filename,{type:'application/pdf'}):undefined;
@@ -17,7 +17,7 @@ export function PdfDocument({load,filename,label='Document'}:{load:()=>Promise<j
   return <div className="pbs-pdf-document"><FormError error={error}/>{!file&&!error&&<p role="status" className="pbs-muted">Preparing your PDF…</p>}{error&&<Button quiet onClick={()=>setRevision(v=>v+1)}>Try again</Button>}
     {file&&<><PdfPages blob={file.blob} label={label}/><p className="pbs-muted pbs-small">This preview and download use the same fixed-size PDF pages on every device.</p><div className="pbs-dialog-actions pbs-pdf-actions">
       <a className="pbs-button pbs-button-outline" href={file.url} target="_blank" rel="noopener noreferrer"><Printer size={17}/>Open / print PDF</a>
-      {canShare&&<Button quiet onClick={()=>{void navigator.share({files:[shareFile!],title:label}).catch(e=>{if(e?.name!=='AbortError')setError(messageFrom(e));});}}><Share2 size={17}/>Save / share file</Button>}
+      {canShare&&<Button quiet onClick={()=>{void navigator.share({files:[shareFile!],title:label}).catch(e=>{if(e?.name!=='AbortError')setError(messageFrom(e));});}}><Share2 size={17}/>Share PDF file</Button>}
       <a className="pbs-button pbs-button-primary" href={file.url} download={filename}><Download size={17}/>Download PDF</a>
     </div></>}
   </div>;

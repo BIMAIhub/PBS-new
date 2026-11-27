@@ -1,4 +1,14 @@
 export const educationSchema = `
+CREATE TABLE IF NOT EXISTS certificate_design_assets (
+ course_id TEXT PRIMARY KEY,logo_image TEXT NOT NULL DEFAULT '',signature_image TEXT NOT NULL DEFAULT '',detail_text TEXT NOT NULL DEFAULT '',duration_label TEXT NOT NULL DEFAULT '',revision TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS certificate_mail_deliveries (
+ id TEXT PRIMARY KEY,certificate_id TEXT NOT NULL REFERENCES certificates(id) ON DELETE CASCADE,account_id TEXT NOT NULL REFERENCES accounts(id),sender_id TEXT NOT NULL REFERENCES accounts(id),request_key TEXT NOT NULL UNIQUE,
+ email TEXT NOT NULL,status TEXT NOT NULL,error TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,sent_at TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS alumni_welcomes (account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,certificate_id TEXT NOT NULL REFERENCES certificates(id) ON DELETE CASCADE,seen_at TEXT NOT NULL,PRIMARY KEY(account_id,certificate_id));
+CREATE TABLE IF NOT EXISTS referral_code_controls (account_id TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,enabled INTEGER NOT NULL DEFAULT 1,alumni_paid_verified INTEGER NOT NULL DEFAULT 0,note TEXT NOT NULL DEFAULT '',updated_at TEXT NOT NULL,verified_at TEXT NOT NULL DEFAULT '');
+
 CREATE TABLE IF NOT EXISTS course_leads (
   id TEXT PRIMARY KEY, course_id TEXT NOT NULL REFERENCES courses(id), email TEXT NOT NULL COLLATE NOCASE,
   name TEXT NOT NULL, phone TEXT NOT NULL DEFAULT '', qualification TEXT NOT NULL DEFAULT '',

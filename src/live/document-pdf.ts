@@ -1,3 +1,4 @@
+import { drawPdfBrand } from './pdf-image';
 import { installPdfFonts } from './pdf-fonts';
 import type { Branding } from './branding-types';
 import type { DocumentInfo, DocumentStamp } from './document-types';
@@ -22,11 +23,9 @@ export async function buildDocumentPdf(document: DocumentInfo, brand: Branding, 
   function header() {
     pdf.setFillColor('#F4F7FA'); pdf.rect(0, 0, width, height, 'F');
     pdf.setFillColor(brand.primaryColor); pdf.rect(0, 0, width, 5, 'F');
-    let logo = false;
-    if (assets.logo) { try { pdf.addImage(assets.logo, 'PNG', margin, 12, 15, 15); logo = true; } catch {} }
-    const left = logo ? margin + 20 : margin;
+    drawPdfBrand(pdf,margin,10,25,21,assets.logo);const left=margin+31;
     pdf.setFont('helvetica', 'bold'); pdf.setFontSize(14); pdf.setTextColor(brand.primaryColor);
-    pdf.text(pdf.splitTextToSize(text(brand.academyName), inner - (logo ? 20 : 0)), left, 17);
+    pdf.text(pdf.splitTextToSize(text(brand.academyName), inner-31), left, 17);
     label(brand.supportEmail, left, 29, 8, false, '#53687A');
     pdf.setDrawColor(brand.accentColor); pdf.setLineWidth(.5); pdf.line(margin, 34, width - margin, 34);
     label(title, margin, 44, idCard ? 16 : 19, true, brand.primaryColor); y = 54;

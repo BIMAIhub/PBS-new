@@ -104,12 +104,17 @@ export function portalOrigin(req: Request) {
   return process.env.PBS_PUBLIC_ORIGIN ? new URL(process.env.PBS_PUBLIC_ORIGIN).origin : `${process.env.VERCEL ? 'https' : req.protocol}://${req.get('host')}`;
 }
 
-export async function sendMicrosoftMail(db: Database, adminId: string, email: string, subject: string, body: string, options: { unsubscribeUrl?: string } = {}) {
+export async function sendMicrosoftMail(db: Database, adminId: string, email: string, subject: string, body: string, options: { unsubscribeUrl?: string;attachments?:{name:string;contentType:string;contentBytes:string}[] } = {}) {
   const html = brandedEmail(await publicBranding(db), subject, body, options.unsubscribeUrl);
   await graphToken(await accessToken(db, adminId, 'mail'), '/me/sendMail', { method: 'POST', body: JSON.stringify({
-    message: { subject, body: { contentType: 'HTML', content: html }, toRecipients: [{ emailAddress: { address: email } }] },
+    message: { subject, body: { contentType: 'HTML', content: html }, toRecipients: [{ emailAddress: { address: email } }],...(options.attachments?.length?{attachments:options.attachments.map(file=>({'@odata.type':'#microsoft.graph.fileAttachment',...file}))}:{}) },
     saveToSentItems: true,
   }) });
+}
+export async function checkMicrosoftMail(db:Database,adminId:string) {
+  const token=await accessToken(db,adminId,'mail');let scopes:string[]=[];try{scopes=String(JSON.parse(Buffer.from(token.split('.')[1],'base64url').toString()).scp||'').split(' ');}catch{}
+  if(scopes.length&&!scopes.some(scope=>scope.toLowerCase()==='mail.send'))throw conflict('Reconnect the Microsoft mailing account and approve Mail.Send permission. Your OneDrive connection can stay separate.');
+  const profile=await graphToken(token,'/me?$select=mail,userPrincipalName');return {email:String(profile.mail||profile.userPrincipalName||''),checkedAt:now(),status:'ready'};
 }
 
 export async function grantCourseAccess(db: WritableDatabase, enrollmentId: string, actorId: string, automatic = false, request: typeof graph = graph) {

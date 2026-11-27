@@ -59,7 +59,7 @@ test('historical credentials describe verified training without inventing an ass
     courseTitle:'Professional Building Information Modelling, Revit Mechanical Electrical Plumbing Coordination and Advanced Project Documentation',
     template:{...pdfCertificate.template,title:'Certificate of professional course completion',signer:'Academic director and head of professional BIM learning programs',signerRole:'Authorized institution signatory for professional training and education'},
     historical:{completedAt:'2024-06-01',mode:'offline',originalNumber:'PBS/OFFLINE/2024/ORIGINAL-000001',qualification:'Civil engineer',scoreRecorded:false,hasOriginal:true}},defaultBranding,{},stamp);
-  assert.equal(pdf.getNumberOfPages(),1);assert.match(await readable(pdf),/has completed verified training in/);assert.ok(!(await readable(pdf)).includes('learning requirements and assessment'));assert.match(await readable(pdf),/ORIGINAL-000001/);
+  assert.equal(pdf.getNumberOfPages(),1);assert.match(await readable(pdf),/has completed verified offline training in/);assert.ok(!(await readable(pdf)).includes('learning requirements and assessment'));assert.match(await readable(pdf),/ORIGINAL-000001/);
 });
 
 test('course brochures paginate real curriculum and use identical A4 content on mobile and desktop',async()=>{

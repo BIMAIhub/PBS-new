@@ -35,7 +35,7 @@ export function StudentAccessDialog({ access, delivery: initial, receipt, onRece
       <div className="pbs-access-channels"><Button disabled={busy || alreadySent} onClick={() => void email()}><Send size={17} />{busy ? 'Sending…' : delivery?.status === 'accepted' ? 'Email accepted' : delivery?.status === 'failed' ? 'Retry email' : 'Send email'}</Button>
         <a className="pbs-button pbs-button-outline" href={emailDraft}><Mail size={17} />Open email draft</a>
         {whatsapp ? <a className="pbs-button pbs-button-outline" href={whatsapp} target="_blank" rel="noopener noreferrer"><MessageCircle size={17} />Open WhatsApp</a> : <span className="pbs-muted">Add the student's WhatsApp number in their admin record.</span>}
-      </div><p className="pbs-muted pbs-small">WhatsApp opens a prepared message for you to send. Saved 10-digit numbers use India’s +91 country code. Direct email uses your connected Microsoft account.</p>
+      </div><p className="pbs-muted pbs-small">WhatsApp opens a prepared message for you to send. Saved 10-digit numbers use India’s +91 country code. Direct email uses the connected PBS mailing account.</p>
       {delivery?.status === 'accepted' && <p className="pbs-form-status" role="status">Microsoft accepted the email for {access.email}. Delivery status is available in Sent Items.</p>}
       {delivery && delivery.status !== 'accepted' && <p className="pbs-form-status" role="status">{delivery.error || 'The email request is pending. Check Sent Items before trying another channel.'}</p>}
       <FormError error={error} />{copied && <p className="pbs-form-status" role="status">{copied} copied.</p>}

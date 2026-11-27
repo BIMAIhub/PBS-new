@@ -121,6 +121,7 @@ export function mountCommerce(app: Express, db: WritableDatabase, hosted: boolea
     const start = date('startsAt'), end = date('endsAt'); if (start && end && end <= start) throw badRequest('The offer must end after its start date.');
     const email = kind !== 'public' && req.body?.assignedEmail ? emailAddress(req.body.assignedEmail) : '';
     await transaction(db, async tx => {
+      if(code&&await tx.prepare('SELECT 1 FROM referral_codes WHERE code=? COLLATE NOCASE').get(code))throw conflict('This code already belongs to a student referral. Choose a different offer code.');
       await tx.prepare(`INSERT INTO promotions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET title = excluded.title, description = excluded.description, kind = excluded.kind,
         code = excluded.code, percent = excluded.percent, course_id = excluded.course_id, owner_id = excluded.owner_id,

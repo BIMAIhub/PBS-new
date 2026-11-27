@@ -24,6 +24,8 @@ import { CatalogBrowser } from './Catalog';
 import { ResourceLibrary } from './LearningResources';
 import { StudentPastTraining } from './AdmissionsTools';
 import { StudentQuizzes } from './LearningQuizzes';
+import { AlumniWelcome } from './CertificateTools';
+import { CertificateDialog } from './Certificates';
 import { TaskAssignments } from './TaskAssignments';
 import { CourseInformation } from './CourseInformation';
 import { LiveClassesStudent, NextLiveSession } from './LiveClassesStudent';
@@ -220,8 +222,11 @@ export function StudentWorkspace({ account, onAccount, onSignOut }: {
   async function saved(message: string) {
     await refreshAll(); close(); setNotice(message);
   }
+  const [alumniCertificate,setAlumniCertificate]=useState<import('./academy-types').CertificateRecord>();
   const enrollment = data && activeEnrollment(data.enrollments);
   return <>
+    {!dialog&&!alumniCertificate&&<AlumniWelcome accountId={account.id} onCertificate={setAlumniCertificate} onReferrals={()=>navigate('referrals')}/>}
+    {alumniCertificate&&<CertificateDialog record={alumniCertificate} onClose={()=>setAlumniCertificate(undefined)}/>}
     <WorkspaceChrome groups={groups} activePage={page} onNavigate={navigate} userName={account.name}
       notifications={<NotificationCenter onNavigate={target => { if (groups.some(group => group.pages.some(item => item.id === target))) navigate(target as Page); }} />}
       onHelp={() => show({ kind: 'help' })}

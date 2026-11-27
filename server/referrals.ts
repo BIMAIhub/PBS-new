@@ -16,7 +16,27 @@ export function mountReferrals(app: Express, db: WritableDatabase) {
   app.get('/api/student/referral-dashboard',route(async(req,res)=>{
     const account=await requireAccount(db,req,'student'); const credits=await reconcileReferrals(db,new Date(),{ownerId:account.id});await notifyReferralCredits(db,credits,portalOrigin(req));
     const code=await ensureReferralCode(db,account.id),stats=await db.prepare(`SELECT COUNT(*) AS total,COALESCE(SUM(CASE WHEN status='credited' THEN amount ELSE 0 END),0) AS earned,COALESCE(SUM(CASE WHEN status='credited' THEN 1 ELSE 0 END),0) AS credited FROM referrals WHERE referrer_id=?`).get(account.id);
-    res.json({program:await referralProgram(db),code,referrals:await referralRows(db,account.id),balance:await walletBalance(db,account.id),earned:Number(stats?.earned||0),total:Number(stats?.total||0),credited:Number(stats?.credited||0),waiting:Number(stats?.total||0)-Number(stats?.credited||0),entries:await db.prepare('SELECT id,amount,kind,note,created_at AS createdAt FROM referral_wallet WHERE account_id=? ORDER BY created_at DESC LIMIT 100').all(account.id)});
+    res.json({program:await referralProgram(db),code,codeEnabled:!await db.prepare('SELECT 1 FROM referral_code_controls WHERE account_id=? AND enabled=0').get(account.id),referrals:await referralRows(db,account.id),balance:await walletBalance(db,account.id),earned:Number(stats?.earned||0),total:Number(stats?.total||0),credited:Number(stats?.credited||0),waiting:Number(stats?.total||0)-Number(stats?.credited||0),entries:await db.prepare('SELECT id,amount,kind,note,created_at AS createdAt FROM referral_wallet WHERE account_id=? ORDER BY created_at DESC LIMIT 100').all(account.id)});
+  }));
+  app.get('/api/admin/referral-codes',route(async(req,res)=>{
+    await requireAccount(db,req,'admin');res.json({codes:await db.prepare(`SELECT a.id,a.name,a.email,COALESCE(r.code,'') AS code,COALESCE(c.enabled,1) AS enabled,COALESCE(c.alumni_paid_verified,0) AS alumniPaidVerified,COALESCE(c.note,'') AS note,COALESCE(c.updated_at,'') AS updatedAt,
+      EXISTS(SELECT 1 FROM legacy_training h WHERE h.account_id=a.id) AS alumni,
+      (SELECT COUNT(*) FROM referrals f WHERE f.referrer_id=a.id) AS referred,
+      COALESCE((SELECT SUM(f.amount) FROM referrals f WHERE f.referrer_id=a.id AND f.status='credited'),0) AS earned
+      FROM accounts a LEFT JOIN referral_codes r ON r.account_id=a.id LEFT JOIN referral_code_controls c ON c.account_id=a.id WHERE a.role='student' AND NOT EXISTS(SELECT 1 FROM account_controls ac WHERE ac.account_id=a.id AND ac.status<>'active') ORDER BY a.name`).all()});
+  }));
+  app.post('/api/admin/students/:id/referral-code',route(async(req,res)=>{
+    const admin=await requireAccount(db,req,'admin'),account=await db.prepare("SELECT id FROM accounts WHERE id=? AND role='student' AND NOT EXISTS(SELECT 1 FROM account_controls c WHERE c.account_id=accounts.id AND c.status<>'active')").get(req.params.id);if(!account)throw notFound('This student is unavailable.');
+    const supplied=field(req.body?.code,'referral code',30,false).toUpperCase(),code=supplied||await ensureReferralCode(db,req.params.id),note=field(req.body?.note,'fee verification note',2000,false);
+    if(!/^[A-Z0-9][A-Z0-9-]{3,29}$/.test(code))throw badRequest('Use 4–30 letters, numbers or hyphens for the referral code.');
+    const paid=req.body?.alumniPaidVerified===true;if(paid&&(!note||!await db.prepare('SELECT 1 FROM legacy_training WHERE account_id=?').get(req.params.id)))throw badRequest('An alumni fee verification requires a past training record and an internal note.');
+    await transaction(db,async tx=>{
+      const current=await tx.prepare('SELECT updated_at FROM referral_code_controls WHERE account_id=?').get(req.params.id);if(current&&current.updated_at!==req.body?.updatedAt)throw conflict('Referral controls changed. Refresh before saving.');
+      if(await tx.prepare('SELECT 1 FROM referral_codes WHERE code=? COLLATE NOCASE AND account_id<>?').get(code,req.params.id)||await tx.prepare('SELECT 1 FROM promotions WHERE code=? COLLATE NOCASE').get(code))throw conflict('This referral or offer code is already in use.');
+      await tx.prepare('INSERT INTO referral_codes VALUES (?,?,?) ON CONFLICT(account_id) DO UPDATE SET code=excluded.code').run(req.params.id,code,now());
+      await tx.prepare(`INSERT INTO referral_code_controls VALUES (?,?,?,?,?,?) ON CONFLICT(account_id) DO UPDATE SET enabled=excluded.enabled,alumni_paid_verified=excluded.alumni_paid_verified,note=excluded.note,updated_at=excluded.updated_at,verified_at=CASE WHEN excluded.alumni_paid_verified=0 THEN '' WHEN referral_code_controls.alumni_paid_verified=1 THEN referral_code_controls.verified_at ELSE excluded.verified_at END`).run(req.params.id,Number(req.body?.enabled!==false),Number(paid),note,now(),paid?now():'');
+      await audit(tx,admin.id,'Referral code and alumni fee verification saved',req.params.id,`${code} · ${req.body?.enabled===false?'paused':'enabled'} · alumni fees ${paid?'verified':'not verified'}`);
+    });res.json({code});
   }));
   app.get('/api/admin/referrals',route(async(req,res)=>{
     await requireAccount(db,req,'admin');const credits=await reconcileReferrals(db);await notifyReferralCredits(db,credits,portalOrigin(req));
