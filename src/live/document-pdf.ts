@@ -1,8 +1,8 @@
-import { drawPdfBrand } from './pdf-image';
-import { installPdfFonts } from './pdf-fonts';
-import type { Branding } from './branding-types';
-import type { DocumentInfo, DocumentStamp } from './document-types';
-import { drawPdfStamp } from './pdf-stamp';
+import { drawPdfBrand } from './pdf-image.js';
+import { installPdfFonts } from './pdf-fonts.js';
+import type { Branding } from './branding-types.js';
+import type { DocumentInfo, DocumentStamp } from './document-types.js';
+import { drawPdfStamp } from './pdf-stamp.js';
 
 const text = (value: unknown) => String(value ?? '').replace(/₹/g, 'INR ').replace(/[–—]/g, '-');
 const currency = (amount: number) => `INR ${(amount / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -11,24 +11,25 @@ const date = (value: string) => value ? new Intl.DateTimeFormat('en-IN', { dateS
 // Physical page geometry is independent of the dialog, screen width and zoom.
 export async function buildDocumentPdf(document: DocumentInfo, brand: Branding, stamp: DocumentStamp, assets: { logo?: string } = {}) {
   const { jsPDF } = await import('jspdf');
-  const idCard = document.kind === 'id';
-  const pdf = new jsPDF({ orientation: idCard ? 'landscape' : 'portrait', format: idCard ? 'a5' : 'a4', unit: 'mm', compress: true, putOnlyUsedFonts:true });
+  const pdf = new jsPDF({ orientation: 'portrait', format: 'a4', unit: 'mm', compress: true, putOnlyUsedFonts:true });
   await installPdfFonts(pdf);
   const width = pdf.internal.pageSize.getWidth(), height = pdf.internal.pageSize.getHeight(), margin = 14, inner = width - margin * 2;
   const title = { receipt: 'Payment receipt', statement: 'Course fee statement', letter: 'Bonafide enrollment certificate', id: 'Student identification' }[document.kind];
   const reference = document.kind === 'receipt' ? document.receipt.number : document.kind === 'statement' || document.kind === 'letter' ? document.enrollment.id : document.account.id;
   let y = 50;
-  const bottom = idCard ? height - 43 : height - 62;
+  const bottom = height - 62;
   const label = (value: string, x: number, at: number, size = 9, bold = false, color = '#152C42') => { pdf.setFont('helvetica', bold ? 'bold' : 'normal'); pdf.setFontSize(size); pdf.setTextColor(color); pdf.text(text(value), x, at); };
   function header() {
     pdf.setFillColor('#F4F7FA'); pdf.rect(0, 0, width, height, 'F');
-    pdf.setFillColor(brand.primaryColor); pdf.rect(0, 0, width, 5, 'F');
-    drawPdfBrand(pdf,margin,10,25,21,assets.logo);const left=margin+31;
-    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(14); pdf.setTextColor(brand.primaryColor);
-    pdf.text(pdf.splitTextToSize(text(brand.academyName), inner-31), left, 17);
-    label(brand.supportEmail, left, 29, 8, false, '#53687A');
-    pdf.setDrawColor(brand.accentColor); pdf.setLineWidth(.5); pdf.line(margin, 34, width - margin, 34);
-    label(title, margin, 44, idCard ? 16 : 19, true, brand.primaryColor); y = 54;
+    pdf.setFillColor('#0A2845'); pdf.rect(0, 0, width, 39, 'F');
+    pdf.setFillColor(brand.primaryColor);pdf.rect(0,0,5,height,'F');
+    drawPdfBrand(pdf,margin,9,25,23,assets.logo);const left=margin+32;
+    let size=14,lines:string[]=[];
+    do{pdf.setFont('helvetica','bold');pdf.setFontSize(size);lines=pdf.splitTextToSize(text(brand.academyName),inner-32);if(lines.length*size*.35278*1.1<=13)break;size-=.5;}while(size>7);
+    pdf.setTextColor('#F4F7FA');pdf.text(lines,left,17,{lineHeightFactor:1.1});
+    label(brand.supportEmail,left,33,8,false,'#BED0DF');
+    pdf.setDrawColor(brand.accentColor); pdf.setLineWidth(.7); pdf.line(margin, 39, margin+30, 39);
+    label(title, margin, 51, 19, true, brand.primaryColor); y = 62;
   }
   function ensure(space: number) { if (y + space > bottom) { pdf.addPage(); header(); } }
   function paragraph(value: string, size = 10, color = '#40566A') {
@@ -39,13 +40,13 @@ export async function buildDocumentPdf(document: DocumentInfo, brand: Branding, 
   }
   function fields(entries: [string, string][]) {
     const cell = (inner - 10) / 2;
-    const valueSize = idCard ? 8 : 10, leading = idCard ? 3.6 : 4.6;
+    const valueSize = 10, leading = 4.6;
     for (let index = 0; index < entries.length; index += 2) {
       pdf.setFont('helvetica', 'bold'); pdf.setFontSize(valueSize);
       const pair = entries.slice(index, index + 2).map(([name, value]) => ({ name, lines: pdf.splitTextToSize(text(value), cell) as string[] }));
-      const rowHeight = Math.max(...pair.map(p => p.lines.length)) * leading + (idCard ? 9 : 11);
+      const rowHeight = Math.max(...pair.map(p => p.lines.length)) * leading + 11;
       ensure(rowHeight);
-      pair.forEach((entry, i) => { const x = margin + i * (cell + 10); label(entry.name, x, y, idCard ? 7 : 8, false, '#53687A'); entry.lines.forEach((line, n) => label(line, x, y + 6 + n * leading, valueSize, true)); });
+      pair.forEach((entry, i) => { const x = margin + i * (cell + 10); label(entry.name, x, y, 8, false, '#53687A'); entry.lines.forEach((line, n) => label(line, x, y + 6 + n * leading, valueSize, true)); });
       y += rowHeight;
     }
   }
@@ -90,12 +91,13 @@ export async function buildDocumentPdf(document: DocumentInfo, brand: Branding, 
     paragraph(`Issued at the student's request. For verification, contact ${brand.supportEmail} and quote the enrollment reference above.`, 9);
   } else {
     const a = document.account, active = document.enrollments.filter(e => e.status === 'approved');
-    fields([['Student', a.name], ['Student ID', a.id], ['Roll number', a.rollNumber], ['Registered', date(a.createdAt)], ['Enrollment', active.length ? `${active.length} approved course(s)` : 'Awaiting enrollment'], ['Institution', brand.shortName]]);
+    fields([['Student', a.name], ['Student ID', a.id], ['Roll number', a.rollNumber], ['Registered', date(a.createdAt)], ['Enrollment', active.length ? `${active.length} approved course(s)` : 'Awaiting enrollment'], ['Institution', brand.shortName],['Registered email',a.email]]);
+    if(active.length){paragraph('Approved courses',11,brand.primaryColor);for(const enrollment of active)paragraph(enrollment.courseTitle,10);}
   }
   const pages = pdf.getNumberOfPages();
   for (let index = 1; index <= pages; index++) {
     pdf.setPage(index);
-    drawPdfStamp(pdf, stamp, width - margin - (idCard ? 12 : 16), height - (idCard ? 31 : 35), idCard ? 10 : 14);
+    drawPdfStamp(pdf, stamp, width - margin - 16, height - 35, 12.5);
     pdf.setDrawColor(brand.accentColor); pdf.setLineWidth(.3); pdf.line(margin, height - 17, width - margin, height - 17);
     label(brand.academyName, margin, height - 11, 7, false, '#53687A');
     label(`${index} / ${pages}`, width - margin - 10, height - 11, 7, false, '#53687A');

@@ -29,7 +29,7 @@ test('every document uses identical physical geometry and vector content at phon
       runtime.window = {innerWidth:1920,devicePixelRatio:1};const desktop = await buildDocumentPdf(document,defaultBranding,stamp);
       assert.equal(content(mobile),content(desktop),`${document.kind} content must not depend on viewport`);
       assert.equal(mobile.getNumberOfPages(),1);assert.ok(Math.abs(mobile.internal.pageSize.getWidth()-210)<.1);
-      assert.ok(Math.abs(mobile.internal.pageSize.getHeight()-(document.kind==='id'?148:297))<.1);
+      assert.ok(Math.abs(mobile.internal.pageSize.getHeight()-297)<.1);
       assert.match(await readable(mobile),/AUTHORIZED RECORD/);assert.match(await readable(mobile),/Academic office/);
       if(document.kind==='receipt') {assert.match(await readable(mobile),/INR 7,500.00/);assert.match(await readable(mobile),/INR 7,499.00/);}
     }
@@ -49,7 +49,7 @@ test('long names stay in a single ID page and all certificate designs stay A4 la
   assert.equal(id.getNumberOfPages(),1);
   for(const design of ['architectural','classic','minimal'] as const) {
     const pdf=await buildCertificatePdf({...pdfCertificate,template:{...pdfCertificate.template,design}},defaultBranding,{},stamp);
-    assert.equal(pdf.getNumberOfPages(),1);assert.ok(Math.abs(pdf.internal.pageSize.getWidth()-297)<.1);assert.ok(Math.abs(pdf.internal.pageSize.getHeight()-210)<.1);assert.match(await readable(pdf),/AUTHORIZED RECORD/);
+    assert.equal(pdf.getNumberOfPages(),1);assert.ok(Math.abs(pdf.internal.pageSize.getWidth()-297)<.1);assert.ok(Math.abs(pdf.internal.pageSize.getHeight()-210)<.1);assert.match(await readable(pdf),/AUTHORIZED RECORD/);assert.equal((await readable(pdf)).split(pdfCertificate.template.signer).length-1,1,'one authorized signatory per certificate');
     const without=await buildCertificatePdf({...pdfCertificate,template:{...pdfCertificate.template,design}},defaultBranding,{}, {...stamp,enabled:false});assert.ok(!(await readable(without)).includes('AUTHORIZED RECORD'));
   }
 });

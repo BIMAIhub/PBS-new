@@ -11,7 +11,7 @@ import { badRequest,conflict,field,limitAttempts,notFound,RequestError,route } f
 import { manualMailSender,mailTemplates,templateVariables } from './mail.js';
 import { portalOrigin,sendMicrosoftMail } from './microsoft.js';
 import { fillMailTemplate } from '../src/live/mail-templates.js';
-import { buildCertificatePdf } from '../src/live/certificate-pdf.js';
+import { buildCertificatePdf,certificateLayoutVersion } from '../src/live/certificate-pdf.js';
 import type { CertificateRecord } from '../src/live/academy-types.js';
 
 let fonts:Promise<string[]>|undefined;
@@ -26,7 +26,7 @@ export async function certificateFile(db:Database,record:CertificateRecord,origi
   const brand=await publicBranding(db),stamp=await documentStamp(db),logo=record.template.logoImage||await brandingLogoData(db);
   const page=await db.prepare('SELECT duration FROM course_pages WHERE course_id=?').get(record.courseId),duration=String(page?.duration||'');
   const url=`${origin}/verify/certificate/${encodeURIComponent(record.publicToken)}`;
-  const key=createHash('sha256').update(JSON.stringify({record,brand,stamp,logo,duration,url})).digest('hex');const previous=cached.get(key);if(previous)return previous;
+  const key=createHash('sha256').update(JSON.stringify({layout:certificateLayoutVersion,record,brand,stamp,logo,duration,url})).digest('hex');const previous=cached.get(key);if(previous)return previous;
   const qr=record.published&&!record.revokedAt?await (await import('qrcode')).toDataURL(url,{margin:1,width:200,errorCorrectionLevel:'M'}):undefined;
   const pdf=await buildCertificatePdf(record,brand,{logo,qr,verificationUrl:url,duration,fonts:await serverFonts()},stamp);
   pdf.setCreationDate(new Date(record.issuedAt));pdf.setFileId(key.slice(0,32));
