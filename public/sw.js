@@ -1,8 +1,8 @@
 /* PBS caches public installation assets only. API responses, lessons, files and accounts stay online. */
-const PUBLIC_CACHE = 'pbs-public-v1';
+const PUBLIC_CACHE = 'pbs-public-v2';
 const OFFLINE_PAGE = '/offline.html';
 const pages = new Set(['overview','students','courses','sessions','enrollments','payments','projects','placements','messages',
-  'certificates','offers','curriculum','course-feedback','batches','notices','fees','project','downloads','reviews','portfolio','profile','referrals','roadmap','mobile-app']);
+  'leads','past-students','resources','certificates','offers','curriculum','course-feedback','batches','notices','fees','project','downloads','reviews','portfolio','profile','referrals','roadmap','mobile-app']);
 function notificationTarget(input) {
   try {
     const candidate = new URL(input || '/', self.location.origin);

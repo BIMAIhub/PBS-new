@@ -28,6 +28,11 @@ import { mountLearningProgress } from './learning-progress.js';
 import { mountDriveUploads } from './drive-uploads.js';
 import { mountAcademyLife } from './academy-life.js';
 import { mountReferralPayouts } from './referral-payouts.js';
+import { mountLearningQuizzes } from './learning-quizzes.js';
+import { mountLeads } from './leads.js';
+import { mountHistoricalStudents } from './historical-students.js';
+import { mountLearningFiles } from './learning-files.js';
+import { mountLearningResources } from './learning-resources.js';
 import { mountAcademyReset } from './academy-reset.js';
 import { mountPush, runPushCycle, type PushSender } from './push.js';
 import type { graph } from './microsoft.js';
@@ -71,6 +76,7 @@ export async function createPortalApp(hosted = false, dependencies: {microsoftGr
     }
     next();
   });
+  app.use('/api/admin/learning-quizzes',express.json({limit:'768kb'}));
   app.use('/api', express.json({ limit: '256kb' }));
   app.use('/api', (req, res, next) => {
     const change = !['GET','HEAD','OPTIONS'].includes(req.method) &&
@@ -119,6 +125,11 @@ export async function createPortalApp(hosted = false, dependencies: {microsoftGr
   mountAcademyLife(app,db);
   mountReferralPayouts(app,db);
   mountAcademyReset(app,db,hosted);
+  mountLeads(app,db,hosted);
+  mountHistoricalStudents(app,db);
+  mountLearningFiles(app,db,dependencies.microsoftGraph);
+  mountLearningResources(app,db);
+  mountLearningQuizzes(app,db);
 
   app.post('/api/ask-pbs', limitAttempts(12, hosted ? db : undefined), route(async (req, res) => {
     await requireAccount(db, req);

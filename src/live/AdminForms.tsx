@@ -141,8 +141,8 @@ export interface CreatedStudent {
   delivery?: AccessDelivery;
 }
 
-export function EnrollStudentForm({ courses, student, initialCourseId, onExisting, onCreateCourse, onClose, onSaved }: {
-  courses: Course[]; student?: StudentRecord; initialCourseId?: string; onExisting: (enrollment: Enrollment) => void;
+export function EnrollStudentForm({ courses, student, initialCourseId, prefill, onExisting, onCreateCourse, onClose, onSaved }: {
+  courses: Course[]; student?: StudentRecord; initialCourseId?: string; prefill?: {name:string;email:string;phone:string}; onExisting: (enrollment: Enrollment) => void;
   onCreateCourse: () => void; onClose: () => void; onSaved: (result: CreatedStudent) => Promise<void>;
 }) {
   const assignable = courses.filter(course => !course.paused && !student?.enrollments.some(enrollment => enrollment.courseId === course.id && enrollment.status !== 'rejected'));
@@ -162,9 +162,9 @@ export function EnrollStudentForm({ courses, student, initialCourseId, onExistin
       await onSaved(result);
     }}>
     <div className="pbs-form-grid">
-      <Input label="Full name" name="name" defaultValue={student?.name} readOnly={Boolean(student)} maxLength={120} required />
-      <Input label="Student email" name="email" type="email" defaultValue={student?.email} readOnly={Boolean(student)} required />
-      <Input label="Phone" name="phone" type="tel" defaultValue={student?.phone} readOnly={Boolean(student)} />
+      <Input label="Full name" name="name" defaultValue={student?.name||prefill?.name} readOnly={Boolean(student)} maxLength={120} required />
+      <Input label="Student email" name="email" type="email" defaultValue={student?.email||prefill?.email} readOnly={Boolean(student)} required />
+      <Input label="Phone" name="phone" type="tel" defaultValue={student?.phone||prefill?.phone} readOnly={Boolean(student)} />
       <Input label="Roll number" name="roll" defaultValue={student?.rollNumber} readOnly={Boolean(student)} placeholder="Assigned automatically if blank" />
     </div>
     <Field label="Course"><select name="course" required value={courseId} onChange={event => setCourseId(event.target.value)}>

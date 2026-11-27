@@ -27,7 +27,7 @@ export function StudentAccessDialog({ access, delivery: initial, receipt, onRece
   const whatsapp = access.whatsappNumber ? `https://wa.me/${access.whatsappNumber}?text=${encodeURIComponent(access.body)}` : '';
   const alreadySent = delivery?.status === 'accepted' || delivery?.status === 'unknown' || delivery?.status === 'pending';
   return <PortalDialog title="Student access ready" onClose={onClose} className="pbs-dialog-wide">
-    <div className="pbs-live-form"><div className="pbs-access-heading"><span><Check size={24} /></span><div><h3>{access.name}</h3><p>Approved enrollment · {access.studentId}</p></div></div>
+    <div className="pbs-live-form"><div className="pbs-access-heading"><span><Check size={24} /></span><div><h3>{access.name}</h3><p>Student record · {access.studentId}</p></div></div>
       <p className="pbs-muted">Share the sign-in link, course summary and fee details privately. {access.password ? 'The student must replace this temporary password at first sign-in.' : 'The student will use their existing password. Generate a new temporary password from Manage access when a reset is needed.'}</p>
       <div className="pbs-form-grid"><Input label="Student email" value={access.email} readOnly /><Input label="Saved WhatsApp number" value={access.whatsappNumber ? `+${access.whatsappNumber}` : 'No WhatsApp number saved'} readOnly /></div>
       {access.password && <Input label="Temporary password" value={access.password} readOnly />}

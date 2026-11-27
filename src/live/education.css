@@ -1,0 +1,32 @@
+.pbs-pdf-document { min-width:0; }
+.pbs-pdf-stage { width:100%; max-width:980px; margin:0 auto; min-height:120px; overflow:hidden; background:#e5e7e5; border:1px solid #d4a94d66; border-radius:8px; }
+.pbs-pdf-stage canvas { display:block; max-width:100%; height:auto; }
+.pbs-pdf-stage p { padding:24px; }
+.pbs-pdf-pagination { display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:12px; margin:16px 0; }
+.pbs-pdf-pagination span { color:var(--pbs-ink,#152c42); font-variant-numeric:tabular-nums; }
+.pbs-pdf-text { padding:16px; margin-top:16px; border:1px solid #d4a94d55; border-radius:12px; background:#f4f7fa; color:#152c42; }
+.pbs-pdf-text summary { cursor:pointer; font-weight:600; }
+.pbs-pdf-text .pbs-document-fields { margin-top:16px; }
+.pbs-pdf-actions { flex-wrap:wrap; }
+.pbs-education-stats { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin:24px 0; }
+.pbs-education-stats div { display:flex; flex-direction:column; gap:6px; padding:16px; border:1px solid #d4a94d66; border-radius:12px; background:linear-gradient(135deg,#d4a94d30,#d4a94d12); }
+.pbs-education-stats strong { font-size:26px; font-variant-numeric:tabular-nums; }
+.pbs-education-stats span { font-size:13px; }
+.pbs-resource-list h3 { display:flex; align-items:center; gap:8px; }
+.pbs-resource-list small { color:inherit; opacity:.8; overflow-wrap:anywhere; }
+.pbs-quiz-question { min-width:0; }
+.pbs-quiz-question legend { font-weight:600; }
+.pbs-quiz-question .pbs-check { align-items:flex-start; padding:12px; margin:8px 0; border:1px solid #d4a94d44; border-radius:10px; background:#d4a94d12; }
+.pbs-quiz-question .pbs-check input { margin-top:4px; flex:0 0 auto; }
+.pbs-quiz-question .pbs-check span { white-space:pre-wrap; overflow-wrap:anywhere; }
+.pbs-quiz-question .pbs-quiz-correct { background:#d8eadf; border-color:#39714b; color:#16442a; }
+.pbs-quiz-timer { display:flex; align-items:center; gap:10px; font-variant-numeric:tabular-nums; padding:12px 16px; border:1px solid #d4a94d; border-radius:10px; }
+.pbs-quiz-result { display:flex; align-items:center; gap:16px; background:#d4a94d22; border:1px solid #d4a94d77; border-radius:16px; padding:20px; }
+.pbs-quiz-result h3 { font-size:24px; }
+@media(max-width:650px) {
+  .pbs-education-stats { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .pbs-pdf-actions>a,.pbs-pdf-actions>button { flex:1 1 100%; justify-content:center; }
+  .pbs-pdf-pagination { gap:8px; }
+  .pbs-pdf-pagination .pbs-button { padding:9px; }
+  .pbs-resource-list .pbs-record-row { align-items:flex-start; }
+}

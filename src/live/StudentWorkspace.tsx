@@ -21,6 +21,9 @@ import { ProfilePage } from './ProfilePage';
 import { NotificationCenter } from './Notifications';
 import { initialWorkspacePage, MobileAppPage } from './MobileApp';
 import { CatalogBrowser } from './Catalog';
+import { ResourceLibrary } from './LearningResources';
+import { StudentPastTraining } from './AdmissionsTools';
+import { StudentQuizzes } from './LearningQuizzes';
 import { TaskAssignments } from './TaskAssignments';
 import { CourseInformation } from './CourseInformation';
 import { LiveClassesStudent, NextLiveSession } from './LiveClassesStudent';
@@ -37,7 +40,7 @@ const groups: WorkspaceNavGroup<Page>[] = [
     { id: 'explore', label: 'Explore courses', icon: Compass },
     { id: 'sessions', label: 'Live sessions', icon: CalendarDays },
     { id: 'notices', label: 'News & notices', icon: Megaphone },
-    { id: 'project', label: 'Capstone project', icon: Layers },
+    { id: 'project', label: 'Assignments & tests', icon: Layers },
   ] },
   { label: 'Resources', pages: [
     { id: 'mobile-app', label: 'PBS app & alerts', icon: Smartphone },
@@ -91,7 +94,7 @@ function StudentOverview({ data, completed, open, navigate }: {
       </section>
       <Panel title="Study tools">
         <WorkspaceActionRow action={{label:'My learning roadmap',detail:'Your modules, live sessions and course credential',icon:Route,run:()=>navigate('roadmap')}}/><WorkspaceActionRow action={{ label: 'Study timer', detail: 'Start a focus session', icon: Clock, run: () => open({ kind: 'timer' }) }} />
-        <WorkspaceActionRow action={{ label: 'Capstone project', detail: 'Submit or review your project', icon: Layers, run: () => navigate('project') }} />
+        <WorkspaceActionRow action={{ label: 'Assignments & tests', detail: 'Submit or review your project', icon: Layers, run: () => navigate('project') }} />
         <WorkspaceActionRow action={{ label: 'BIM assistant', detail: 'Ask about a BIM workflow', icon: Bot, run: () => open({ kind: 'assistant' }) }} />
         <WorkspaceActionRow action={{ label: 'Student documents', detail: 'View and print your student ID', icon: IdCard, run: () => navigate('courses') }} />
         <WorkspaceActionRow action={{ label: 'My certificates', detail: 'Earn and share your course credentials', icon: Award, run: () => navigate('certificates') }} />
@@ -238,8 +241,8 @@ export function StudentWorkspace({ account, onAccount, onSignOut }: {
       <FormError error={error || academy.error} />
       {!data && !error && <p className="pbs-muted" role="status">Loading your workspace…</p>}
       {notice && <p className="pbs-form-status pbs-notice" role="status">{notice}</p>}
-      {data && page === 'overview' && <div className="pbs-live-stack"><StudentOverview data={data} completed={completed} open={show} navigate={navigate} /><StudentNotices compact/></div>}
-      {data && page === 'courses' && <StudentCourses data={data} account={account} open={show} academy={academy.data} />}
+      {data && page === 'overview' && <div className="pbs-live-stack"><StudentOverview data={data} completed={completed} open={show} navigate={navigate} /><StudentNotices compact/><StudentPastTraining onCertificates={()=>navigate('certificates')} onProfile={()=>navigate('profile')}/></div>}
+      {data && page === 'courses' && <div className="pbs-live-stack"><StudentCourses data={data} account={account} open={show} academy={academy.data} /><StudentPastTraining onCertificates={()=>navigate('certificates')} onProfile={()=>navigate('profile')}/></div>}
       {data && page === 'fees' && <StudentFees data={data} catalog={catalog.data} open={show} academy={academy.data} onWallet={() => navigate('referrals')} />}
       {data && page === 'referrals' && <StudentReferrals enrollments={data.enrollments} onChanged={refreshAll} />}
       {page === 'roadmap' && <LearningRoadmap onCourses={()=>navigate('courses')} onCertificates={()=>navigate('certificates')}/>}
@@ -251,13 +254,13 @@ export function StudentWorkspace({ account, onAccount, onSignOut }: {
       {page === 'explore' && catalog.data && <CatalogBrowser catalog={catalog.data} onChoose={course => show({ kind: 'course-info', course })} />}
       {page === 'course-feedback' && <StudentCourseFeedback account={account} />}
       {page === 'sessions' && <LiveClassesStudent />}
-      {data && page === 'downloads' && <Panel title="Course resources">
-        {!data.courses.some(course => course.resources.length) && <Empty title="No resources yet">Course files and practice materials will appear here.</Empty>}
+      {data && page === 'downloads' && <div className="pbs-live-stack"><ResourceLibrary/><Panel title="Additional course links">
+        {!data.courses.some(course => course.resources.length) && <Empty title="No additional course links">Your published practice downloads appear in the section above.</Empty>}
         {data.courses.flatMap(course => course.resources.map(resource => <article className="pbs-record-row" key={resource.id}>
           <div><h3>{resource.title}</h3><p className="pbs-muted">{course.title}</p></div><ExternalLink href={resource.url}>Open resource</ExternalLink>
         </article>))}
-      </Panel>}
-      {data && page === 'project' && <div className="pbs-live-stack"><TaskAssignments /><Panel title="Project submissions" action={data.courses.length > 0 && <Button onClick={() => show({ kind: 'assignment' })}>Submit project</Button>}>
+      </Panel></div>}
+      {data && page === 'project' && <div className="pbs-live-stack"><TaskAssignments /><StudentQuizzes/><Panel title="Project submissions" action={data.courses.length > 0 && <Button onClick={() => show({ kind: 'assignment' })}>Submit project</Button>}>
         {!data.assignments.length && <Empty title="No projects submitted">Submit a project link for your instructor to review.</Empty>}
         {data.assignments.map(assignment => <article className="pbs-record-row" key={assignment.id}>
           <div><h3>{assignment.courseTitle}</h3><p className="pbs-muted">{dateLabel(assignment.submittedAt)}</p><ExternalLink href={assignment.url}>Open project</ExternalLink></div>

@@ -4,6 +4,7 @@ import { PortalDialog } from '../components/student-dashboard/PortalUI';
 import { messageFrom, send } from './api';
 import type { Course, Lesson } from './types';
 import { Button, dateTimeLabel, Empty, Field, FormError, Input, useApiResource, value } from './ui';
+import { ResourceLibrary } from './LearningResources';
 import { LessonPlayer } from './LessonPlayer';
 import { usePlaybackProgress } from './usePlaybackProgress';
 
@@ -114,6 +115,7 @@ export function Classroom({ course, completed, onClose, onCompletion, onAssessme
             <Input label="Describe the playback issue" name="issue" maxLength={3000} required />
             <button type="submit" className="pbs-button pbs-button-primary">Send to PBS</button>
           </form>}
+          {active&&studentId&&<ResourceLibrary courseId={course.id} lessonId={active.id} moduleId={course.modules.find(m=>m.lessons.some(l=>l.id===active.id))?.id}/>}
           {sent && <p className="pbs-form-status" role="status">Playback report sent to PBS.</p>}
         </section>
         <aside className="pbs-classroom-outline" aria-label="Course modules">

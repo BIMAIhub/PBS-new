@@ -1,3 +1,4 @@
+import { installPdfFonts } from './pdf-fonts';
 import type { CertificateRecord } from './academy-types';
 import type { Branding } from './branding-types';
 import { defaultDocumentStamp, type DocumentStamp } from './document-types';
@@ -5,12 +6,14 @@ import { drawPdfStamp } from './pdf-stamp';
 
 export async function buildCertificatePdf(record: CertificateRecord, brand: Branding, assets: { logo?: string; qr?: string; verificationUrl?: string } = {}, stamp: DocumentStamp = defaultDocumentStamp(brand)) {
   const { jsPDF } = await import('jspdf');
-  const pdf = new jsPDF({ orientation: 'landscape', format: 'a4', unit: 'mm', compress: true });
+  const pdf = new jsPDF({ orientation: 'landscape', format: 'a4', unit: 'mm', compress: true, putOnlyUsedFonts:true });
+  await installPdfFonts(pdf);
   const t = record.template;
-  const fit = (text: string, width: number, size: number, minimum: number, maxLines = 2) => {
-    pdf.setFontSize(size); let lines: string[] = pdf.splitTextToSize(text, width);
-    while (lines.length > maxLines && size > minimum) { pdf.setFontSize(--size); lines = pdf.splitTextToSize(text, width); }
-    return lines;
+  const clean=(value:string)=>value.replace(/[–—]/g,'-').replace(/₹/g,'INR ');
+  const block=(value:string,x:number,top:number,width:number,height:number,size:number,align:'left'|'center'='left')=>{
+    let lines:string[]=[];
+    do {pdf.setFontSize(size);lines=pdf.splitTextToSize(clean(value),width);if(lines.length*size*.35278*1.12<=height)break;size-=.5;} while(size>5);
+    pdf.text(lines,x,top+size*.35278,{align,lineHeightFactor:1.12});
   };
   pdf.setProperties({ title: `${t.title} — ${record.studentName}`, subject: record.courseTitle, author: t.issuer, creator: brand.academyName });
   pdf.setFillColor('#F4F7FA'); pdf.rect(0, 0, 297, 210, 'F');
@@ -28,23 +31,23 @@ export async function buildCertificatePdf(record: CertificateRecord, brand: Bran
   let hasLogo = false;
   if (assets.logo) { try { pdf.addImage(assets.logo, 'PNG', 22, 19, 18, 18); hasLogo = true; } catch { /* Fall back to the academy initials. */ } }
   if (!hasLogo) { pdf.setDrawColor(t.accentColor); pdf.setLineWidth(.5); pdf.roundedRect(22, 19, 18, 18, 3, 3); pdf.setFont('helvetica', 'bold'); pdf.setFontSize(10); pdf.setTextColor('#F4F7FA'); pdf.text(brand.shortName.slice(0, 8), 31, 30, { align: 'center' }); }
-  pdf.setTextColor('#F4F7FA'); pdf.setFont('helvetica', 'bold'); pdf.text(fit(t.issuer, 180, 14, 10), 48, 25);
+  pdf.setTextColor('#F4F7FA'); pdf.setFont('helvetica', 'bold'); block(t.issuer,48,20,192,11,14);
   pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.text('PROFESSIONAL BIM EDUCATION', 48, 36);
   pdf.setDrawColor(t.accentColor); pdf.setLineWidth(.6); pdf.circle(266, 28, 10);
   pdf.setTextColor(t.accentColor); pdf.setFont('helvetica', 'bold'); pdf.setFontSize(8); pdf.text(brand.shortName.slice(0, 8), 266, 29, { align: 'center' });
-  pdf.setTextColor(t.primaryColor); pdf.setFont('times', 'normal'); pdf.text(fit(t.title, 245, 30, 19), 148.5, 65, { align: 'center' });
+  pdf.setTextColor(t.primaryColor); pdf.setFont('times', 'normal'); block(t.title,148.5,51,245,22,30,'center');
   pdf.setTextColor('#5B6E80'); pdf.setFont('helvetica', 'normal'); pdf.setFontSize(10); pdf.text('This is to certify that', 148.5, 83, { align: 'center' });
-  pdf.setTextColor('#152C42'); pdf.setFont('times', 'italic'); pdf.text(fit(record.studentName, 235, 29, 17), 148.5, 99, { align: 'center' });
+  pdf.setTextColor('#152C42'); pdf.setFont('times', 'italic'); block(record.studentName,148.5,90,235,22,29,'center');
   pdf.setDrawColor(t.accentColor); pdf.setLineWidth(.4); pdf.line(85, 117, 212, 117);
-  pdf.setTextColor('#5B6E80'); pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.text('has successfully completed the learning requirements and assessment for', 148.5, 126, { align: 'center' });
-  pdf.setTextColor(t.primaryColor); pdf.setFont('helvetica', 'bold'); pdf.text(fit(record.courseTitle, 230, 17, 11), 148.5, 139, { align: 'center' });
+  pdf.setTextColor('#5B6E80'); pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.text(record.historical?'has completed verified training in':'has successfully completed the learning requirements and assessment for', 148.5, 126, { align: 'center' });
+  pdf.setTextColor(t.primaryColor); pdf.setFont('helvetica', 'bold'); block(record.courseTitle,148.5,132,230,20,17,'center');
   pdf.setDrawColor('#D9CEB3'); pdf.setLineWidth(.25); pdf.line(24, 158, 273, 158);
-  pdf.setTextColor('#152C42'); pdf.text(fit(t.signer, 82, 11, 8), 25, 168);
+  pdf.setTextColor('#152C42'); block(t.signer,25,162,72,10,11);
   pdf.setDrawColor(t.accentColor); pdf.line(25, 176, 96, 176);
-  pdf.setFont('helvetica', 'normal'); pdf.setTextColor('#5B6E80'); pdf.text(fit(t.signerRole, 82, 8, 7), 25, 182);
+  pdf.setFont('helvetica', 'normal'); pdf.setTextColor('#5B6E80'); block(t.signerRole,25,179,72,8,8);
   const date = new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeZone: 'Asia/Kolkata' }).format(new Date(record.issuedAt));
   pdf.setFontSize(9); pdf.setTextColor('#152C42'); pdf.text(`Issued ${date}`, 210, 169);
-  pdf.setTextColor('#5B6E80'); pdf.text(fit(record.id, 63, 7, 6), 210, 179);
+  pdf.setTextColor('#5B6E80'); block(record.historical?.originalNumber||record.id,210,174,62,12,7);
   if (assets.qr && assets.verificationUrl && record.published && !record.revokedAt) {
     pdf.addImage(assets.qr, 'PNG', 137, 163, 23, 23); pdf.link(137, 163, 23, 23, { url: assets.verificationUrl });
     pdf.setFontSize(6.5); pdf.text('SCAN TO VERIFY CREDENTIAL', 148.5, 191, { align: 'center' });

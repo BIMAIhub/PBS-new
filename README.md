@@ -265,3 +265,29 @@ In **Courses & videos → Curriculum and materials**, use **Edit module** to ren
 **Remove video** removes the chosen lesson and its dependent watch/completion records after confirmation. **Delete module** can remove a populated module and all of its video entries after a confirmation showing the current video count. The server checks the exact video IDs again inside the transaction, so a newly added video cannot be deleted by an outdated confirmation. Linked assignments are retained as course assignments, preserving their submissions and reviews. Unfinished uploads still block module deletion until they finish or expire.
 
 These actions remove course entries; original OneDrive, private Blob and local video files stay in storage because they may be shared by another lesson. Removal is limited to the selected content, never accounts, credentials, fees or other courses. Deploying this update adds no schema migration, reset or seeded records, and does not itself delete any live content.
+
+### Brochures and admissions leads
+
+Every published course has Download brochure on its catalog card and course page. The request form records name, email, WhatsApp number, optional qualification and separate marketing consent. Only then does it prepare the branded A4 brochure from the actual course outline, price and open batches. Administrators can preview draft or published course brochures from Courses & videos without creating a lead.
+
+Brochure leads contains course interests, request counts, follow-up stages and notes, CSV export and an Enroll action with prefilled details. An approved matching enrollment determines conversion. Campaigns can select opted-in brochure leads, deduplicate recipients and personalize their course interest. A brochure request never removes an existing email opt-out. Drafting does not send mail.
+
+### Past and offline student credentials
+
+Past & offline students is administrator-only. Verify the previous training, select its existing or draft course, enter completion and issue dates and optionally attach an original PDF stored privately in OneDrive. A new student receives a temporary password and must replace it at first sign-in. Existing accounts retain their identity, password, profile and enrollment records. Repeat import requests do not create duplicate credentials or return a saved plaintext password.
+
+A historical certificate records verified training, its original reference and any actual recorded score. Importing it does not fabricate video completions, assessment results, payments or current online access. Grant current lessons separately from Students when appropriate. Students see their past training and certificates, edit My profile & CV, create a portfolio and choose whether to enable public verification before sharing to LinkedIn. Original certificate PDFs remain available only to the student and administrators; public verification never exposes email, notes or payment details.
+
+### Practice downloads and MCQ tests
+
+Practice resources supports OneDrive uploads or direct HTTPS document/model file links scoped to an entire course, a module or a video. Supported files include PDFs, ZIPs, Revit/IFC/CAD models, images and office documents. A connected storage account and course folder are used for uploads; without a configured course folder, PBS creates a course folder under PBS portal files in the connected administrator’s OneDrive. The upload verifies the stored file’s name, size and destination before attaching it.
+
+Approved active enrollments and the current module release rules control every download. Resources follow a video when it moves between modules. Removing a video or module never turns its protected resources into unrestricted course downloads. Removing a resource from PBS retains its source OneDrive file. These practice download controls do not change lesson video protection. Students find practice files in Downloads, the classroom and attached assignments.
+
+Assignments includes MCQ assignments and sample tests with full questions, 2–6 answer options, explanations and resource attachments. Set pass mark, optional timer, attempt limit and review release. Students save/resume answers and submit for server grading. Each attempt stores an immutable question snapshot; editing a test preserves previous marks. Practice tests reveal explanations after submission; graded assignments require admin review release. An expired timer accepts only previously saved answers. The course’s final certificate assessment remains separate. Admins can inspect results and add individual feedback. Unpublish a test to archive it while retaining attempts.
+
+### Consistent PDF previews and app announcements
+
+Document dialogs render the actual PDF pages with a page selector. Download and Open / print use that same file, with embedded Liberation fonts (SIL Open Font License included with the source assets). Supported mobile browsers also offer Save / share file. All layouts use physical A4 or A5 geometry and never capture the responsive page as an image. Long content and fee histories paginate; institution stamps remain included.
+
+Email campaigns includes PBS app installation instructions, an app-launch advertisement and a news/announcement template, using the current domain and academy email theme. Choose enrolled students, selected students, verified alumni, opted-in brochure leads or external contacts. Marketing opt-outs are checked at delivery. News & notices has a PBS app launch draft shortcut that an admin can review before publishing. These tools are shared by the website and installed PBS web app; reopening/updating the app loads the release. Existing passwords, content, payments, branding and Microsoft connections are preserved.

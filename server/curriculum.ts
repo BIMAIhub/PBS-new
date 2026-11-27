@@ -1,4 +1,5 @@
 import type { Express } from 'express';
+import { learningResources,validateResourceIds } from './learning-resources.js';
 import { moduleAccess } from './learning-access.js';
 import { requireAccount } from './auth.js';
 import { type WritableDatabase, makeId, now, transaction } from './database.js';
@@ -23,7 +24,8 @@ export function validateCurriculum(value: unknown): CurriculumDraft {
 
 export function mountCurriculum(app: Express, db: WritableDatabase, hosted: boolean) {
   app.get('/api/admin/curriculum', route(async (req, res) => {
-    await requireAccount(db, req, 'admin');
+    const admin=await requireAccount(db, req, 'admin');
+    const resources=await learningResources(db,admin);
     const tasks = await db.prepare(`SELECT t.id, t.course_id AS courseId, t.module_id AS moduleId, t.title, t.brief,
       t.deliverables, t.published, c.title AS courseTitle FROM learning_tasks t JOIN courses c ON c.id = t.course_id ORDER BY t.created_at DESC`).all();
     const submissions = await db.prepare(`SELECT s.id, s.task_id AS taskId, s.account_id AS studentId, a.name AS studentName,
@@ -33,7 +35,7 @@ export function mountCurriculum(app: Express, db: WritableDatabase, hosted: bool
     const drafts = await db.prepare(`SELECT d.id, d.course_id AS courseId, c.title AS courseTitle, d.status, d.model,
       d.created_at AS createdAt, d.applied_at AS appliedAt, d.error, d.content FROM curriculum_drafts d
       JOIN courses c ON c.id = d.course_id ORDER BY d.created_at DESC LIMIT 12`).all();
-    res.json({ aiConfigured: aiConfigured(), tasks: tasks.map(task => ({ ...task, deliverables: JSON.parse(String(task.deliverables)), published: Boolean(task.published) })), submissions,
+    res.json({ aiConfigured: aiConfigured(), tasks: await Promise.all(tasks.map(async task => {const links=await db.prepare('SELECT resource_id FROM task_resources WHERE task_id=?').all(task.id);const resourceIds=links.map(r=>String(r.resource_id));return {...task,deliverables:JSON.parse(String(task.deliverables)),published:Boolean(task.published),resourceIds,resources:resources.filter(r=>resourceIds.includes(r.id))};})), submissions,
       drafts: drafts.map(draft => ({ ...draft, content: draft.content ? JSON.parse(String(draft.content)) : null })) });
   }));
   app.get('/api/admin/courses/:id/page', route(async (req, res) => {
@@ -102,10 +104,13 @@ export function mountCurriculum(app: Express, db: WritableDatabase, hosted: bool
     await courseById(db, courseId);
     if (req.params.id) { const existing = await db.prepare('SELECT course_id FROM learning_tasks WHERE id = ?').get(id); if (!existing) throw notFound('This assignment is unavailable.'); if (existing.course_id !== courseId) throw conflict('Keep this assignment in its original course.'); }
     if (moduleId && !await db.prepare('SELECT 1 FROM modules WHERE id = ? AND course_id = ?').get(moduleId, courseId)) throw badRequest('Choose a module in this course.');
-    await db.prepare(`INSERT INTO learning_tasks VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET
+    await transaction(db,async tx=>{
+    await tx.prepare(`INSERT INTO learning_tasks VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET
       module_id = excluded.module_id, title = excluded.title, brief = excluded.brief, deliverables = excluded.deliverables, published = excluded.published`)
       .run(id, courseId, moduleId, field(req.body?.title, 'assignment title', 160), field(req.body?.brief, 'assignment instructions', 4000), JSON.stringify(listOfStrings(req.body?.deliverables || [], 'deliverables', 8, 400)), Number(req.body?.published === true), now());
-    await audit(db, admin.id, 'Assignment brief saved', id, courseId); res.json({ id });
+    await audit(tx, admin.id, 'Assignment brief saved', id, courseId);
+      if(req.body?.resourceIds!==undefined){const ids=await validateResourceIds(tx,req.body.resourceIds,courseId);await tx.prepare('DELETE FROM task_resources WHERE task_id=?').run(id);for(const rid of ids)await tx.prepare('INSERT INTO task_resources VALUES (?,?)').run(id,rid);}
+    }); res.json({ id });
   });
   app.post('/api/admin/tasks', saveTask); app.put('/api/admin/tasks/:id', saveTask);
   app.get('/api/student/tasks', route(async (req, res) => {
@@ -117,7 +122,8 @@ export function mountCurriculum(app: Express, db: WritableDatabase, hosted: bool
       AND NOT EXISTS (SELECT 1 FROM course_controls cc WHERE cc.course_id = t.course_id AND cc.paused = 1)
       AND NOT EXISTS (SELECT 1 FROM enrollment_controls ec WHERE ec.enrollment_id = e.id AND ec.paused = 1)
       ORDER BY t.created_at`).all(account.id, account.id);
-    res.json({ tasks: await Promise.all(rows.map(async({ submissionId, url, note, feedback, submittedAt, reviewedAt, ...task }) => {const access=task.moduleId?await moduleAccess(db,account.id,String(task.moduleId)):{unlocked:true,reason:''};return({ ...task,locked:!access.unlocked,lockReason:access.reason,published: true, deliverables: JSON.parse(String(task.deliverables)),
+    const resources=await learningResources(db,account);
+    res.json({ tasks: await Promise.all(rows.map(async({ submissionId, url, note, feedback, submittedAt, reviewedAt, ...task }) => {const access=task.moduleId?await moduleAccess(db,account.id,String(task.moduleId)):{unlocked:true,reason:''};const links=await db.prepare('SELECT resource_id FROM task_resources WHERE task_id=?').all(task.id);return({ ...task,resources:access.unlocked?resources.filter(r=>links.some(l=>l.resource_id===r.id)):[],locked:!access.unlocked,lockReason:access.reason,published: true, deliverables: JSON.parse(String(task.deliverables)),
       submission: access.unlocked&&submissionId ? { id: submissionId, url, note, feedback, submittedAt, reviewedAt } : undefined });})) });
   }));
   app.post('/api/student/tasks/:id/submit', route(async (req, res) => {

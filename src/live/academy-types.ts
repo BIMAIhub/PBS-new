@@ -5,6 +5,7 @@ export interface CertificateTemplate {
 export interface CertificateRecord {
   id: string; studentId: string; courseId: string; studentName: string; courseTitle: string;
   score: number; issuedAt: string; publicToken: string; published: boolean; revokedAt: string;
+  historical?: { completedAt:string; mode:string; originalNumber:string; qualification:string; scoreRecorded:boolean; hasOriginal:boolean };
   template: CertificateTemplate;
 }
 export interface Reminder {

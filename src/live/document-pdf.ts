@@ -1,3 +1,4 @@
+import { installPdfFonts } from './pdf-fonts';
 import type { Branding } from './branding-types';
 import type { DocumentInfo, DocumentStamp } from './document-types';
 import { drawPdfStamp } from './pdf-stamp';
@@ -10,7 +11,8 @@ const date = (value: string) => value ? new Intl.DateTimeFormat('en-IN', { dateS
 export async function buildDocumentPdf(document: DocumentInfo, brand: Branding, stamp: DocumentStamp, assets: { logo?: string } = {}) {
   const { jsPDF } = await import('jspdf');
   const idCard = document.kind === 'id';
-  const pdf = new jsPDF({ orientation: idCard ? 'landscape' : 'portrait', format: idCard ? 'a5' : 'a4', unit: 'mm', compress: true });
+  const pdf = new jsPDF({ orientation: idCard ? 'landscape' : 'portrait', format: idCard ? 'a5' : 'a4', unit: 'mm', compress: true, putOnlyUsedFonts:true });
+  await installPdfFonts(pdf);
   const width = pdf.internal.pageSize.getWidth(), height = pdf.internal.pageSize.getHeight(), margin = 14, inner = width - margin * 2;
   const title = { receipt: 'Payment receipt', statement: 'Course fee statement', letter: 'Bonafide enrollment certificate', id: 'Student identification' }[document.kind];
   const reference = document.kind === 'receipt' ? document.receipt.number : document.kind === 'statement' || document.kind === 'letter' ? document.enrollment.id : document.account.id;

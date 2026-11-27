@@ -30,8 +30,9 @@ export async function templateVariables(db: Database, origin: string, accountId 
   const account = accountId ? await db.prepare('SELECT name, email FROM accounts WHERE id = ?').get(accountId) : undefined;
   const course = accountId ? await db.prepare(`SELECT c.title, e.total - COALESCE((SELECT SUM(r.amount) FROM receipts r WHERE r.enrollment_id = e.id),0) AS balance
     FROM enrollments e JOIN courses c ON c.id = e.course_id WHERE e.account_id = ? AND e.status = 'approved' ORDER BY e.approved_at DESC LIMIT 1`).get(accountId) : undefined;
+  const historical=!course&&accountId?await db.prepare('SELECT c.course_title AS title FROM legacy_training h JOIN certificates c ON c.id=h.certificate_id WHERE h.account_id=? ORDER BY h.created_at DESC LIMIT 1').get(accountId):undefined;
   return { name: String(account?.name || 'Learner'), email: String(account?.email || ''), academy: brand.academyName,
-    sign_in_url: origin, explore_url: `${origin}/explore`, course: String(course?.title || 'your PBS course'),
+    app_url: `${origin}/app`, sign_in_url: origin, explore_url: `${origin}/explore`, course: String(course?.title || historical?.title || 'your PBS course'),
     balance: money(Number(course?.balance || 0)), reward: '', message: '', ...extra };
 }
 async function ensureContact(db: Database, email: string, name: string, consent = false) {
@@ -135,14 +136,23 @@ export function mountMail(app: Express, db: WritableDatabase, hosted: boolean) {
   app.post('/api/admin/mail/campaigns', limitAttempts(10, hosted ? db : undefined), route(async (req, res) => {
     const admin = await requireAccount(db, req, 'admin');
     const template = defaultMailTemplates.find(t => t.id === req.body?.templateId); if (!template) throw badRequest('Choose a message template.');
-    const mode = field(req.body?.recipientMode, 'recipient group', 20); if (!['students','selected','external'].includes(mode)) throw badRequest('Choose a recipient group.');
+    const mode = field(req.body?.recipientMode, 'recipient group', 20); if (!['students','selected','external','leads','alumni'].includes(mode)) throw badRequest('Choose a recipient group.');
     if ((template.marketing || mode === 'external') && req.body?.consentConfirmed !== true) throw badRequest('Confirm that these recipients agreed to receive academy offers and updates.');
-    if (mode === 'external' && !template.marketing) throw badRequest('Use an offer, update or custom template for external contacts.');
+    if (['external','leads'].includes(mode) && !template.marketing) throw badRequest('Use an offer, update or custom template for external contacts.');
     const title = field(req.body?.title,'campaign name',120), subject=field(req.body?.subject,'subject',160), body=field(req.body?.body,'message',6000), message=field(req.body?.message,'update details',3000,false);
-    const recipients: { email:string; name:string; accountId:string }[] = [];
+    const recipients: { email:string; name:string; accountId:string; courseId?:string }[] = [];
     if (mode === 'external') {
       const lines = field(req.body?.externalRecipients,'recipients',15000).split(/[\n;]+/).filter(Boolean); if(lines.length>500) throw badRequest('Use up to 500 recipients per campaign.');
       for(const line of lines) { const [email,name='Learner'] = line.split(',').map(v=>v.trim()); recipients.push({email:emailAddress(email),name:name.slice(0,100),accountId:''}); }
+    } else if (mode==='leads') {
+      const ids=Array.isArray(req.body?.leadIds)?[...new Set(req.body.leadIds.filter((v:unknown)=>typeof v==='string'))] as string[]:[];
+      if(!ids.length||ids.length>500)throw badRequest('Select up to 500 brochure leads who opted in.');
+      const rows=await db.prepare(`SELECT l.email,l.name,l.course_id FROM course_leads l JOIN mail_contacts mc ON mc.email=l.email COLLATE NOCASE WHERE l.id IN (${ids.map(()=>'?').join(',')}) AND l.consent=1 AND mc.consent=1 AND mc.unsubscribed=0 ORDER BY l.updated_at DESC`).all(...ids);
+      for(const row of rows)recipients.push({email:String(row.email),name:String(row.name),accountId:'',courseId:String(row.course_id)});
+    } else if (mode==='alumni') {
+      const rows=await db.prepare(`SELECT DISTINCT a.id,a.name,a.email FROM accounts a JOIN legacy_training h ON h.account_id=a.id WHERE a.role='student' AND NOT EXISTS(SELECT 1 FROM account_controls c WHERE c.account_id=a.id AND c.status<>'active') ORDER BY a.name LIMIT 501`).all();
+      if(rows.length>500)throw badRequest('Use a group of up to 500 past students.');
+      for(const row of rows)recipients.push({email:String(row.email),name:String(row.name),accountId:String(row.id)});
     } else {
       const ids: string[] = Array.isArray(req.body?.studentIds) ? req.body.studentIds.filter((id:unknown)=>typeof id==='string').slice(0,500) : [];
       if (mode === 'selected' && !ids.length) throw badRequest('Choose at least one student.');
@@ -154,7 +164,7 @@ export function mountMail(app: Express, db: WritableDatabase, hosted: boolean) {
     const id=makeId(),revision=makeId();
     await transaction(db,async tx=>{
       await tx.prepare('INSERT INTO mail_campaigns (id,title,template_id,subject,body,message,admin_id,marketing,revision,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)').run(id,title,template.id,subject,body,message,admin.id,Number(template.marketing),revision,now());
-      for(const r of unique) { await ensureContact(tx,r.email,r.name,template.marketing); await tx.prepare('INSERT INTO mail_campaign_recipients VALUES (?,?,?,?)').run(id,r.email,r.name,r.accountId); }
+      for(const r of unique) { await ensureContact(tx,r.email,r.name,mode==='leads'?false:template.marketing); await tx.prepare('INSERT INTO mail_campaign_recipients VALUES (?,?,?,?)').run(id,r.email,r.name,r.accountId); if(r.courseId)await tx.prepare('INSERT INTO campaign_lead_links VALUES (?,?,?)').run(id,r.email,r.courseId); }
       await audit(tx,admin.id,'Email campaign drafted',id,`${unique.length} recipients`);
     }); res.status(201).json({id,revision,total:unique.length});
   }));
@@ -165,7 +175,11 @@ export function mountMail(app: Express, db: WritableDatabase, hosted: boolean) {
     if(campaign.revision!==req.body?.revision) throw conflict('Refresh the campaign before sending.');
     const recipients=await db.prepare('SELECT * FROM mail_campaign_recipients WHERE campaign_id=?').all(req.params.id);
     const prepared=[];
-    for(const r of recipients) { const vars=await templateVariables(db,portalOrigin(req),String(r.account_id),{name:String(r.name),email:String(r.email),message:String(campaign.message)}); prepared.push({r,subject:fillMailTemplate(String(campaign.subject),vars),body:fillMailTemplate(String(campaign.body),vars)}); }
+    for(const r of recipients) {
+      const interest=await db.prepare('SELECT c.title FROM campaign_lead_links l JOIN courses c ON c.id=l.course_id WHERE l.campaign_id=? AND l.email=?').get(campaign.id,r.email);
+      const vars=await templateVariables(db,portalOrigin(req),String(r.account_id),{name:String(r.name),email:String(r.email),message:String(campaign.message),...(interest?{course:String(interest.title)}:{})});
+      prepared.push({r,subject:fillMailTemplate(String(campaign.subject),vars),body:fillMailTemplate(String(campaign.body),vars)});
+    }
     await transaction(db,async tx=>{
       const current=await tx.prepare('SELECT status FROM mail_campaigns WHERE id=?').get(req.params.id); if(current?.status==='cancelled') throw conflict('This campaign is cancelled.');
       for(const {r,subject,body} of prepared) await tx.prepare('INSERT OR IGNORE INTO mail_outbox (id,event_key,campaign_id,admin_id,account_id,email,name,subject,body,marketing,origin,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)').run(makeId(),`campaign:${campaign.id}:${r.email}`,campaign.id,admin.id,r.account_id,r.email,r.name,subject,body,campaign.marketing,portalOrigin(req),now());

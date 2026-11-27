@@ -14,6 +14,6 @@ export interface PortfolioEntry { title: string; organization: string; period: s
 export interface PortfolioSections { layout: 'studio' | 'resume' | 'gallery'; accentColor: string; projects: PortfolioProject[]; experience: PortfolioEntry[]; education: PortfolioEntry[] }
 export interface PortalNotification { id: string; title: string; body: string; kind: string; page: string; createdAt: string; readAt: string; shownAt: string }
 export interface LearningTask { id: string; courseId: string; moduleId: string; title: string; brief: string; deliverables: string[]; published: boolean; courseTitle: string;
-  locked?:boolean;lockReason?:string;
+  locked?:boolean;lockReason?:string;resourceIds?:string[];resources?:import('./education-types').LearningResource[];
   submission?: { id: string; url: string; note: string; feedback: string; submittedAt: string; reviewedAt: string } }
 export interface CurriculumDraft { description: string; outcomes: string[]; requirements: string[]; modules: { title: string; summary: string; objectives: string[]; assignment: { title: string; brief: string; deliverables: string[] } }[]; capstone: { title: string; brief: string; deliverables: string[] } }

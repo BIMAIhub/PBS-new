@@ -36,7 +36,8 @@ export async function accessPackage(db: Database, studentId: string, origin: str
   const student = await findAccount(db, studentId);
   if (!student || student.role !== 'student' || student.accountStatus !== 'active') throw notFound('This student is inactive or unavailable.');
   const approved = (await enrollments(db, studentId)).filter(item => item.status === 'approved');
-  if (!approved.length) throw conflict('Approve an enrollment before sharing student access.');
+  const historical = await db.prepare(`SELECT c.course_title AS title,h.completed_at AS completedAt,h.mode FROM legacy_training h JOIN certificates c ON c.id=h.certificate_id WHERE h.account_id=? AND c.revoked_at=''`).all(studentId);
+  if (!approved.length && !historical.length) throw conflict('Approve an enrollment or verify a past training record before sharing student access.');
   const brand = await publicBranding(db);
   const summaries = await Promise.all(approved.map(async item => {
     const course = await db.prepare('SELECT description FROM courses WHERE id = ?').get(item.courseId);
@@ -45,15 +46,15 @@ export async function accessPackage(db: Database, studentId: string, origin: str
   }));
   const recent = (await receipts(db, studentId)).slice(0, 3);
   const signInUrl = `${origin}/`;
-  const body = [`Hello ${student.name},`, `Your enrollment at ${brand.academyName} is approved.`,
+  const body = [`Hello ${student.name},`, approved.length ? `Your enrollment at ${brand.academyName} is approved.` : `Your past training record at ${brand.academyName} is verified. Your student portal and certificates are ready.`,
     `Sign in: ${signInUrl}`, `Email: ${student.email}`, `Student ID: ${student.id}`,
     password ? `Temporary password: ${password}\nSet a new password when you first sign in.` : 'Use your existing PBS password. Contact the academy if you need a password reset.',
-    ...summaries,
-    recent.length ? `Receipts: ${recent.map(item => `${item.number} (${currency(item.amount)})`).join(', ')}` : 'A receipt is issued after PBS verifies a payment.',
-    `Receipts and current fee statement: ${origin}/?page=fees\nBonafide enrollment letter: ${origin}/?page=downloads`,
+    ...summaries, ...historical.map(item => `Verified past training: ${item.title}\nCompleted: ${item.completedAt} | Mode: ${item.mode}\nCertificates: ${origin}/?page=certificates\nEnable public verification in My certificates to share on LinkedIn. Current online lesson access is separate.`),
+    approved.length && recent.length ? `Receipts: ${recent.map(item => `${item.number} (${currency(item.amount)})`).join(', ')}` : approved.length ? 'A receipt is issued after PBS verifies a payment.' : '',
+    approved.length ? `Receipts and current fee statement: ${origin}/?page=fees\nBonafide enrollment letter: ${origin}/?page=downloads` : '',
     `Support: ${brand.supportEmail}`].filter(Boolean).join('\n\n');
   return { studentId, name: student.name, email: student.email, phone: student.phone, whatsappNumber: whatsappNumber(student.phone), signInUrl, password,
-    subject: `${brand.shortName} enrollment approved — your student access`, body };
+    subject: approved.length ? `${brand.shortName} enrollment approved — your student access` : `${brand.shortName} verified past training — your student access`, body };
 }
 
 // Delivery records contain status and a digest, never the temporary password or message body.

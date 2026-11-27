@@ -170,6 +170,7 @@ export function mountAcademy(app: Express, db: WritableDatabase, hosted: boolean
     const record = await db.prepare(`SELECT id, student_name AS studentName, course_title AS courseTitle,
       course_id AS courseId, issued_at AS issuedAt, revoked_at AS revokedAt FROM certificates WHERE public_token = ? AND published = 1`).get(req.params.token);
     if (!record) throw notFound('This certificate is private or unavailable.');
-    res.json({ ...record, template: await certificateTemplate(db, String(record.courseId)) });
+    const history=await db.prepare('SELECT completed_at AS completedAt,mode,original_number AS originalNumber FROM legacy_training WHERE certificate_id=?').get(record.id);
+    res.json({ ...record, historical:history||undefined, template: await certificateTemplate(db, String(record.courseId)) });
   }));
 }

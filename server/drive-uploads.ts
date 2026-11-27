@@ -11,7 +11,7 @@ import { isMicrosoftVideo } from './video.js';
 const part=encodeURIComponent, itemPath=(drive:string,item:string)=>`/drives/${part(drive)}/items/${part(item)}`;
 export const driveFolderName=(name:string)=>name.normalize('NFKC').replace(/[\x00-\x1f"*:<>?\/\\|#%]/g,'-').replace(/\.{2,}/g,'-').replace(/^[.\s]+|[.\s]+$/g,'').slice(0,110)||'PBS files';
 export function uploadLocation(value:unknown){let u:URL;try{u=new URL(String(value));}catch{throw badRequest('Microsoft returned an invalid upload location.');}if(u.protocol!=='https:'||u.username||u.password||!['1drv.com','sharepoint.com','onedrive.com','microsoftpersonalcontent.com','storage.live.com','storage.msn.com'].some(h=>u.hostname===h||u.hostname.endsWith(`.${h}`)))throw badRequest('Microsoft returned an unsupported upload host.');return u.href;}
-async function folder(db:Database,admin:string,drive:string,parent:string,name:string,request:typeof graph){
+export async function folder(db:Database,admin:string,drive:string,parent:string,name:string,request:typeof graph){
   const path=itemPath(drive,parent),safe=driveFolderName(name);
   try{return await request(db,admin,`${path}/children`,{method:'POST',body:JSON.stringify({name:safe,folder:{},'@microsoft.graph.conflictBehavior':'fail'})});}
   catch(e){if(!(e instanceof RequestError)||!/nameAlreadyExists|itemAlreadyExists|409/i.test(e.message))throw e;const result=await request(db,admin,`${path}:/${part(safe)}?$select=id,name,folder,parentReference`);if(!result.folder)throw conflict('A file has the same name as a required assignment folder.');return result;}

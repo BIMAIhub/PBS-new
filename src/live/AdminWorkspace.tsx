@@ -21,6 +21,10 @@ import { ActivityLog, AdminOverview, GrantAccessButton, PaymentLedger, PaymentSe
 import { CertificateStudio } from './Certificates';
 import { Integrations } from './Integrations';
 import { OffersAdmin } from './OffersAdmin';
+import { AdminBrochureButton } from './Brochure';
+import { LeadsAdmin,PastStudentsAdmin } from './AdmissionsTools';
+import { ResourceManager } from './LearningResources';
+import type { CourseLead } from './education-types';
 import { MailCenter } from './MailCenter';
 import { BatchStudio } from './Batches';
 import { NoticesAdmin } from './AcademyExperience';
@@ -36,12 +40,14 @@ import type { AdminAcademyData } from './academy-types';
 import type { Account, AdminWorkspaceData, Assignment, Course, Enrollment, Lesson, Module, Receipt, StudentRecord } from './types';
 import { Button, dateLabel, dateTimeLabel, DialogForm, Empty, ExternalLink, Field, FormError, Input, money, Panel, Status, useApiResource, value } from './ui';
 
-type Page = 'overview' | 'students' | 'courses' | 'sessions' | 'enrollments' | 'payments' | 'projects' | 'placements' | 'messages' | 'certificates' | 'integrations' | 'activity' | 'offers' | 'curriculum' | 'branding' | 'course-feedback' | 'mail' | 'batches' | 'notices' | 'data-reset' | 'mobile-app';
+type Page = 'leads' | 'past-students' | 'resources' | 'overview' | 'students' | 'courses' | 'sessions' | 'enrollments' | 'payments' | 'projects' | 'placements' | 'messages' | 'certificates' | 'integrations' | 'activity' | 'offers' | 'curriculum' | 'branding' | 'course-feedback' | 'mail' | 'batches' | 'notices' | 'data-reset' | 'mobile-app';
 const groups: WorkspaceNavGroup<Page>[] = [
   { label: 'Administration', pages: [
     { id: 'overview', label: 'Academy overview', icon: LayoutDashboard },
+    { id: 'leads', label: 'Brochure leads', icon: UserRound },
     { id: 'students', label: 'Students', icon: Users },
     { id: 'courses', label: 'Courses & videos', icon: BookOpen },
+    { id: 'resources', label: 'Practice resources', icon: ArrowDownToLine },
     { id: 'batches', label: 'Batches & releases', icon: CalendarDays },
     { id: 'sessions', label: 'Live sessions', icon: Video },
     { id: 'curriculum', label: 'Assignments', icon: FilePenLine },
@@ -50,6 +56,7 @@ const groups: WorkspaceNavGroup<Page>[] = [
     { id: 'payments', label: 'Payments & receipts', icon: CreditCard },
   ] },
   { label: 'Academic records', pages: [
+    { id: 'past-students', label: 'Past & offline students', icon: Award },
     { id: 'projects', label: 'Projects & reviews', icon: FileText },
     { id: 'placements', label: 'Placements', icon: BriefcaseBusiness },
     { id: 'messages', label: 'Messages', icon: MessageSquare },
@@ -76,7 +83,7 @@ type Dialog = AccessControlDialog
   | { kind: 'move-video' | 'remove-video'; course: Course; module: Module; lesson: Lesson }
   | { kind: 'video'; course: Course; moduleId?: string; lesson?: Lesson }
   | { kind: 'link'; course: Course; type: 'session' | 'resource' }
-  | { kind: 'enroll'; student?: StudentRecord; courseId?: string }
+  | { kind: 'enroll'; student?: StudentRecord; courseId?: string; lead?:CourseLead }
   | { kind: 'record' | 'edit-student' | 'reset' | 'placement'; student: StudentRecord }
   | { kind: 'review' | 'payment' | 'reject-payment'; enrollment: Enrollment }
   | { kind: 'document'; document: DocumentInfo }
@@ -131,7 +138,7 @@ function Roster({ data, open, onCreateCourse }: { data: AdminWorkspaceData; open
   </div>;
 }
 
-function CourseManager({ courses, open, onSessions, onChanged }: { courses: Course[]; open: (dialog: Dialog) => void; onSessions: (courseId: string, create: boolean) => void; onChanged: () => Promise<void> }) {
+function CourseManager({ courses, open, onSessions, onChanged,onResources }: { courses: Course[]; open: (dialog: Dialog) => void; onSessions: (courseId: string, create: boolean) => void; onChanged: () => Promise<void>;onResources:(id:string)=>void }) {
   return <Panel title="Course library" action={<Button onClick={() => open({ kind: 'course' })}><Plus size={18} /> Create course</Button>}>
     {!courses.length && <Empty title="Create your first course">Add a course, create a module and upload a lesson.</Empty>}
     {courses.map(course => <article className="pbs-course-admin" key={course.id}>
@@ -143,7 +150,7 @@ function CourseManager({ courses, open, onSessions, onChanged }: { courses: Cour
       <div className="pbs-actions">
         <Button quiet onClick={() => open({ kind: 'pause-course', course })}>{course.paused ? 'Resume course' : 'Pause course'}</Button>
         <Button disabled={course.paused} onClick={() => open({ kind: 'enroll', courseId: course.id })}>Enroll student</Button>
-        <Button quiet onClick={() => open({ kind: 'course', course })}>Edit course</Button>
+        <Button quiet onClick={() => open({ kind: 'course', course })}>Edit course</Button><AdminBrochureButton courseId={course.id}/><Button quiet onClick={()=>onResources(course.id)}>Practice files</Button>
         <Button quiet onClick={() => open({ kind: 'module', course })}>Add module</Button>
         <Button disabled={!course.modules.length} onClick={() => open({ kind: 'video', course })}><Video size={18} /> Add video</Button>
         {course.published && <a className="pbs-button pbs-button-outline" href={`/courses/${encodeURIComponent(course.id)}`} target="_blank" rel="noopener noreferrer">View public course page</a>}
@@ -263,6 +270,7 @@ export function AdminWorkspace({ account, onAccount, onSignOut }: {
     } else if (result.receipt) showReceipt(result.receipt);
     else { close(); setNotice('Student enrolled.'); }
   }
+  const [mailAudience,setMailAudience]=useState<'leads'|undefined>(),[resourceCourse,setResourceCourse]=useState('');
   function navigate(next: Page) {
     if (next !== 'sessions') { setLiveCourse(''); setCreateLive(false); }
     setPage(next);
@@ -290,12 +298,15 @@ export function AdminWorkspace({ account, onAccount, onSignOut }: {
       {!data && !error && <p className="pbs-muted" role="status">Loading records…</p>}
       {academy.data && !academy.data.payment.paymentUpiId && ['overview', 'students', 'courses', 'enrollments'].includes(page) && <div className="pbs-inset pbs-payment-setup pbs-section-top"><div><strong>Enable scan-to-pay & UPI app payments</strong><p className="pbs-muted">Add your verified business UPI ID and payee name. Students can apply while payment setup is pending.</p></div><Button onClick={() => show({ kind: 'payment-settings' })}>Set up student payments</Button></div>}
       {data && page === 'overview' && <AdminOverview data={data} academy={academy.data} navigate={navigate} onEnroll={() => data.courses.length ? show({ kind: 'enroll' }) : show({ kind: 'course' })} />}
+      {data && page === 'leads' && <LeadsAdmin onCampaign={()=>{setMailAudience('leads');navigate('mail');}} onEnroll={lead=>show({kind:'enroll',courseId:lead.courseId,student:data.students.find(s=>s.email.toLowerCase()===lead.email.toLowerCase()),lead})}/>}
+      {data && page === 'past-students' && <PastStudentsAdmin courses={data.courses} onChanged={refreshAll}/>}
+      {data && page === 'resources' && <ResourceManager courses={data.courses} initialCourseId={resourceCourse}/>}
       {data && page === 'students' && <Roster data={data} open={show} onCreateCourse={() => show({ kind: 'course' })} />}
-      {data && page === 'courses' && <CourseManager courses={data.courses} open={show} onChanged={refreshAll} onSessions={(courseId, create) => { navigate('sessions'); setLiveCourse(courseId); setCreateLive(create); }} />}
+      {data && page === 'courses' && <CourseManager courses={data.courses} onResources={id=>{setResourceCourse(id);navigate('resources');}} open={show} onChanged={refreshAll} onSessions={(courseId, create) => { navigate('sessions'); setLiveCourse(courseId); setCreateLive(create); }} />}
       {data && page === 'sessions' && <LiveClassesAdmin courses={data.courses} initialCourseId={liveCourse} createOnOpen={createLive} onChanged={refreshAll} />}
       {data && page === 'curriculum' && <CurriculumAdmin courses={data.courses} onSaved={refreshAll} />}
       {data && page === 'offers' && <OffersAdmin courses={data.courses} students={data.students} />}
-      {data && page === 'mail' && <MailCenter students={data.students} adminId={account.id} />}
+      {data && page === 'mail' && <MailCenter students={data.students} initialAudience={mailAudience} adminId={account.id} />}
       {data && page === 'batches' && <BatchStudio courses={data.courses} enrollments={data.enrollments} onChanged={refreshAll}/>}
       {data && page === 'notices' && <NoticesAdmin courses={data.courses}/>}
       {page === 'data-reset' && <DataReset onReset={refreshAll}/>}
@@ -343,7 +354,7 @@ export function AdminWorkspace({ account, onAccount, onSignOut }: {
     {dialog?.kind === 'link' && <CourseLinkForm course={dialog.course} kind={dialog.type} onClose={close} onSaved={() => saved('Course materials saved.')} />}
     {dialog?.kind === 'assessment' && <AssessmentForm course={dialog.course} onClose={close} onSaved={() => saved('Assessment published.')} />}
     {dialog?.kind === 'preview' && <Classroom course={dialog.course} completed={new Set()} onClose={close} />}
-    {dialog?.kind === 'enroll' && data && <EnrollStudentForm courses={data.courses} student={dialog.student} initialCourseId={dialog.courseId} onExisting={enrollment => enrollment.status === 'pending' ? show({ kind: 'review', enrollment }) : show({ kind: 'record', student: data.students.find(item => item.id === enrollment.studentId)! })} onCreateCourse={() => show({ kind: 'course' })} onClose={close} onSaved={enroll} />}
+    {dialog?.kind === 'enroll' && data && <EnrollStudentForm courses={data.courses} student={dialog.student} initialCourseId={dialog.courseId} prefill={dialog.lead} onExisting={enrollment => enrollment.status === 'pending' ? show({ kind: 'review', enrollment }) : show({ kind: 'record', student: data.students.find(item => item.id === enrollment.studentId)! })} onCreateCourse={() => show({ kind: 'course' })} onClose={close} onSaved={enroll} />}
     {dialog?.kind === 'record' && <StudentRecordPanel student={data?.students.find(item => item.id === dialog.student.id) || dialog.student} open={show} onClose={close} onSaved={refreshAll} />}
     {dialog?.kind === 'review' && <ReviewEnrollmentForm enrollment={dialog.enrollment} onClose={close} onSaved={async result => {
       await saved('Enrollment reviewed.'); if (result.access) show({ kind: 'temp', access: result.access, delivery: result.delivery, receipt: result.receipt }); else if (result.receipt) showReceipt(result.receipt);

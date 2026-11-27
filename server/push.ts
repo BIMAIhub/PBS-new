@@ -60,7 +60,7 @@ const eligibleDevice = `SELECT d.*, a.role, a.must_change, s.expires_at, n.title
 // Page names, never provider URLs or credentials, are included in a push message.
 export function pushLink(page: string) {
   const pages = new Set(['overview','students','courses','sessions','enrollments','payments','projects','placements','messages',
-    'certificates','offers','curriculum','course-feedback','batches','notices','fees','project','downloads','reviews','portfolio','profile','referrals','roadmap','mobile-app']);
+    'leads','past-students','resources','certificates','offers','curriculum','course-feedback','batches','notices','fees','project','downloads','reviews','portfolio','profile','referrals','roadmap','mobile-app']);
   return `/?page=${pages.has(page) ? page : 'overview'}`;
 }
 
