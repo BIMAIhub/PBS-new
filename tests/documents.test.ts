@@ -62,6 +62,15 @@ test('historical credentials describe verified training without inventing an ass
   assert.equal(pdf.getNumberOfPages(),1);assert.match(await readable(pdf),/has completed verified offline training in/);assert.ok(!(await readable(pdf)).includes('learning requirements and assessment'));assert.match(await readable(pdf),/ORIGINAL-000001/);
 });
 
+test('certificate training duration defaults to six months and respects admin or course overrides',async()=>{
+  const original=await buildCertificatePdf(pdfCertificate,defaultBranding,{},stamp);
+  assert.match(await readable(original),/6 months of training/);
+  const custom=await buildCertificatePdf({...pdfCertificate,template:{...pdfCertificate.template,durationLabel:'12 months of professional training'}},defaultBranding,{duration:'Course duration on file'},stamp);
+  assert.match(await readable(custom),/12 months of professional training/);assert.ok(!(await readable(custom)).includes('6 months of training'));
+  const course=await buildCertificatePdf(pdfCertificate,defaultBranding,{duration:'8 months of supervised training'},stamp);
+  assert.match(await readable(course),/8 months of supervised training/);
+});
+
 test('course brochures paginate real curriculum and use identical A4 content on mobile and desktop',async()=>{
   const course:CourseBrochure={id:'qa-brochure',title:pdfEnrollment.courseTitle,description:'A course brochure layout fixture. Never published to the academy catalog.',category:'BIM',instructor:'',schedule:'',fee:1800000,brand:defaultBranding,
     price:{listPrice:1800000,total:1500000,discount:300000,promotionId:'qa',promotionTitle:'First batch offer',code:'',percent:17},
