@@ -1,9 +1,9 @@
-import { installPdfFonts } from './pdf-fonts';
-import { drawPdfBrand,fitPdfImage } from './pdf-image';
-import type { CertificateRecord } from './academy-types';
-import type { Branding } from './branding-types';
-import { defaultDocumentStamp,type DocumentStamp } from './document-types';
-import { drawPdfStamp } from './pdf-stamp';
+import { installPdfFonts } from './pdf-fonts.js';
+import { drawPdfBrand,fitPdfImage } from './pdf-image.js';
+import type { CertificateRecord } from './academy-types.js';
+import type { Branding } from './branding-types.js';
+import { defaultDocumentStamp,type DocumentStamp } from './document-types.js';
+import { drawPdfStamp } from './pdf-stamp.js';
 
 export const certificatePage={width:297,height:210,logo:{x:23,y:21,width:32,height:22},stamp:{x:148.5,y:184,radius:12},signature:{x:25,y:177,width:61,height:9}};
 export async function buildCertificatePdf(record:CertificateRecord,brand:Branding,assets:{logo?:string;qr?:string;verificationUrl?:string;fonts?:string[];duration?:string}={},stamp:DocumentStamp=defaultDocumentStamp(brand)) {

@@ -1,6 +1,6 @@
 import type { jsPDF } from 'jspdf';
-import type { DocumentStamp } from './document-types';
-import { fitPdfImage } from './pdf-image';
+import type { DocumentStamp } from './document-types.js';
+import { fitPdfImage } from './pdf-image.js';
 
 export function drawPdfStamp(pdf: jsPDF, stamp: DocumentStamp, x: number, y: number, radius = 14) {
   if (!stamp.enabled) return;

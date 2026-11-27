@@ -1,9 +1,25 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync,rmSync } from 'node:fs';
+import { mkdtempSync,rmSync,readFileSync,writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fitPdfImage } from '../src/live/pdf-image.js';
+
+test('the deployed certificate renderer initializes as native Node ESM without the TypeScript loader',async()=>{
+  const directory=mkdtempSync(path.join(tmpdir(),'pbs-certificate-esm-'));
+  try {
+    const {transpileModule,ModuleKind,ScriptTarget}=await import('typescript');
+    writeFileSync(path.join(directory,'package.json'),JSON.stringify({type:'module'}));
+    for(const name of ['certificate-pdf','pdf-fonts','pdf-image','document-types','pdf-stamp']) {
+      const source=readFileSync(new URL(`../src/live/${name}.ts`,import.meta.url),'utf8');
+      writeFileSync(path.join(directory,`${name}.js`),transpileModule(source,{compilerOptions:{module:ModuleKind.ESNext,target:ScriptTarget.ES2022}}).outputText);
+    }
+    const result=spawnSync(process.execPath,['--input-type=module','-e',`const renderer=await import(${JSON.stringify(pathToFileURL(path.join(directory,'certificate-pdf.js')).href)});if(typeof renderer.buildCertificatePdf!=='function')process.exit(1);`],{encoding:'utf8'});
+    assert.equal(result.status,0,result.stderr||result.stdout);
+  } finally {rmSync(directory,{recursive:true,force:true});}
+});
 
 const images={"logo": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPAAAAA8CAYAAABYfzddAAAA0ElEQVR4nO3TQQ3AIADAwDETiEQg8piHfUiTOwX9dMy1zwMkvbcDgP8MDGEGhjADQ5iBIczAEGZgCDMwhBkYwgwMYQaGMANDmIEhzMAQZmAIMzCEGRjCDAxhBoYwA0OYgSHMwBBmYAgzMIQZGMIMDGEGhjADQ5iBIczAEGZgCDMwhBkYwgwMYQaGMANDmIEhzMAQZmAIMzCEGRjCDAxhBoYwA0OYgSHMwBBmYAgzMIQZGMIMDGEGhjADQ5iBIczAEGZgCDMwhBkYwgwMYQaGsA+BxQKwL0vxjgAAAABJRU5ErkJggg==", "signature": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPAAAAAoCAYAAADAOHfQAAAAl0lEQVR4nO3TsQ3AIADAsNJDmJn5/zf6QxcUyb4gS8Zc+zxA0ns7APjPwBBmYAgzMIQZGMIMDGEGhjADQ5iBIczAEGZgCDMwhBkYwgwMYQaGMANDmIEhzMAQZmAIMzCEGRjCDAxhBoYwA0OYgSHMwBBmYAgzMIQZGMIMDGEGhjADQ5iBIczAEGZgCDMwhBkYwgwMYQaGsA8KTAHHu/fJmwAAAABJRU5ErkJggg==", "stamp": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFAAAABQCAYAAACOEfKtAAAAxUlEQVR4nO3QQQ2AMADAwDGZ04QSTDIP64OQ3Cloeq37eQfH5tcBf2dgZGBkYGRgZGBkYGRgZGBkYGRgZGBkYGRgZGBkYGRgZGBkYGRgZGBkYGRgZGBkYGRgZGBkYGRgZGBkYGRgZGBkYGRgZGBkYGRgZGBkYGRgZGBkYGRgZGBkYGRgZGBkYGRgZGBkYGRgZGBkYGRgZGBkYGRgZGBkYGRgZGBkYGRgZGBkYGRgZGBkYGRgZGBkYGRgZGBkYGRgZGBkYLQBb3QDLzYeqPAAAAAASUVORK5CYII="};
 async function pdfDetails(bytes:Uint8Array){const {getDocument}=await import('pdfjs-dist/legacy/build/pdf.mjs');const task=getDocument({data:new Uint8Array(bytes),useSystemFonts:false}),doc=await task.promise;try{const page=await doc.getPage(1),text=await page.getTextContent();return {pages:doc.numPages,width:page.view[2],height:page.view[3],text:text.items.map(i=>'str'in i?i.str:'').join(' ')};}finally{await task.destroy();}}
