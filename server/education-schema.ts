@@ -2,6 +2,9 @@ export const educationSchema = `
 CREATE TABLE IF NOT EXISTS certificate_design_assets (
  course_id TEXT PRIMARY KEY,logo_image TEXT NOT NULL DEFAULT '',signature_image TEXT NOT NULL DEFAULT '',detail_text TEXT NOT NULL DEFAULT '',duration_label TEXT NOT NULL DEFAULT '',revision TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS certificate_signature_details (
+ course_id TEXT PRIMARY KEY,second_signer TEXT NOT NULL DEFAULT '',second_role TEXT NOT NULL DEFAULT '',second_signature_image TEXT NOT NULL DEFAULT '',revision TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS certificate_mail_deliveries (
  id TEXT PRIMARY KEY,certificate_id TEXT NOT NULL REFERENCES certificates(id) ON DELETE CASCADE,account_id TEXT NOT NULL REFERENCES accounts(id),sender_id TEXT NOT NULL REFERENCES accounts(id),request_key TEXT NOT NULL UNIQUE,
  email TEXT NOT NULL,status TEXT NOT NULL,error TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,sent_at TEXT NOT NULL DEFAULT ''

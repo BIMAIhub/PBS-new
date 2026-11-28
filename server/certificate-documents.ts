@@ -5,8 +5,7 @@ import type { Express } from 'express';
 import { findAccount,requireAccount } from './auth.js';
 import { type Database,type WritableDatabase,makeId,now,transaction } from './database.js';
 import { audit,certificateRecords } from './academy-data.js';
-import { brandingLogoData,imageExtension,publicBranding } from './branding.js';
-import { documentStamp } from './document-stamp.js';
+import { imageExtension,publicBranding } from './branding.js';
 import { badRequest,conflict,field,limitAttempts,notFound,RequestError,route } from './http.js';
 import { manualMailSender,mailTemplates,templateVariables } from './mail.js';
 import { portalOrigin,sendMicrosoftMail } from './microsoft.js';
@@ -14,21 +13,22 @@ import { fillMailTemplate } from '../src/live/mail-templates.js';
 import { buildCertificatePdf,certificateLayoutVersion } from '../src/live/certificate-pdf.js';
 import type { CertificateRecord } from '../src/live/academy-types.js';
 
-let fonts:Promise<string[]>|undefined;
+let fonts:Promise<string[]>|undefined,artwork:Promise<string>|undefined;
 const cached=new Map<string,Buffer>();
 const certificateFilename=(record:CertificateRecord)=>`${record.id.replace(/[^a-zA-Z0-9._-]/g,'-').slice(0,120)}.pdf`;
-async function serverFonts(){fonts??=Promise.all(['LiberationSans-Regular.ttf','LiberationSans-Bold.ttf','LiberationSerif-Regular.ttf','LiberationSerif-Italic.ttf'].map(async file=>(await readFile(path.join(process.cwd(),'src/assets/pdf-fonts',file))).toString('base64'))).catch(error=>{fonts=undefined;throw error;});return fonts;}
+async function serverFonts(){fonts??=Promise.all(['LiberationSans-Regular.ttf','LiberationSans-Bold.ttf','LiberationSerif-Regular.ttf','LiberationSerif-Italic.ttf','InstrumentSans-Regular.ttf','InstrumentSans-Bold.ttf'].map(async file=>(await readFile(path.join(process.cwd(),'src/assets/pdf-fonts',file))).toString('base64'))).catch(error=>{fonts=undefined;throw error;});return fonts;}
+async function serverArtwork(){artwork??=readFile(path.join(process.cwd(),'src/assets/certificate-art/pbs-certificate-blueprint.jpg')).then(bytes=>'data:image/jpeg;base64,'+bytes.toString('base64')).catch(error=>{artwork=undefined;throw error;});return artwork;}
 export async function certificateRecord(db:Database,id:string) {
   const row=await db.prepare('SELECT account_id FROM certificates WHERE id=?').get(id);if(!row)throw notFound('This certificate is unavailable.');
   const record=(await certificateRecords(db,String(row.account_id))).find(r=>r.id===id);if(!record)throw notFound('This certificate is unavailable.');return record;
 }
 export async function certificateFile(db:Database,record:CertificateRecord,origin:string) {
-  const brand=await publicBranding(db),stamp=await documentStamp(db),logo=record.template.logoImage||await brandingLogoData(db);
+  const brand=await publicBranding(db);
   const page=await db.prepare('SELECT duration FROM course_pages WHERE course_id=?').get(record.courseId),duration=String(page?.duration||'');
   const url=`${origin}/verify/certificate/${encodeURIComponent(record.publicToken)}`;
-  const key=createHash('sha256').update(JSON.stringify({layout:certificateLayoutVersion,record,brand,stamp,logo,duration,url})).digest('hex');const previous=cached.get(key);if(previous)return previous;
+  const key=createHash('sha256').update(JSON.stringify({layout:certificateLayoutVersion,record,brand,duration,url})).digest('hex');const previous=cached.get(key);if(previous)return previous;
   const qr=record.published&&!record.revokedAt?await (await import('qrcode')).toDataURL(url,{margin:1,width:200,errorCorrectionLevel:'M'}):undefined;
-  const pdf=await buildCertificatePdf(record,brand,{logo,qr,verificationUrl:url,duration,fonts:await serverFonts()},stamp);
+  const pdf=await buildCertificatePdf(record,brand,{qr,verificationUrl:url,duration,fonts:await serverFonts(),background:await serverArtwork()});
   pdf.setCreationDate(new Date(record.issuedAt));pdf.setFileId(key.slice(0,32));
   const bytes=Buffer.from(pdf.output('arraybuffer'));if(cached.size>=20)cached.delete(cached.keys().next().value!);cached.set(key,bytes);return bytes;
 }
@@ -38,10 +38,17 @@ function png(input:unknown,label:string) {
   const bytes=Buffer.from(match[1],'base64');if(bytes.length>125000)throw badRequest(`Keep ${label} below 125 KB.`);imageExtension(bytes,'image/png');return data;
 }
 export async function saveCertificateDesign(db:Database,courseId:string,body:Record<string,unknown>) {
-  const keys=['logoImage','signatureImage','detailText','durationLabel'];if(!keys.some(key=>body[key]!==undefined))return;
-  const existing=await db.prepare('SELECT * FROM certificate_design_assets WHERE course_id=?').get(courseId);
-  await db.prepare(`INSERT INTO certificate_design_assets VALUES (?,?,?,?,?,?) ON CONFLICT(course_id) DO UPDATE SET logo_image=excluded.logo_image,signature_image=excluded.signature_image,detail_text=excluded.detail_text,duration_label=excluded.duration_label,revision=excluded.revision`)
-    .run(courseId,body.logoImage===undefined?String(existing?.logo_image||''):png(body.logoImage,'certificate logo'),body.signatureImage===undefined?String(existing?.signature_image||''):png(body.signatureImage,'signature'),body.detailText===undefined?String(existing?.detail_text||''):field(body.detailText,'certificate details',320,false),body.durationLabel===undefined?String(existing?.duration_label||''):field(body.durationLabel,'training duration',100,false),makeId());
+  const keys=['logoImage','signatureImage','detailText','durationLabel'];
+  if(keys.some(key=>body[key]!==undefined)) {
+    const existing=await db.prepare("SELECT * FROM certificate_design_assets WHERE course_id IN (?, '') ORDER BY CASE WHEN course_id=? THEN 0 ELSE 1 END LIMIT 1").get(courseId,courseId);
+    await db.prepare(`INSERT INTO certificate_design_assets VALUES (?,?,?,?,?,?) ON CONFLICT(course_id) DO UPDATE SET logo_image=excluded.logo_image,signature_image=excluded.signature_image,detail_text=excluded.detail_text,duration_label=excluded.duration_label,revision=excluded.revision`)
+      .run(courseId,body.logoImage===undefined?String(existing?.logo_image||''):png(body.logoImage,'certificate logo'),body.signatureImage===undefined?String(existing?.signature_image||''):png(body.signatureImage,'signature'),body.detailText===undefined?String(existing?.detail_text||''):field(body.detailText,'certificate details',320,false),body.durationLabel===undefined?String(existing?.duration_label||''):field(body.durationLabel,'training duration',100,false),makeId());
+  }
+  if(['secondSigner','secondSignerRole','secondSignatureImage'].some(key=>body[key]!==undefined)) {
+    const existing=await db.prepare("SELECT * FROM certificate_signature_details WHERE course_id IN (?, '') ORDER BY CASE WHEN course_id=? THEN 0 ELSE 1 END LIMIT 1").get(courseId,courseId);
+    await db.prepare(`INSERT INTO certificate_signature_details VALUES (?,?,?,?,?) ON CONFLICT(course_id) DO UPDATE SET second_signer=excluded.second_signer,second_role=excluded.second_role,second_signature_image=excluded.second_signature_image,revision=excluded.revision`)
+      .run(courseId,body.secondSigner===undefined?String(existing?.second_signer||''):field(body.secondSigner,'second signatory name',120,false),body.secondSignerRole===undefined?String(existing?.second_role||''):field(body.secondSignerRole,'second signatory role',120,false),body.secondSignatureImage===undefined?String(existing?.second_signature_image||''):png(body.secondSignatureImage,'second signature'),makeId());
+  }
 }
 export function mountCertificateDocuments(app:Express,db:WritableDatabase,hosted:boolean,sendMail:typeof sendMicrosoftMail=sendMicrosoftMail) {
   app.get('/api/certificates/:id/pdf',limitAttempts(40,hosted?db:undefined),route(async(req,res)=>{

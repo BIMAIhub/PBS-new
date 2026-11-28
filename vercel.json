@@ -7,7 +7,7 @@
   "functions": {
     "api/pbs.ts": {
       "maxDuration": 60,
-      "includeFiles": "src/assets/pdf-fonts/**"
+      "includeFiles": "src/assets/**"
     }
   },
   "headers": [

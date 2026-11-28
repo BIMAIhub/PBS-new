@@ -44,14 +44,28 @@ test('long fee histories paginate without losing receipt rows and repeat the ins
   for(const receipt of receipts) assert.ok((await readable(pdf)).includes(receipt.number),`Receipt ${receipt.number} must be preserved`);
 });
 
-test('long names stay in a single ID page and all certificate designs stay A4 landscape with an optional stamp', async () => {
+test('certificate design stays fixed at the reference 4:3 size with two signatory blocks', async () => {
   const id = await buildDocumentPdf({kind:'id',account:{...pdfAccount,name:'An exceptionally long learner name for institution record layout verification with extended family and given names',id:'PBS-EXTENDED-IDENTIFICATION-REFERENCE-01234567890123456789',rollNumber:'PBS/2026/PROFESSIONAL-BIM-ACADEMY/000001'},enrollments:[pdfEnrollment]},defaultBranding,stamp);
   assert.equal(id.getNumberOfPages(),1);
+  const original=await buildCertificatePdf(pdfCertificate,defaultBranding);
   for(const design of ['architectural','classic','minimal'] as const) {
-    const pdf=await buildCertificatePdf({...pdfCertificate,template:{...pdfCertificate.template,design}},defaultBranding,{},stamp);
-    assert.equal(pdf.getNumberOfPages(),1);assert.ok(Math.abs(pdf.internal.pageSize.getWidth()-297)<.1);assert.ok(Math.abs(pdf.internal.pageSize.getHeight()-210)<.1);assert.match(await readable(pdf),/AUTHORIZED RECORD/);assert.equal((await readable(pdf)).split(pdfCertificate.template.signer).length-1,1,'one authorized signatory per certificate');
-    const without=await buildCertificatePdf({...pdfCertificate,template:{...pdfCertificate.template,design}},defaultBranding,{}, {...stamp,enabled:false});assert.ok(!(await readable(without)).includes('AUTHORIZED RECORD'));
+    const pdf=await buildCertificatePdf({...pdfCertificate,template:{...pdfCertificate.template,design,title:'Old custom title',issuer:'Old issuer',primaryColor:'#ff0000',accentColor:'#00ff00',logoImage:'ignored legacy logo'}},defaultBranding,{}, {...stamp,enabled:false});
+    assert.equal(pdf.getNumberOfPages(),1);assert.ok(Math.abs(pdf.internal.pageSize.getWidth()-280)<.1);assert.ok(Math.abs(pdf.internal.pageSize.getHeight()-210)<.1);
+    assert.equal(content(pdf),content(original),'legacy appearance settings and other-document stamps cannot alter the fixed certificate design');
+    const text=await readable(pdf);assert.match(text,/PBS AUTHORIZED RECORD/);assert.match(text,/Academic Director/);assert.match(text,/Authorized signatory/);assert.ok(!text.includes('Old custom title'));
   }
+  const signed=await buildCertificatePdf({...pdfCertificate,template:{...pdfCertificate.template,signer:'First authorised member',signerRole:'Academic Director',secondSigner:'Second authorised member',secondSignerRole:'Head of training'}},defaultBranding);
+  const text=await readable(signed);assert.match(text,/First authorised member/);assert.match(text,/Second authorised member/);assert.match(text,/Head of training/);
+});
+
+test('certificate typography and physical size are identical on phone and desktop',async()=>{
+  await import('jspdf');const runtime=globalThis as unknown as {window?:{innerWidth:number;devicePixelRatio:number}},previous=runtime.window;
+  try {
+    runtime.window={innerWidth:390,devicePixelRatio:3};const phone=await buildCertificatePdf(pdfCertificate,defaultBranding);
+    runtime.window={innerWidth:1920,devicePixelRatio:1};const desktop=await buildCertificatePdf(pdfCertificate,defaultBranding);
+    assert.equal(content(phone),content(desktop));assert.equal(phone.internal.pageSize.getWidth()/phone.internal.pageSize.getHeight(),4/3);
+    const text=await readable(phone);assert.ok(!text.includes('Prathamesh Desai'));assert.ok(!text.includes('85F041FCB39C'));
+  }finally{if(previous)runtime.window=previous;else delete runtime.window;}
 });
 
 test('historical credentials describe verified training without inventing an assessment and retain original references',async()=>{

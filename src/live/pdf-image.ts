@@ -34,3 +34,31 @@ export function drawPdfBrand(pdf:jsPDF,x:number,y:number,width:number,height:num
   pdf.setFillColor('#0A2845');pdf.rect(...at(35,34),side*10/80,side*4/80,'F');
   pdf.setDrawColor('#D4A94D');pdf.setLineWidth(side*3/80);draw([[20,16],[46,16],[61,27]]);pdf.stroke();draw([[61,39],[61,59],[45,59]]);pdf.stroke();pdf.setLineWidth(side*2/80);pdf.line(...at(17,65),...at(64,65));pdf.restoreGraphicsState();
 }
+
+// Render genuine uploaded signature strokes in the reference's light ink.
+// Stored PNGs stay untouched. A white scanner background is removed only when fully opaque.
+export async function lightSignatureInk(data:string) {
+  const match=/^data:image\/png;base64,(.+)$/.exec(data);
+  if(!match)throw new Error('Choose a PNG signature.');
+  const {decode,encode}=await import('fast-png');
+  const png=decode(Uint8Array.from(atob(match[1]),value=>value.charCodeAt(0))),count=png.width*png.height;
+  if(count>4_000_000)throw new Error('Resize the signature PNG before uploading it.');
+  const maximum=png.depth===16?65535:255;
+  function pixel(index:number) {
+    const offset=index*png.channels,palette=png.palette?.[Number(png.data[offset])];
+    if(palette)return [palette[0]/255,palette[1]/255,palette[2]/255,palette.length>3?palette[3]/255:1];
+    if(png.channels<=2){const gray=Number(png.data[offset])/maximum;return [gray,gray,gray,png.channels===2?Number(png.data[offset+1])/maximum:1];}
+    return [Number(png.data[offset])/maximum,Number(png.data[offset+1])/maximum,Number(png.data[offset+2])/maximum,png.channels===4?Number(png.data[offset+3])/maximum:1];
+  }
+  let transparent=false;
+  for(let i=0;i<count;i++)if(pixel(i)[3]<.99){transparent=true;break;}
+  const whitePaper=!transparent&&[0,png.width-1,count-png.width,count-1].every(i=>pixel(i).slice(0,3).every(channel=>channel>.94));
+  const output=new Uint8Array(count*4);
+  for(let i=0;i<count;i++) {
+    const [r,g,b,a]=pixel(i),alpha=whitePaper?a*(1-Math.min(r,g,b)):a;
+    output.set([244,247,250,Math.round(255*alpha)],i*4);
+  }
+  const bytes=encode({width:png.width,height:png.height,channels:4,depth:8,data:output});
+  let encoded='';for(let i=0;i<bytes.length;i+=8192)encoded+=String.fromCharCode(...bytes.subarray(i,i+8192));
+  return 'data:image/png;base64,'+btoa(encoded);
+}

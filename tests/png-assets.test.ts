@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createCanvas, loadImage, type Canvas } from '@napi-rs/canvas';
 import { normalizePngAsset, PNG_ASSET_MAX_BYTES, preparePngAsset } from '../src/live/png-assets.js';
-import { needsLightPdfBackdrop } from '../src/live/pdf-image.js';
+import { needsLightPdfBackdrop,lightSignatureInk } from '../src/live/pdf-image.js';
 
 const canvasFactory = () => createCanvas(1, 1) as unknown as HTMLCanvasElement;
 const source = (canvas: Canvas) => canvas as unknown as CanvasImageSource;
@@ -61,4 +61,19 @@ test('the supplied stamp and exact website logo remain transparent upload-ready 
     const canvas = createCanvas(image.width, image.height), context = canvas.getContext('2d'); context.drawImage(image, 0, 0);
     assert.equal(context.getImageData(0, 0, 1, 1).data[3], 0);
   }
+});
+
+
+test('both signature PNGs render as light ink with preserved strokes and no white scanner box',async()=>{
+  const canvas=createCanvas(120,40),context=canvas.getContext('2d');
+  context.fillStyle='#fff';context.fillRect(0,0,120,40);context.fillStyle='#101010';context.fillRect(10,10,100,20);
+  const original=canvas.toDataURL('image/png'),output=await lightSignatureInk(original),image=await loadImage(bytes(output));
+  const target=createCanvas(120,40),checked=target.getContext('2d');checked.drawImage(image,0,0);
+  assert.equal(checked.getImageData(0,0,1,1).data[3],0);
+  const ink=Array.from(checked.getImageData(20,20,1,1).data);
+  assert.ok(ink.every((channel,index)=>Math.abs(channel-[244,247,250,239][index])<=1),'canvas premultiplication may round a channel by one');
+  assert.equal(canvas.toDataURL('image/png'),original,'source PNG remains unchanged');
+  context.clearRect(0,0,120,40);context.globalAlpha=.5;context.fillStyle='#176BB7';context.fillRect(10,10,100,20);
+  const transparent=await loadImage(bytes(await lightSignatureInk(canvas.toDataURL('image/png'))));checked.clearRect(0,0,120,40);checked.drawImage(transparent,0,0);
+  assert.equal(checked.getImageData(0,0,1,1).data[3],0);assert.ok(Math.abs(checked.getImageData(20,20,1,1).data[3]-128)<=1);
 });

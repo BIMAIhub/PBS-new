@@ -33,7 +33,8 @@ export async function certificateTemplate(db: Database, courseId: string): Promi
     design, primary_color AS primaryColor, accent_color AS accentColor FROM certificate_templates
     WHERE course_id IN (?, '') ORDER BY CASE WHEN course_id = ? THEN 0 ELSE 1 END LIMIT 1`).get(courseId, courseId);
   const assets=await db.prepare(`SELECT logo_image AS logoImage,signature_image AS signatureImage,detail_text AS detailText,duration_label AS durationLabel FROM certificate_design_assets WHERE course_id IN (?, '') ORDER BY CASE WHEN course_id=? THEN 0 ELSE 1 END LIMIT 1`).get(courseId,courseId);
-  return {...(row?row as unknown as CertificateTemplate:defaultTemplate),...(assets||{})};
+  const second=await db.prepare(`SELECT second_signer AS secondSigner,second_role AS secondSignerRole,second_signature_image AS secondSignatureImage FROM certificate_signature_details WHERE course_id IN (?, '') ORDER BY CASE WHEN course_id=? THEN 0 ELSE 1 END LIMIT 1`).get(courseId,courseId);
+  return {...(row?row as unknown as CertificateTemplate:defaultTemplate),...(assets||{}),...(second||{})};
 }
 
 export async function certificateRecords(db: Database, accountId?: string) {

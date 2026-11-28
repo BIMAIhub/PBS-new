@@ -54,12 +54,27 @@ test('canonical certificates, signed PDF email, alumni welcome and admin-control
       await req(admin,'/admin/certificate-template',{...template,signatureImage:'data:image/svg+xml;base64,AAAA'},'PUT',400);assert.equal((await req(admin,'/admin/certificate-template')).signatureImage,images.signature);
       const {logoImage:_logo,signatureImage:_signature,detailText:_details,durationLabel:_duration,...oldFields}=template;await req(admin,'/admin/certificate-template',oldFields,'PUT');assert.equal((await req(admin,'/admin/certificate-template')).logoImage,images.logo);
     });
+    await t.test('two signatories support independent PNGs, inheritance and partial updates without resetting saved credentials',async()=>{
+      template=await req(admin,'/admin/certificate-template',{signer:'First authorised member',signerRole:'Academic Director',secondSigner:'Second authorised member',secondSignerRole:'Head of training',secondSignatureImage:images.logo},'PUT');
+      assert.equal(template.signatureImage,images.signature);assert.equal(template.secondSignatureImage,images.logo);
+      assert.equal(template.logoImage,images.logo);assert.equal(template.durationLabel,'84 recorded lessons + 10 live mentorship sessions');
+      await req(student,'/admin/certificate-template',{secondSigner:'Unauthorised'},'PUT',403);
+      await req(admin,'/admin/certificate-template',{secondSignatureImage:'data:image/svg+xml;base64,AAAA',signer:'Must roll back'},'PUT',400);
+      assert.equal((await req(admin,'/admin/certificate-template')).signer,'First authorised member');
+      const inherited=await req(admin,`/admin/certificate-template?courseId=${courseId}`);assert.equal(inherited.secondSigner,'Second authorised member');
+      await req(admin,'/admin/certificate-template',{courseId,secondSigner:'Course second member'},'PUT');
+      const scoped=await req(admin,`/admin/certificate-template?courseId=${courseId}`);assert.equal(scoped.secondSignatureImage,images.logo);assert.equal(scoped.signatureImage,images.signature);assert.equal(scoped.signer,'First authorised member');
+      await req(admin,'/admin/certificate-template',{courseId,secondSigner:'Second authorised member'},'PUT');
+      const {secondSigner:_name,secondSignerRole:_role,secondSignatureImage:_png,...legacy}=template;
+      await req(admin,'/admin/certificate-template',legacy,'PUT');assert.equal((await req(admin,'/admin/certificate-template')).secondSignatureImage,images.logo);
+      assert.deepEqual(await db.prepare('SELECT * FROM accounts WHERE id=?').get(adminId),originalAdmin);
+    });
     await t.test('public verification and owner download use the identical standard PDF and certificate name',async()=>{
       await req(visitor,`/certificates/${record.id}/pdf`,undefined,'GET',401);await req(other,`/certificates/${record.id}/pdf`,undefined,'GET',404);await req(visitor,`/certificates/verify/${record.publicToken}/pdf`,undefined,'GET',404);
       await req(student,'/student/profile',{name:'Updated Profile Name',phone:'9876543221',headline:'Civil engineer',location:'',about:'',skills:[]},'PATCH');
       await req(student,`/student/certificates/${record.id}`,{published:true},'PATCH',204);
       const privatePdf=await req(student,`/certificates/${record.id}/pdf`),publicPdf=await req(visitor,`/certificates/verify/${record.publicToken}/pdf`);assert.deepEqual(privatePdf,publicPdf);
-      const details=await pdfDetails(privatePdf);assert.equal(details.pages,1);assert.ok(Math.abs(details.width-841.89)<.1);assert.ok(Math.abs(details.height-595.28)<.1);assert.match(details.text,/Certificate Snapshot Name/);assert.ok(!details.text.includes('Updated Profile Name'));assert.match(details.text,/PBS\/ORIGINAL\/2024\/008/);assert.match(details.text,/84 recorded lessons/);assert.match(details.text,/Verified training in practical BIM/);
+      const details=await pdfDetails(privatePdf);assert.equal(details.pages,1);assert.ok(Math.abs(details.width-793.70)<.1);assert.ok(Math.abs(details.height-595.28)<.1);assert.match(details.text,/Certificate Snapshot Name/);assert.match(details.text,/First authorised member/);assert.match(details.text,/Second authorised member/);assert.ok(!details.text.includes('Updated Profile Name'));assert.match(details.text,/PBS\/ORIGINAL\/2024\/008/);assert.match(details.text,/84 recorded lessons/);assert.match(details.text,/Verified training in practical BIM/);
       const verify=await req(visitor,`/certificates/verify/${record.publicToken}`);assert.equal(verify.studentName,'Certificate Snapshot Name');assert.ok(!JSON.stringify(verify).includes('alumni-cert@example.invalid'));
     });
     await t.test('certificate email attaches that same PDF and records accepted, failed and uncertain results without duplicates',async()=>{
@@ -91,7 +106,7 @@ test('canonical certificates, signed PDF email, alumni welcome and admin-control
     });
     await t.test('reviewed student reset removes new private records and preserves certificate branding and administrator credentials',async()=>{
       const preview=await req(admin,'/admin/reset-preview');await req(admin,'/admin/reset-students',{current:password,confirmation:'DELETE STUDENT DATA',reviewToken:preview.reviewToken});
-      assert.equal(Number((await db.prepare('SELECT COUNT(*) AS n FROM certificate_mail_deliveries').get())!.n),0);assert.equal(Number((await db.prepare('SELECT COUNT(*) AS n FROM alumni_welcomes').get())!.n),0);assert.equal((await req(admin,'/admin/certificate-template')).signatureImage,images.signature);assert.deepEqual(await db.prepare('SELECT * FROM accounts WHERE id=?').get(adminId),originalAdmin);
+      assert.equal(Number((await db.prepare('SELECT COUNT(*) AS n FROM certificate_mail_deliveries').get())!.n),0);assert.equal(Number((await db.prepare('SELECT COUNT(*) AS n FROM alumni_welcomes').get())!.n),0);assert.equal((await req(admin,'/admin/certificate-template')).signatureImage,images.signature);assert.equal((await req(admin,'/admin/certificate-template')).secondSignatureImage,images.logo);assert.deepEqual(await db.prepare('SELECT * FROM accounts WHERE id=?').get(adminId),originalAdmin);
     });
   }finally{await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));db.close();rmSync(directory,{recursive:true,force:true});}
 });

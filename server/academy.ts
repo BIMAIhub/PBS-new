@@ -112,19 +112,20 @@ export function mountAcademy(app: Express, db: WritableDatabase, hosted: boolean
     const admin = await requireAccount(db, req, 'admin');
     const courseId = field(req.body?.courseId, 'course ID', 80, false);
     if (courseId && !await db.prepare('SELECT 1 FROM courses WHERE id = ?').get(courseId)) throw notFound('This course is unavailable.');
-    const color = (name: string) => {
-      const result = field(req.body?.[name], 'certificate color', 7);
+    const current=await certificateTemplate(db,courseId);
+    const color = (name: 'primaryColor'|'accentColor') => {
+      const result = field(req.body?.[name]??current[name], 'certificate color', 7);
       if (!/^#[a-f0-9]{6}$/i.test(result)) throw badRequest('Choose valid certificate colors.');
       return result;
     };
-    const design = field(req.body?.design, 'certificate design', 20);
+    const design = field(req.body?.design??current.design, 'certificate design', 20);
     if (!['architectural', 'classic', 'minimal'].includes(design)) throw badRequest('Choose a certificate design.');
     await transaction(db, async tx => {
       await tx.prepare(`INSERT INTO certificate_templates VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(course_id) DO UPDATE SET title = excluded.title, issuer = excluded.issuer, signer = excluded.signer,
         signer_role = excluded.signer_role, design = excluded.design, primary_color = excluded.primary_color, accent_color = excluded.accent_color`)
-        .run(courseId, field(req.body?.title, 'certificate title', 120), field(req.body?.issuer, 'issuer', 120),
-          field(req.body?.signer, 'signer name', 120), field(req.body?.signerRole, 'signer role', 120), design, color('primaryColor'), color('accentColor'));
+        .run(courseId, field(req.body?.title??current.title, 'certificate title', 120), field(req.body?.issuer??current.issuer, 'issuer', 120),
+          field(req.body?.signer??current.signer, 'signer name', 120), field(req.body?.signerRole??current.signerRole, 'signer role', 120), design, color('primaryColor'), color('accentColor'));
       await saveCertificateDesign(tx,courseId,req.body||{});
       await audit(tx, admin.id, 'Certificate design saved', courseId, design);
     });
