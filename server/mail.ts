@@ -160,7 +160,7 @@ export function mountMail(app: Express, db: WritableDatabase, hosted: boolean) {
       const rows=await db.prepare(`SELECT l.email,l.name,l.course_id FROM course_leads l JOIN mail_contacts mc ON mc.email=l.email COLLATE NOCASE WHERE l.id IN (${ids.map(()=>'?').join(',')}) AND l.consent=1 AND mc.consent=1 AND mc.unsubscribed=0 ORDER BY l.updated_at DESC`).all(...ids);
       for(const row of rows)recipients.push({email:String(row.email),name:String(row.name),accountId:'',courseId:String(row.course_id)});
     } else if (mode==='alumni') {
-      const rows=await db.prepare(`SELECT DISTINCT a.id,a.name,a.email FROM accounts a JOIN legacy_training h ON h.account_id=a.id WHERE a.role='student' AND NOT EXISTS(SELECT 1 FROM account_controls c WHERE c.account_id=a.id AND c.status<>'active') ORDER BY a.name LIMIT 501`).all();
+      const rows=await db.prepare(`SELECT DISTINCT a.id,a.name,a.email FROM accounts a WHERE a.role='student' AND (EXISTS(SELECT 1 FROM legacy_training h WHERE h.account_id=a.id) OR EXISTS(SELECT 1 FROM past_student_contacts p WHERE p.account_id=a.id)) AND NOT EXISTS(SELECT 1 FROM account_controls c WHERE c.account_id=a.id AND c.status<>'active') ORDER BY a.name LIMIT 501`).all();
       if(rows.length>500)throw badRequest('Use a group of up to 500 past students.');
       for(const row of rows)recipients.push({email:String(row.email),name:String(row.name),accountId:String(row.id)});
     } else {

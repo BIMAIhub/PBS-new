@@ -77,6 +77,15 @@ test('canonical certificates, signed PDF email, alumni welcome and admin-control
       const details=await pdfDetails(privatePdf);assert.equal(details.pages,1);assert.ok(Math.abs(details.width-793.70)<.1);assert.ok(Math.abs(details.height-595.28)<.1);assert.match(details.text,/Certificate Snapshot Name/);assert.match(details.text,/First authorised member/);assert.match(details.text,/Second authorised member/);assert.ok(!details.text.includes('Updated Profile Name'));assert.match(details.text,/PBS\/ORIGINAL\/2024\/008/);assert.match(details.text,/84 recorded lessons/);assert.match(details.text,/Verified training in practical BIM/);
       const verify=await req(visitor,`/certificates/verify/${record.publicToken}`);assert.equal(verify.studentName,'Certificate Snapshot Name');assert.ok(!JSON.stringify(verify).includes('alumni-cert@example.invalid'));
     });
+    await t.test('credential visitors receive only public course information and old browser PDF links open the credential page',async()=>{
+      const moduleId=(await req(admin,`/admin/courses/${courseId}/modules`,{title:'Public curriculum module'},'POST',201)).id;
+      await req(admin,`/admin/courses/${courseId}/modules/${moduleId}/lessons`,{title:'Public lesson title',duration:'20 min',url:'https://private.example.invalid/secret-recording.mp4'},'POST',201);
+      const verify=await req(visitor,`/certificates/verify/${record.publicToken}`);assert.equal(verify.course.title,'Revit MEP credential course');assert.deepEqual(verify.course.modules,['Public curriculum module']);
+      const exposed=JSON.stringify(verify);assert.ok(!exposed.includes('secret-recording'));assert.ok(!exposed.includes('alumni-cert@example.invalid'));assert.ok(!exposed.includes('password_hash'));assert.ok(!exposed.includes('9876543221'));
+      const redirect=await fetch(origin+`/api/certificates/verify/${record.publicToken}/pdf`,{redirect:'manual',headers:{Accept:'text/html'}});assert.equal(redirect.status,302);assert.equal(redirect.headers.get('location'),`/verify/certificate/${record.publicToken}`);
+      const pdf=await fetch(origin+`/api/certificates/verify/${record.publicToken}/pdf`,{headers:{Accept:'application/pdf'}});assert.equal(pdf.headers.get('content-type'),'application/pdf');assert.deepEqual(Buffer.from(await pdf.arrayBuffer()),await req(student,`/certificates/${record.id}/pdf`));
+      await db.prepare('UPDATE courses SET published=0 WHERE id=?').run(courseId);assert.equal((await req(visitor,`/certificates/verify/${record.publicToken}`)).course,undefined);await db.prepare('UPDATE courses SET published=1 WHERE id=?').run(courseId);
+    });
     await t.test('certificate email attaches that same PDF and records accepted, failed and uncertain results without duplicates',async()=>{
       const key=crypto.randomUUID();await req(student,`/certificates/${record.id}/mail`,{requestKey:key},'POST',409);
       await db.prepare('INSERT INTO microsoft_mail_connections VALUES (?,?,?,?,?)').run(adminId,'institution-mail@example.invalid','QA sender','opaque-test-cache',new Date().toISOString());

@@ -29,3 +29,5 @@ export interface IntegrationStatus {
   mail: {clientId:string;tenant:string;secretSaved:boolean;configured:boolean;connected?:{email:string;name:string;connectedAt:string}};
   storage: CourseStorage[];
 }
+
+export interface PublicCredentialCourse {id:string;title:string;description:string;category:string;instructor:string;schedule:string;level:string;duration:string;audience:string;outcomes:string[];requirements:string[];modules:string[]}

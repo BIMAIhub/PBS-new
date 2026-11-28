@@ -34,3 +34,7 @@ export interface QuizAttempt {
   answers: Record<string, number>; status: 'draft' | 'submitted'; score: number | null; passed: boolean | null;
   passingScore: number; expiresAt: number; submittedAt: string; feedback: string; reviewAvailable: boolean;
 }
+
+export interface PastStudentContact {accountId:string;name:string;email:string;phone:string;createdAt:string;accountStatus:string}
+export interface PastContactPreview {rows:{name:string;email:string;phone:string;status:'new'|'existing'|'blocked';reason:string}[];total:number;created:number;existing:number;blocked:number}
+export interface PastContactImport {rows:{studentId:string;name:string;email:string;created:boolean;access?:import('./admissions-types').AccessPackage;note:string}[];total:number;created:number;existing:number;repeated:boolean;emailsSent:0;certificatesIssued:0}

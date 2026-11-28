@@ -1,3 +1,4 @@
+import { mountPastStudentContacts,pendingPastStudentContacts } from './past-student-contacts.js';
 import { randomBytes } from 'node:crypto';
 import type { Express } from 'express';
 import { requireAccount } from './auth.js';
@@ -17,8 +18,9 @@ export async function historicalTraining(db:Database, accountId?:string) {
     ${accountId?'WHERE h.account_id=?':''} ORDER BY h.created_at DESC`).all(...(accountId?[accountId]:[]));
 }
 export function mountHistoricalStudents(app:Express,db:WritableDatabase) {
-  app.get('/api/admin/past-students',route(async(req,res)=>{await requireAccount(db,req,'admin');res.json({records:await historicalTraining(db)});}));
-  app.get('/api/student/past-training',route(async(req,res)=>{const account=await requireAccount(db,req,'student');const records=await historicalTraining(db,account.id);res.json({records:records.map(({note: _note,...row})=>row)});}));
+  mountPastStudentContacts(app,db);
+  app.get('/api/admin/past-students',route(async(req,res)=>{await requireAccount(db,req,'admin');res.json({records:await historicalTraining(db),contacts:await pendingPastStudentContacts(db)});}));
+  app.get('/api/student/past-training',route(async(req,res)=>{const account=await requireAccount(db,req,'student');const records=await historicalTraining(db,account.id);res.json({records:records.map(({note: _note,...row})=>row),awaitingDetails:!records.length&&Boolean(await db.prepare('SELECT 1 FROM past_student_contacts WHERE account_id=?').get(account.id))});}));
   app.post('/api/admin/past-students',route(async(req,res)=>{
     const admin=await requireAccount(db,req,'admin'), email=emailAddress(req.body?.email), name=field(req.body?.name,'student name',120),phone=phoneNumber(req.body?.phone);
     const courseId=field(req.body?.courseId,'course',80),qualification=field(req.body?.qualification,'qualification',200,false), mode=field(req.body?.mode,'training mode',20);

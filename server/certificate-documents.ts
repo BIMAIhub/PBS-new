@@ -57,6 +57,8 @@ export function mountCertificateDocuments(app:Express,db:WritableDatabase,hosted
   }));
   app.get('/api/certificates/verify/:token/pdf',limitAttempts(40,hosted?db:undefined),route(async(req,res)=>{
     const row=await db.prepare('SELECT id FROM certificates WHERE public_token=? AND published=1').get(req.params.token);if(!row)throw notFound('This certificate is private or unavailable.');
+    res.vary('Accept');
+    if(/\btext\/html\b/i.test(String(req.headers.accept||''))&&req.query.download!=='1'){res.redirect(302,`/verify/certificate/${encodeURIComponent(req.params.token)}`);return;}
     const record=await certificateRecord(db,String(row.id));res.type('application/pdf').set('Content-Disposition',`${req.query.download==='1'?'attachment':'inline'}; filename="${certificateFilename(record)}"`).send(await certificateFile(db,record,portalOrigin(req)));
   }));
   app.get('/api/certificates/:id/mail',route(async(req,res)=>{

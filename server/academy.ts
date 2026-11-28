@@ -1,3 +1,4 @@
+import { publicCredentialCourse } from './credential-course.js';
 import { saveCertificateDesign } from './certificate-documents.js';
 import { randomBytes } from 'node:crypto';
 import type { Express } from 'express';
@@ -174,6 +175,6 @@ export function mountAcademy(app: Express, db: WritableDatabase, hosted: boolean
       course_id AS courseId, issued_at AS issuedAt, revoked_at AS revokedAt FROM certificates WHERE public_token = ? AND published = 1`).get(req.params.token);
     if (!record) throw notFound('This certificate is private or unavailable.');
     const history=await db.prepare('SELECT completed_at AS completedAt,mode,original_number AS originalNumber FROM legacy_training WHERE certificate_id=?').get(record.id);
-    res.json({ ...record, historical:history||undefined, template: await certificateTemplate(db, String(record.courseId)) });
+    res.json({ ...record, historical:history||undefined, template: await certificateTemplate(db, String(record.courseId)),course:await publicCredentialCourse(db,String(record.courseId)) });
   }));
 }

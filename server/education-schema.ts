@@ -47,6 +47,10 @@ CREATE TABLE IF NOT EXISTS task_resources (
   task_id TEXT NOT NULL REFERENCES learning_tasks(id) ON DELETE CASCADE,
   resource_id TEXT NOT NULL REFERENCES learning_resources(id) ON DELETE CASCADE, PRIMARY KEY(task_id,resource_id)
 );
+CREATE TABLE IF NOT EXISTS past_student_contacts (account_id TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,imported_by TEXT NOT NULL REFERENCES accounts(id),created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS past_contact_imports (request_key TEXT PRIMARY KEY,content_hash TEXT NOT NULL,actor_id TEXT NOT NULL REFERENCES accounts(id),source TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS past_contact_import_rows (request_key TEXT NOT NULL REFERENCES past_contact_imports(request_key) ON DELETE CASCADE,account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,created INTEGER NOT NULL,position INTEGER NOT NULL,PRIMARY KEY(request_key,account_id));
+
 CREATE TABLE IF NOT EXISTS legacy_training (
   id TEXT PRIMARY KEY, account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
   course_id TEXT NOT NULL REFERENCES courses(id), certificate_id TEXT NOT NULL UNIQUE REFERENCES certificates(id) ON DELETE CASCADE,
