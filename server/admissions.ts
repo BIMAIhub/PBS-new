@@ -8,7 +8,8 @@ import { publicBranding } from './branding.js';
 import { conflict, field, limitAttempts, notFound, RequestError, route } from './http.js';
 import { verifyPassword } from './passwords.js';
 import { enrollments, receipts } from './records.js';
-import { portalOrigin, sendMicrosoftMail } from './microsoft.js';
+import {portalOrigin} from './microsoft.js';
+import {sendPortalMail} from './mail-transport.js';
 import type { AccessDelivery, AccessPackage } from '../src/live/admissions-types.js';
 
 export function whatsappNumber(phone: string) {
@@ -62,10 +63,10 @@ export async function accessPackage(db: Database, studentId: string, origin: str
 }
 
 // Delivery records contain status and a digest, never the temporary password or message body.
-export async function deliverAccessEmail(db: WritableDatabase, adminId: string, kit: AccessPackage, requestKey: string, sendMail = sendMicrosoftMail): Promise<AccessDelivery> {
+export async function deliverAccessEmail(db: WritableDatabase, adminId: string, kit: AccessPackage, requestKey: string, sendMail = sendPortalMail): Promise<AccessDelivery> {
   const sendingAccount=await manualMailSender(db,adminId);
   if (!sendingAccount) {
-    return { status: 'unconfigured', error: 'Email was not sent. Connect Microsoft in OneDrive & email to send directly, or use the email draft or WhatsApp button.' };
+    return { status: 'unconfigured', error: 'Email was not sent. Connect a mailing account in OneDrive & email to send directly, or use the email draft or WhatsApp button.' };
   }
   const contentHash = createHash('sha256').update(`${kit.studentId}\n${kit.email}\n${kit.body}`).digest('hex');
   const prepared = await transaction(db, async tx => {
@@ -87,8 +88,8 @@ export async function deliverAccessEmail(db: WritableDatabase, adminId: string, 
   let status: AccessDelivery['status'] = 'accepted', error = '';
   try { await sendMail(db, sendingAccount, kit.email, kit.subject, kit.body); }
   catch (problem) {
-    status = problem instanceof RequestError ? 'failed' : 'unknown';
-    error = problem instanceof RequestError ? problem.message : 'Delivery is uncertain. Check Microsoft Sent Items before sending another message.';
+    status = problem instanceof RequestError && [400,401,403,404,409,422,429].includes(problem.status) ? 'failed' : 'unknown';
+    error = problem instanceof RequestError ? problem.message : 'Delivery is uncertain. Check with the mailbox provider or recipient before sending another message.';
   }
   await transaction(db, async tx => {
     await tx.prepare('UPDATE access_deliveries SET status = ?, error = ? WHERE id = ?').run(status, error, prepared.id);

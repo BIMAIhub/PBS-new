@@ -8,7 +8,9 @@ import { academyWorkspace, audit, certificateRecords, certificateTemplate, payme
 import { badRequest, conflict, field, limitAttempts, notFound, RequestError, route } from './http.js';
 import { enrollmentById, hasCourseAccess, requireCompletedLessons } from './records.js';
 import { verifyPassword } from './passwords.js';
-import { portalOrigin, sendMicrosoftMail } from './microsoft.js';
+import {portalOrigin} from './microsoft.js';
+import {sendPortalMail} from './mail-transport.js';
+import {manualMailSender} from './mail-senders.js';
 import { queueAutomation } from './mail.js';
 
 export function mountAcademy(app: Express, db: WritableDatabase, hosted: boolean) {
@@ -56,6 +58,7 @@ export function mountAcademy(app: Express, db: WritableDatabase, hosted: boolean
     const admin = await requireAccount(db, req, 'admin');
     const requestKey = field(req.body?.requestKey, 'reminder request ID', 80);
     const channel = req.body?.channel === 'email' ? 'email' : 'portal';
+    const mailingAccount=channel==='email'?await manualMailSender(db,admin.id):'';
     const id = makeId();
     const body = field(req.body?.body, 'reminder message', 3000);
     const prepared = await transaction(db, async tx => {
@@ -66,7 +69,7 @@ export function mountAcademy(app: Express, db: WritableDatabase, hosted: boolean
       }
       const enrollment = await enrollmentById(tx, req.params.id);
       if (enrollment.status !== 'approved' || enrollment.paid >= enrollment.total) throw conflict('There is no approved outstanding balance to remind.');
-      if (channel === 'email' && !await tx.prepare('SELECT 1 FROM microsoft_mail_connections WHERE admin_id = ?').get(admin.id)) throw conflict('Connect your Microsoft email account to send reminders, or choose portal message.');
+      if (channel === 'email' && !mailingAccount) throw conflict('Connect the company mailing account to send reminders, or choose portal message.');
       const date = now();
       await tx.prepare('INSERT INTO payment_reminders VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(id, enrollment.id, requestKey, channel, channel === 'portal' ? 'posted' : 'pending', body, date, '');
       await tx.prepare("INSERT INTO messages VALUES (?, ?, 'admin', ?, ?, ?)").run(makeId(), enrollment.studentId, 'Course fee reminder', body, date);
@@ -78,11 +81,11 @@ export function mountAcademy(app: Express, db: WritableDatabase, hosted: boolean
     let error = '';
     if (channel === 'email') {
       try {
-        await sendMicrosoftMail(db, admin.id, prepared.enrollment!.email, 'PBS course fee reminder', `${body}\n\nSign in to PBS: ${portalOrigin(req)}`);
+        await sendPortalMail(db, mailingAccount, prepared.enrollment!.email, 'PBS course fee reminder', `${body}\n\nSign in to PBS: ${portalOrigin(req)}`);
         status = 'accepted';
       } catch (problem) {
-        status = problem instanceof RequestError ? 'failed' : 'unknown';
-        error = problem instanceof RequestError ? problem.message : 'Email delivery could not be confirmed. Check Microsoft Sent Items before retrying.';
+        status = problem instanceof RequestError&&[400,401,403,404,409,422,429].includes(problem.status) ? 'failed' : 'unknown';
+        error = problem instanceof RequestError ? problem.message : 'Email delivery could not be confirmed. Check with the mailbox provider or recipient before retrying.';
       }
       await db.prepare('UPDATE payment_reminders SET status = ?, error = ? WHERE id = ?').run(status, error, id);
     }

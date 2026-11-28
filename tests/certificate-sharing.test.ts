@@ -33,7 +33,7 @@ test('canonical certificates, signed PDF email, alumni welcome and admin-control
   process.env.PBS_DATA_DIR=directory;process.env.PBS_BOOTSTRAP_CATALOG='0';process.env.PBS_BOOTSTRAP_ADMIN_EMAIL='credentials-admin@example.invalid';process.env.PBS_BOOTSTRAP_ADMIN_PASSWORD='Credentials-bootstrap-185!';process.env.PBS_INTEGRATION_KEY='e'.repeat(64);
   const password='Credentials-isolated-password-284!',sent:any[]=[];let failing=false,uncertain=false;
   const {createPortalApp}=await import('../server/app.js'),{RequestError}=await import('../server/http.js'),{issueReceipt}=await import('../server/records.js'),{reconcileReferrals}=await import('../server/referral-data.js');
-  const mail:any=async(...args:any[])=>{if(failing)throw new RequestError(502,'Microsoft could not complete this action (ErrorAccessDenied). Reconnect the mailing account.');if(uncertain)throw new Error('Network interrupted');sent.push(args);};
+  const mail:any=async(...args:any[])=>{if(failing)throw new RequestError(403,'Microsoft could not complete this action (ErrorAccessDenied). Reconnect the mailing account.');if(uncertain)throw new RequestError(502,'Email delivery is uncertain.');sent.push(args);};
   const app=await createPortalApp(false,{microsoftMail:mail}),db=app.locals.portalDatabase as import('../server/database.js').WritableDatabase;
   const server=app.listen(0,'127.0.0.1');await new Promise<void>(r=>server.once('listening',r));const address=server.address(),origin=`http://127.0.0.1:${typeof address==='object'?address!.port:0}`;
   type Client={cookie:string};const admin={cookie:''},student={cookie:''},other={cookie:''},visitor={cookie:''};

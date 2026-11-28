@@ -9,7 +9,7 @@ import {badRequest,conflict,notFound,route} from './http.js';
 export async function releaseExpiredMailLocks(db:Database){
   // Older workers did not create leases. Give them a full grace period before declaring uncertainty.
   await db.prepare("INSERT OR IGNORE INTO mail_delivery_locks(outbox_id,lease_token,expires_at) SELECT id,'legacy-worker',? FROM mail_outbox WHERE status='sending'").run(Date.now()+120000);
-  await db.prepare("UPDATE mail_outbox SET status='unknown',error='The sending worker timed out. Check Microsoft Sent Items before resending.' WHERE status='sending' AND id IN (SELECT outbox_id FROM mail_delivery_locks WHERE expires_at<=?)").run(Date.now());
+  await db.prepare("UPDATE mail_outbox SET status='unknown',error='The sending worker timed out. Check with the mailbox provider or recipient before resending.' WHERE status='sending' AND id IN (SELECT outbox_id FROM mail_delivery_locks WHERE expires_at<=?)").run(Date.now());
   await db.prepare('DELETE FROM mail_delivery_locks WHERE expires_at<=?').run(Date.now());
 }
 export async function campaignDeletionPreview(db:Database,id:string){

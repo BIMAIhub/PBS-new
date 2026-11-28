@@ -10,31 +10,44 @@ For a narrower correction, **Payments & receipts → select the exact enrollment
 
 Private CV files, known OneDrive assignment/original-certificate files and individual folder permission grants are removed through a durable cleanup queue. Storage failures do not restore the student account; retries run with academy jobs or **Data reset → Retry file cleanup**. Shared course folders and lesson files are retained. This is active-record deletion, not a request to erase independent mailboxes, bank transfers or historical provider backups.
 
-Campaigns with no remaining pending messages show **Completed** or **Attention** rather than staying Queued. **Accepted** means Microsoft accepted the request, not that a recipient received it in their inbox. Uncertain sends require checking Microsoft Sent Items and message trace before another send.
+Campaigns with no remaining pending messages show **Completed** or **Attention** rather than staying Queued. **Accepted** means the selected mail provider accepted the request, not that a recipient received it in their inbox. Uncertain sends require checking with the provider or recipient before another send. SMTP sends may not create a Sent Items copy.
 
-## Public DNS findings — 28 November 2026
+## Company mailbox — GoDaddy Professional Email / Titan
 
-A read-only DNS check of `pragmaticbim.com` found:
+The administrator confirmed that `info@pragmaticbim.com` uses GoDaddy Professional Email / Titan. An external Entra identity (`#EXT#`) does not establish an Exchange Online mailbox. The OneDrive storage account remains independent.
 
-| Check | Published result |
-| --- | --- |
-| DNS host | `ns09.domaincontrol.com`, `ns10.domaincontrol.com` — GoDaddy |
-| SPF | `v=spf1 include:secureserver.net -all` |
-| DMARC | `v=DMARC1; p=quarantine; adkim=r; aspf=r; rua=mailto:dmarc_rua@onsecureserver.net;` |
-| Microsoft DKIM CNAMEs | `selector1._domainkey` and `selector2._domainkey` were not found |
-| MX | Priority 0 `smtp.secureserver.net`; priority 10 `mailstore1.secureserver.net` |
+In **Email campaigns → Company mailing provider** or **OneDrive & email → Company mailing provider**, choose **Connect Titan SMTP**. Enter the company mailbox email and its Titan password privately in the admin form, then confirm with the current PBS administrator password. **Verify & use Titan for PBS mail** authenticates without sending a message and selects Titan as the company sender. Existing automation flags, templates, Microsoft connections, OneDrive connections, students, courses and PBS password hashes remain intact. The encrypted SMTP password is never returned by an API or recorded in delivery/audit logs. Blank password keeps the saved password only when the email is unchanged. Stale setup revisions are rejected.
 
-The SPF record is a documented GoDaddy value, including for Microsoft 365 bought through GoDaddy. Its existence does not prove that an individual message passed SPF. The MX records point to GoDaddy mail servers; compare them with the actual mailbox product’s setup before changing routing. Missing Microsoft selectors do not rule out other providers signing with other selectors. No received-message headers or private Microsoft tenant configuration were available for this check, so the cause of any particular spam placement is not confirmed.
+The endpoint is fixed to **smtpout.secureserver.net:465**, SSL/TLS with certificate verification. PBS does not accept arbitrary SMTP hostnames. Passwords are encrypted with the existing integration key; do not replace that key or retrieve credentials through chat. Microsoft 365 stays available for actual Exchange Online mailboxes. Removing the selected Titan connection pauses sending rather than silently switching providers. Saving a connection does not process existing queued messages.
 
-## Complete the mailbox-side setup
+All campaign, automatic course, access-details, payment-reminder and certificate-PDF sends use the selected provider. Titan messages contain themed HTML and a plain-text alternative. Promotional messages retain one-click unsubscribe headers; certificate attachments use the same PDF bytes as downloads. Each email has one recipient. Authentication checks do not establish that a particular From address will be accepted or that an email will reach the inbox. Provider rejections are shown as failed; interrupted delivery is uncertain and never automatically resent. Raw SMTP responses are not exposed. Sending is time-bounded; remaining queued messages can be processed in another batch.
 
-1. In PBS **OneDrive & email**, select the intended company Microsoft 365 mailing account. Storage and mailing connections can be separate. Campaign MIME uses the authenticated mailbox’s actual From address.
-2. In the Microsoft Defender portal, select `pragmaticbim.com` under DKIM, create the keys if necessary and copy both exact CNAME hostnames and target values. They are tenant-specific; do not invent them.
-3. Add those two CNAME records at GoDaddy, allow DNS propagation, then enable DKIM signing for the custom domain in Microsoft. If GoDaddy Advanced Email Security is enabled, also follow that product’s additional DKIM instructions.
-4. Keep exactly one SPF record. Follow the actual mailbox provider’s value: GoDaddy commonly uses `include:secureserver.net`; direct Microsoft 365 commonly uses `include:spf.protection.outlook.com`. Merge any other legitimate senders into the existing record instead of adding a second SPF record. Keep the existing DMARC quarantine policy and reporting addresses while fixing authentication alignment.
-5. In **Email campaigns → Email delivery & spam checks**, run **Check sending-domain authentication**. The check only reads public DNS and never sends an email.
-6. With a deliberately requested test message, use Gmail **Show original** to confirm `spf=pass`, `dkim=pass` and `dmarc=pass`, including alignment with the visible From domain. Review Microsoft message trace for rejections, delays and filtering. DNS publication alone cannot prove that signing is enabled or that a message reached the inbox.
-7. Send expected, relevant mail to opted-in recipients. Start with small batches, remove invalid addresses, honour unsubscribes, avoid misleading subjects and monitor complaints. Offer campaigns now include plain-text and HTML alternatives plus standard one-click unsubscribe headers. A student can mark a legitimate PBS message **Not spam** and add the sender to contacts; this helps their own mailbox and is not an inbox guarantee for everyone.
+## Check the DNS setup supplied by GoDaddy
+
+The supplied domain-specific setup is:
+
+| Type | Name | Value |
+| --- | --- | --- |
+| CNAME | email | email.secureserver.net |
+| CNAME | secureserver1._domainkey | s1.dkim.pragmaticbim_com.5d5.onsecureserver.net. |
+| CNAME | secureserver2._domainkey | s2.dkim.pragmaticbim_com.5d5.onsecureserver.net. |
+| MX | @ | priority 0 smtp.secureserver.net |
+| MX | @ | priority 10 mailstore1.secureserver.net |
+| TXT | @ | T6462247 |
+| TXT | @ | v=spf1 include:secureserver.net -all |
+| SRV | _autodiscover._tcp | priority 100, weight 1, port 443, target autodiscover.secureserver.net |
+
+The user’s earlier screenshots already matched the CNAME, MX and SPF records. They did not show `T6462247`, and SRV showed priority 0 / weight 0. Check current DNS before changing either. Keep the website A/CNAME records. Maintain exactly one SPF record; the separate verification TXT is allowed.
+
+The existing screenshot DMARC policy was `p=quarantine`. GoDaddy’s proposed final policy is `v=DMARC1; p=reject; rua=mailto:dmarc_rua@onsecureserver.net; adkim=r; aspf=r;`. Preserve the existing policy while verifying legitimate outgoing mail, then move to reject after confirming that the legitimate senders pass alignment. No DNS changes are made by this source update.
+
+## Verify a received message
+
+1. Complete GoDaddy’s **Email & Office → Set mail destination** checks and click **Done**. DNS updates commonly appear within an hour but can take up to 48 hours.
+2. In PBS, connect the Titan company mailbox and run **Check mailing connection**. This authenticates only, without sending an email.
+3. Run **Check sending-domain authentication**. Titan uses `secureserver1` / `secureserver2`, while Microsoft 365 uses `selector1` / `selector2`. Published DKIM CNAMEs are reported for review, not as proof that signing is active. Resolver failures are unavailable rather than missing.
+4. With an explicitly requested test message, use Gmail **More → Show original** to check SPF, DKIM and DMARC. At least one passing SPF or DKIM domain must align with the visible From domain for DMARC to pass. DNS publication and provider acceptance cannot confirm inbox placement.
+5. Send expected mail to opted-in recipients, start with small batches, remove invalid addresses and honour unsubscribes. Follow Titan’s sending limits and provider terms. Recipients may mark legitimate PBS messages **Not spam**; this does not guarantee inbox placement for everyone.
 
 For local/public DNS diagnostics, `npm run mail:check-domain -- pragmaticbim.com` prints only public records. Resolver failures are reported as unavailable, not incorrectly as missing records.
 
@@ -42,6 +55,7 @@ Official references:
 
 - [Microsoft Graph sendMail response and MIME format](https://learn.microsoft.com/en-us/graph/api/user-sendmail?view=graph-rest-1.0)
 - [Microsoft custom-domain DKIM](https://learn.microsoft.com/en-us/defender-office-365/email-authentication-dkim-configure)
-- [GoDaddy Microsoft 365 DKIM setup](https://www.godaddy.com/help/enable-and-add-dkim-to-my-domain-for-microsoft-365-41748)
+- [GoDaddy / Titan SMTP settings](https://www.godaddy.com/help/set-up-third-party-plugins-or-websites-using-smtp-settings-42788)
+- [GoDaddy / Titan DNS authentication](https://www.godaddy.com/help/add-spf-dkim-and-dmarc-to-my-domain-for-professional-email-powered-by-titan-42437)
 - [GoDaddy SPF values](https://www.godaddy.com/help/add-an-spf-record-to-my-domain-for-my-email-40499)
 - [Gmail sender guidelines](https://support.google.com/mail/answer/81126?hl=en)

@@ -1,4 +1,6 @@
 export const educationSchema = `
+CREATE TABLE IF NOT EXISTS smtp_mail_connections (admin_id TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,email TEXT NOT NULL,password_sealed TEXT NOT NULL,connected_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS mail_sender_preferences (admin_id TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,provider TEXT NOT NULL CHECK(provider IN ('microsoft','titan')),revision TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS student_storage_cleanup (id TEXT PRIMARY KEY,admin_id TEXT NOT NULL REFERENCES accounts(id),operation TEXT NOT NULL,drive_id TEXT NOT NULL DEFAULT '',item_id TEXT NOT NULL DEFAULT '',permission_id TEXT NOT NULL DEFAULT '',upload_url TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,attempts INTEGER NOT NULL DEFAULT 0,error TEXT NOT NULL DEFAULT '');
 CREATE TABLE IF NOT EXISTS mail_delivery_locks (outbox_id TEXT PRIMARY KEY REFERENCES mail_outbox(id) ON DELETE CASCADE,lease_token TEXT NOT NULL,expires_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS certificate_design_assets (

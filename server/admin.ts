@@ -170,7 +170,7 @@ export function mountAdmin(app: Express, db: WritableDatabase, hosted: boolean) 
     const courseAccess = await grantCourseAccess(db, result.enrollment.id, admin.id, true).catch(() => ({ status: 'failed' }));
     const access = await accessPackage(db, id, portalOrigin(req), password);
     await queueAutomation(db, 'welcome', `welcome:${result.enrollment.id}:${result.enrollment.approvedAt}`, id, portalOrigin(req), { course: result.enrollment.courseTitle });
-    const delivery = req.body?.sendEmail === true ? await deliverAccessEmail(db, admin.id, access, `enroll:${result.enrollment.id}:${result.enrollment.approvedAt}`).catch(() => ({ status: 'unknown', error: 'Enrollment saved. Check Sent Items before sharing these details again.' })) : undefined;
+    const delivery = req.body?.sendEmail === true ? await deliverAccessEmail(db, admin.id, access, `enroll:${result.enrollment.id}:${result.enrollment.approvedAt}`).catch(() => ({ status: 'unknown', error: 'Enrollment saved. Check with the mailbox provider or recipient before sharing these details again.' })) : undefined;
     res.status(201).json({ ...result, temporaryPassword: password, access, delivery, courseAccess });
   }));
 
@@ -186,7 +186,7 @@ export function mountAdmin(app: Express, db: WritableDatabase, hosted: boolean) 
       await tx.prepare('DELETE FROM sessions WHERE account_id = ?').run(student.id);
     });
     const access = await accessPackage(db, student.id, portalOrigin(req), password);
-    const delivery = req.body?.sendEmail === true ? await deliverAccessEmail(db, admin.id, access, `reset:${makeId()}`).catch(() => ({ status: 'unknown', error: 'Password reset saved. Check Sent Items before sharing these details again.' })) : undefined;
+    const delivery = req.body?.sendEmail === true ? await deliverAccessEmail(db, admin.id, access, `reset:${makeId()}`).catch(() => ({ status: 'unknown', error: 'Password reset saved. Check with the mailbox provider or recipient before sharing these details again.' })) : undefined;
     res.json({ temporaryPassword: password, access, delivery });
   }));
 
@@ -243,7 +243,7 @@ export function mountAdmin(app: Express, db: WritableDatabase, hosted: boolean) 
     const courseAccess = decision === 'approved' ? await grantCourseAccess(db, result.enrollment.id, admin.id, true).catch(() => ({ status: 'failed' })) : undefined;
     const access = decision === 'approved' && result.changed ? await accessPackage(db, result.enrollment.studentId, portalOrigin(req), result.temporaryPassword) : undefined;
     if (access) await queueAutomation(db, 'welcome', `welcome:${result.enrollment.id}:${result.enrollment.approvedAt}`, result.enrollment.studentId, portalOrigin(req), { course: result.enrollment.courseTitle });
-    const delivery = access && req.body?.sendEmail === true ? await deliverAccessEmail(db, admin.id, access, `approve:${result.enrollment.id}:${result.enrollment.approvedAt}`).catch(() => ({ status: 'unknown', error: 'Approval saved. Check Sent Items before sharing these details again.' })) : undefined;
+    const delivery = access && req.body?.sendEmail === true ? await deliverAccessEmail(db, admin.id, access, `approve:${result.enrollment.id}:${result.enrollment.approvedAt}`).catch(() => ({ status: 'unknown', error: 'Approval saved. Check with the mailbox provider or recipient before sharing these details again.' })) : undefined;
     res.json({ ...result, access, delivery, courseAccess });
   }));
 

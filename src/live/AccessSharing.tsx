@@ -36,8 +36,8 @@ export function StudentAccessDialog({ access, delivery: initial, receipt, onRece
         <a className="pbs-button pbs-button-outline" href={emailDraft}><Mail size={17} />Open email draft</a>
         {whatsapp ? <a className="pbs-button pbs-button-outline" href={whatsapp} target="_blank" rel="noopener noreferrer"><MessageCircle size={17} />Open WhatsApp</a> : <span className="pbs-muted">Add the student's WhatsApp number in their admin record.</span>}
       </div><p className="pbs-muted pbs-small">WhatsApp opens a prepared message for you to send. Saved 10-digit numbers use India’s +91 country code. Direct email uses the connected PBS mailing account.</p>
-      {delivery?.status === 'accepted' && <p className="pbs-form-status" role="status">Microsoft accepted the email for {access.email}. Delivery status is available in Sent Items.</p>}
-      {delivery && delivery.status !== 'accepted' && <p className="pbs-form-status" role="status">{delivery.error || 'The email request is pending. Check Sent Items before trying another channel.'}</p>}
+      {delivery?.status === 'accepted' && <p className="pbs-form-status" role="status">The mail provider accepted the email for {access.email}. Provider acceptance does not confirm inbox delivery.</p>}
+      {delivery && delivery.status !== 'accepted' && <p className="pbs-form-status" role="status">{delivery.error || 'The email request is pending. Check with the mailbox provider or recipient before trying another channel.'}</p>}
       <FormError error={error} />{copied && <p className="pbs-form-status" role="status">{copied} copied.</p>}
       <details className="pbs-access-preview"><summary>Preview the full message</summary><Field label="Access message"><textarea rows={9} value={access.body} readOnly /></Field></details>
       {history.data && history.data.deliveries.length > 0 && <details className="pbs-access-preview"><summary>Email history</summary>{history.data.deliveries.slice(0, 5).map(item => <p className="pbs-muted" key={item.id}>{dateTimeLabel(item.createdAt)} · {item.email} · {item.status}{item.error ? ` · ${item.error}` : ''}</p>)}</details>}

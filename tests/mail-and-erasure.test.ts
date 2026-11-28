@@ -23,7 +23,7 @@ test('marketing messages contain correctly encoded alternatives and standard one
 
 test('mail DNS checks distinguish published records, missing records and resolver failures without claiming DKIM is active',async()=>{
   const missing=()=>Promise.reject(Object.assign(new Error('No record'),{code:'ENODATA'}));
-  const dns:MailDns={txt:async name=>name.startsWith('_dmarc.')?[['v=DMARC1; p=none']]:[['v=spf1 include:','spf.protection.outlook.com -all']],cname:async name=>[name+'.tenant.onmicrosoft.com'],mx:async()=>[{exchange:'example.mail.protection.outlook.com',priority:0}],ns:async()=>['ns09.domaincontrol.com','ns10.domaincontrol.com']};
+  const dns:MailDns={txt:async name=>name.startsWith('_dmarc.')?[['v=DMARC1; p=none']]:[['v=spf1 include:','spf.protection.outlook.com -all']],cname:async name=>name.startsWith('selector')?[name+'.tenant.onmicrosoft.com']:missing(),mx:async()=>[{exchange:'example.mail.protection.outlook.com',priority:0}],ns:async()=>['ns09.domaincontrol.com','ns10.domaincontrol.com']};
   const report=await mailDomainReport('info@EXAMPLE.invalid',dns);assert.equal(report.domain,'example.invalid');assert.equal(report.dnsHost,'GoDaddy');assert.equal(report.spf.status,'ready');assert.equal(report.dmarc.status,'ready');assert.equal(report.dkim.status,'review');assert.match(report.dkim.note,/enable DKIM/i);
   const absent=await mailDomainReport('example.invalid',{txt:missing,cname:missing,mx:missing,ns:missing});assert.equal(absent.spf.status,'missing');assert.equal(absent.dkim.status,'missing');assert.equal(absent.dmarc.status,'missing');
   const unavailable=()=>Promise.reject(Object.assign(new Error('Resolver refused'),{code:'ECONNREFUSED'}));

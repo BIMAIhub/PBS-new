@@ -8,7 +8,8 @@ import { audit,certificateRecords } from './academy-data.js';
 import { imageExtension,publicBranding } from './branding.js';
 import { badRequest,conflict,field,limitAttempts,notFound,RequestError,route } from './http.js';
 import { manualMailSender,mailTemplates,templateVariables } from './mail.js';
-import { portalOrigin,sendMicrosoftMail } from './microsoft.js';
+import {portalOrigin} from './microsoft.js';
+import {sendPortalMail,type MailTransport} from './mail-transport.js';
 import { fillMailTemplate } from '../src/live/mail-templates.js';
 import { buildCertificatePdf,certificateLayoutVersion } from '../src/live/certificate-pdf.js';
 import type { CertificateRecord } from '../src/live/academy-types.js';
@@ -51,7 +52,7 @@ export async function saveCertificateDesign(db:Database,courseId:string,body:Rec
       .run(courseId,body.secondSigner===undefined?String(existing?.second_signer||''):field(body.secondSigner,'second signatory name',120,false),body.secondSignerRole===undefined?String(existing?.second_role||''):field(body.secondSignerRole,'second signatory role',120,false),body.secondSignatureImage===undefined?String(existing?.second_signature_image||''):png(body.secondSignatureImage,'second signature'),makeId());
   }
 }
-export function mountCertificateDocuments(app:Express,db:WritableDatabase,hosted:boolean,sendMail:typeof sendMicrosoftMail=sendMicrosoftMail) {
+export function mountCertificateDocuments(app:Express,db:WritableDatabase,hosted:boolean,sendMail:MailTransport=sendPortalMail) {
   app.get('/api/certificates/:id/pdf',limitAttempts(40,hosted?db:undefined),route(async(req,res)=>{
     const account=await requireAccount(db,req),record=await certificateRecord(db,req.params.id);if(account.role!=='admin'&&record.studentId!==account.id)throw notFound('This certificate is private.');
     res.type('application/pdf').set('Content-Disposition',`${req.query.download==='1'?'attachment':'inline'}; filename="${certificateFilename(record)}"`).send(await certificateFile(db,record,portalOrigin(req)));
@@ -80,7 +81,7 @@ export function mountCertificateDocuments(app:Express,db:WritableDatabase,hosted
       const bytes=await certificateFile(db,record,portalOrigin(req));if(bytes.length>2800000)throw badRequest('This certificate is too large for direct email. Download and share the PDF file instead.');
       const template=(await mailTemplates(db)).find(t=>t.id==='certificate')!,vars=await templateVariables(db,portalOrigin(req),account.id,{name:record.studentName,course:record.courseTitle});
       transmitting=true;await sendMail(db,sender,account.email,fillMailTemplate(template.subject,vars),fillMailTemplate(template.body,vars),{attachments:[{name:certificateFilename(record),contentType:'application/pdf',contentBytes:bytes.toString('base64')}]});
-    }catch(problem){status=problem instanceof RequestError||!transmitting?'failed':'unknown';error=problem instanceof RequestError?problem.message:transmitting?'Delivery could not be confirmed. Ask PBS to check Microsoft Sent Items before resending.':'The certificate PDF could not be prepared. Refresh and retry, or ask PBS to check document assets.';}
+    }catch(problem){status=!transmitting||problem instanceof RequestError&&[400,401,403,404,409,422,429].includes(problem.status)?'failed':'unknown';error=problem instanceof RequestError?problem.message:transmitting?'Delivery could not be confirmed. Ask PBS to check with the mailbox provider or recipient before resending.':'The certificate PDF could not be prepared. Refresh and retry, or ask PBS to check document assets.';}
     await transaction(db,async tx=>{await tx.prepare('UPDATE certificate_mail_deliveries SET status=?,error=?,sent_at=? WHERE id=?').run(status,error,status==='accepted'?now():'',prepared.id);await audit(tx,actor.id,'Certificate PDF email',record.id,status);});
     res.json({id:prepared.id,status,error});
   }));

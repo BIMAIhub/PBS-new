@@ -24,6 +24,8 @@ import { mountControls } from './control-routes.js';
 import { mountPlayback } from './playback.js';
 import { mountDocumentStamp } from './document-stamp.js';
 import { mountMail, mountPublicMail } from './mail.js';
+import {mountMailConnections} from './mail-connections.js';
+import type {SmtpFactory} from './mail-transport.js';
 import { mountReferrals } from './referrals.js';
 import { mountEngagementJobs } from './engagement-jobs.js';
 import { mountBatches } from './batches.js';
@@ -41,7 +43,7 @@ import { mountPush, runPushCycle, type PushSender } from './push.js';
 import type { graph,sendMicrosoftMail } from './microsoft.js';
 import { apiError, field, limitAttempts, RequestError, route } from './http.js';
 
-export async function createPortalApp(hosted = false, dependencies: {microsoftGraph?:typeof graph; defer?:(task:Promise<unknown>)=>void;microsoftMail?:typeof sendMicrosoftMail; pushSender?:PushSender} = {}) {
+export async function createPortalApp(hosted = false, dependencies: {microsoftGraph?:typeof graph; defer?:(task:Promise<unknown>)=>void;microsoftMail?:typeof sendMicrosoftMail; pushSender?:PushSender;smtpFactory?:SmtpFactory} = {}) {
   const app = express();
   const publicOrigin = process.env.PBS_PUBLIC_ORIGIN ? new URL(process.env.PBS_PUBLIC_ORIGIN).origin : '';
   const db = await openDatabase(hosted);
@@ -122,7 +124,8 @@ export async function createPortalApp(hosted = false, dependencies: {microsoftGr
   mountNotifications(app, db);
   mountPush(app, db, hosted, dependencies.pushSender);
   mountCurriculum(app, db, hosted);
-  mountMail(app, db, hosted);
+  mountMailConnections(app,db,hosted,dependencies.smtpFactory);
+  mountMail(app, db, hosted,dependencies.smtpFactory);
   mountReferrals(app, db);
   mountEngagementJobs(app, db);
   mountBatches(app,db);

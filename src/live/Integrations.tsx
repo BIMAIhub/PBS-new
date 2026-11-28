@@ -4,6 +4,7 @@ import type { Course, Enrollment } from './types';
 import type { IntegrationStatus } from './academy-types';
 import { api, messageFrom, send } from './api';
 import { AssignmentStorageSettings } from './AssignmentUploads';
+import {MailConnectionSettings} from './MailConnectionSettings';
 import { GrantAccessButton } from './AcademyAdmin';
 import { Button, DialogForm, Empty, ExternalLink, Field, FormError, Input, Panel, PasswordInput, Status, useApiResource, value } from './ui';
 
@@ -17,8 +18,9 @@ export function Integrations({ courses, enrollments, onSaved }: { courses: Cours
   const configured=data&&(purpose==='mail'?data.mail:data);
   return <div className="pbs-live-stack"><FormError error={resource.error||problem}/>
     {notice&&<p className="pbs-form-status" role="status">{notice==='connected'?'Microsoft account connected.':notice==='reset'?'Saved application and account connection cleared. Add a new application when ready.':'Microsoft connection did not finish. Check the redirect URL, app credentials and consent.'}<button type="button" className="pbs-text-button" onClick={()=>setNotice('')}>Dismiss</button></p>}
-    <section className="pbs-integration-banner"><div className="pbs-integration-icon"><Cloud size={32}/></div><div><h2>Your storage. Your sending account.</h2><p>Keep your existing OneDrive capacity and send academy mail from a separate Microsoft 365 mailbox.</p></div></section>
-    {data&&<><div className="pbs-academy-grid">{(['storage','mail'] as const).map(role=>{const item=role==='mail'?data.mail:data;return <Panel key={role} title={role==='mail'?'Academy email account':'OneDrive storage account'} action={<Status value={item.connected?'Connected':'Not connected'}/>}>
+    <section className="pbs-integration-banner"><div className="pbs-integration-icon"><Cloud size={32}/></div><div><h2>Your storage. Your sending account.</h2><p>Keep your existing OneDrive capacity and send academy mail through your company’s Titan or Microsoft 365 mailbox.</p></div></section>
+    <MailConnectionSettings/>
+    {data&&<><div className="pbs-academy-grid">{(['storage','mail'] as const).map(role=>{const item=role==='mail'?data.mail:data;return <Panel key={role} title={role==='mail'?'Microsoft 365 email connection':'OneDrive storage account'} action={<Status value={item.connected?'Connected':'Not connected'}/>}>
       {item.connected?<div className="pbs-connection-identity"><span className="pbs-connection-mark"><CheckCircle2/></span><div><strong>{item.connected.name}</strong><p className="pbs-muted">{item.connected.email}</p></div></div>:<p className="pbs-muted">{role==='mail'?'Connect info@pragmaticbim.com or another Microsoft 365 / Outlook mailbox. No OneDrive subscription is needed for this connection.':'Connect the Microsoft account that owns your 5 TB OneDrive. It is used for course videos, sharing and assignment uploads.'}</p>}
       <p className="pbs-muted pbs-small">{role==='mail'?'Permissions: User.Read and Mail.Send.':'Permissions: User.Read and Files.ReadWrite. Sharing invitations are disabled.'}</p>
       <div className="pbs-actions"><Button disabled={!item.configured||!data.encryptionReady||busy} onClick={async()=>{setBusy(true);setProblem('');try{const result=await send<{url:string}>('/admin/integrations/microsoft/connect',{purpose:role});window.location.assign(result.url);}catch(e){setProblem(messageFrom(e));setBusy(false);}}}><Link2 size={16}/>{item.connected?'Replace account':'Connect account'}</Button><Button quiet onClick={()=>{setPurpose(role);setDialog('config');}}><Settings size={16}/>App settings</Button>
