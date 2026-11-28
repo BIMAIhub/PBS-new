@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createCanvas, loadImage, type Canvas } from '@napi-rs/canvas';
 import { normalizePngAsset, PNG_ASSET_MAX_BYTES, preparePngAsset } from '../src/live/png-assets.js';
-import { needsLightPdfBackdrop,lightSignatureInk } from '../src/live/pdf-image.js';
+import { needsLightPdfBackdrop,lightSignatureInk,tintedSignatureInk } from '../src/live/pdf-image.js';
 
 const canvasFactory = () => createCanvas(1, 1) as unknown as HTMLCanvasElement;
 const source = (canvas: Canvas) => canvas as unknown as CanvasImageSource;
@@ -76,4 +76,22 @@ test('both signature PNGs render as light ink with preserved strokes and no whit
   context.clearRect(0,0,120,40);context.globalAlpha=.5;context.fillStyle='#176BB7';context.fillRect(10,10,100,20);
   const transparent=await loadImage(bytes(await lightSignatureInk(canvas.toDataURL('image/png'))));checked.clearRect(0,0,120,40);checked.drawImage(transparent,0,0);
   assert.equal(checked.getImageData(0,0,1,1).data[3],0);assert.ok(Math.abs(checked.getImageData(20,20,1,1).data[3]-128)<=1);
+});
+
+
+test('approved light-blue certificates retain a coloured paper field and legible navy signature strokes',async()=>{
+  const art=await loadImage(readFileSync(new URL('../src/assets/certificate-art/pbs-certificate-blueprint.jpg',import.meta.url)));
+  assert.equal(art.width/art.height,4/3);
+  const paper=createCanvas(art.width,art.height),paperContext=paper.getContext('2d');paperContext.drawImage(art,0,0);
+  for(const [x,y] of [[1500,1150],[350,910]]) {
+    const [r,g,b]=paperContext.getImageData(x,y,1,1).data;
+    assert.ok(r>155&&g>175&&b>195,'the approved paper stays pale');
+    assert.ok(b-r>12,'the background retains a blue tint instead of white');
+  }
+  const source=createCanvas(120,40),context=source.getContext('2d');context.fillStyle='#fff';context.fillRect(0,0,120,40);context.fillStyle='#101010';context.fillRect(10,10,100,20);
+  const original=source.toDataURL('image/png'),rendered=await loadImage(bytes(await tintedSignatureInk(original,'#15364D'))),result=createCanvas(120,40),checked=result.getContext('2d');checked.drawImage(rendered,0,0);
+  assert.equal(checked.getImageData(0,0,1,1).data[3],0,'signature paper does not create a box');
+  const colour=Array.from(checked.getImageData(20,20,1,1).data);
+  assert.ok(colour.every((channel,index)=>Math.abs(channel-[21,54,77,239][index])<=1),'the signature uses dark ink for the approved light background');
+  assert.equal(source.toDataURL('image/png'),original,'saved signature pixels are unchanged');
 });

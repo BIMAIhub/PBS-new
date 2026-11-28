@@ -35,9 +35,11 @@ export function drawPdfBrand(pdf:jsPDF,x:number,y:number,width:number,height:num
   pdf.setDrawColor('#D4A94D');pdf.setLineWidth(side*3/80);draw([[20,16],[46,16],[61,27]]);pdf.stroke();draw([[61,39],[61,59],[45,59]]);pdf.stroke();pdf.setLineWidth(side*2/80);pdf.line(...at(17,65),...at(64,65));pdf.restoreGraphicsState();
 }
 
-// Render genuine uploaded signature strokes in the reference's light ink.
-// Stored PNGs stay untouched. A white scanner background is removed only when fully opaque.
-export async function lightSignatureInk(data:string) {
+// Render genuine signature strokes in the certificate's ink colour. Stored PNGs stay untouched.
+// A white scanner background is removed only when fully opaque.
+export async function tintedSignatureInk(data:string,ink:string) {
+  if(!/^#[0-9a-f]{6}$/i.test(ink))throw new Error('Choose a valid signature ink colour.');
+  const colour=[1,3,5].map(index=>parseInt(ink.slice(index,index+2),16));
   const match=/^data:image\/png;base64,(.+)$/.exec(data);
   if(!match)throw new Error('Choose a PNG signature.');
   const {decode,encode}=await import('fast-png');
@@ -56,9 +58,12 @@ export async function lightSignatureInk(data:string) {
   const output=new Uint8Array(count*4);
   for(let i=0;i<count;i++) {
     const [r,g,b,a]=pixel(i),alpha=whitePaper?a*(1-Math.min(r,g,b)):a;
-    output.set([244,247,250,Math.round(255*alpha)],i*4);
+    output.set([...colour,Math.round(255*alpha)],i*4);
   }
   const bytes=encode({width:png.width,height:png.height,channels:4,depth:8,data:output});
   let encoded='';for(let i=0;i<bytes.length;i+=8192)encoded+=String.fromCharCode(...bytes.subarray(i,i+8192));
   return 'data:image/png;base64,'+btoa(encoded);
 }
+
+// Retain the light-ink helper for existing document callers.
+export const lightSignatureInk=(data:string)=>tintedSignatureInk(data,'#F4F7FA');

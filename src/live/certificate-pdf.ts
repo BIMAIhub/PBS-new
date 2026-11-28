@@ -1,11 +1,11 @@
 import { installPdfFonts } from './pdf-fonts.js';
-import { fitPdfImage,lightSignatureInk } from './pdf-image.js';
+import { fitPdfImage,tintedSignatureInk } from './pdf-image.js';
 import type { jsPDF } from 'jspdf';
 import type { CertificateRecord } from './academy-types.js';
 import type { Branding } from './branding-types.js';
 import type { DocumentStamp } from './document-types.js';
 
-export const certificateLayoutVersion = 'pbs-reference-blueprint-4x3-two-signatures-v1';
+export const certificateLayoutVersion = 'pbs-light-blueprint-4x3-two-signatures-v2';
 export const defaultCertificateDuration = '6 months of training';
 // The supplied 2048 × 1536 artwork is 4:3. Its PDF paper is deliberately not A4.
 export const certificatePage = {width:280,height:210,aspectRatio:4/3};
@@ -33,7 +33,7 @@ export async function buildCertificatePdf(record:CertificateRecord,brand:Brandin
   const pdf=new jsPDF({orientation:'landscape',format:[certificatePage.width,certificatePage.height],unit:'mm',compress:true,putOnlyUsedFonts:true});
   await installPdfFonts(pdf,assets.fonts);
   pdf.addImage(assets.background||await backgroundArtwork(),'JPEG',0,0,certificatePage.width,certificatePage.height);
-  const t=record.template,ink='#F4F7FA',muted='#BACBD9';
+  const t=record.template,ink='#15364D',muted='#536D81';
   const clean=(value:string)=>value.replace(/₹/g,'INR ');
   function block(value:string,x:number,y:number,width:number,height:number,pixels:number,bold=false,color=ink) {
     if(!value)return;
@@ -80,7 +80,7 @@ export async function buildCertificatePdf(record:CertificateRecord,brand:Brandin
     {x:1305,name:t.secondSigner||'Authorized signatory',role:t.secondSignerRole||institution,image:t.secondSignatureImage},
   ];
   for(const signer of signatories) {
-    if(signer.image)fitPdfImage(pdf,await lightSignatureInk(signer.image),unit(signer.x),unit(1116),unit(333),unit(86));
+    if(signer.image)fitPdfImage(pdf,await tintedSignatureInk(signer.image,ink),unit(signer.x),unit(1116),unit(333),unit(86));
     const nameHeight=block(signer.name,signer.x,1235,440,62,32,true)||0;
     block(signer.role,signer.x,Math.max(1275,1241+nameHeight),440,51,26,false,muted);
   }
@@ -88,10 +88,10 @@ export async function buildCertificatePdf(record:CertificateRecord,brand:Brandin
     fitPdfImage(pdf,assets.qr,unit(1858),unit(1348),unit(102),unit(102));
     pdf.link(unit(1858),unit(1348),unit(102),unit(102),{url:assets.verificationUrl});
     block('Scan to verify',1685,1423,165,31,27,false,muted);
-  } else if(record.revokedAt)block('Credential revoked',1670,1395,270,58,29,true,'#F2B6AA');
+  } else if(record.revokedAt)block('Credential revoked',1670,1395,270,58,29,true,'#A13730');
   block(record.id==='DESIGN-PREVIEW'?'Design preview only — not an issued credential':`Issued ${date(record.issuedAt)}  |  ${brand.supportEmail}`,790,1423,860,35,28,false,muted);
   if(record.revokedAt) {
-    pdf.setTextColor('#F2B6AA');pdf.setFont('pbs-sans','bold');pdf.setFontSize(40);
+    pdf.setTextColor('#A13730');pdf.setFont('pbs-sans','bold');pdf.setFontSize(40);
     pdf.text('REVOKED',unit(1360),unit(1090),{align:'center'});
   }
   return pdf;
