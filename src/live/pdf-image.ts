@@ -1,5 +1,24 @@
 import type { jsPDF } from 'jspdf';
 
+// Preserve uploaded pixels; choose only whether their displayed ink needs a light backing.
+export async function needsLightPdfBackdrop(data:string) {
+  try {
+    const match=/^data:image\/png;base64,(.+)$/.exec(data);if(!match)return true;
+    const {decode}=await import('fast-png'),png=decode(Uint8Array.from(atob(match[1]),value=>value.charCodeAt(0)));
+    const count=png.width*png.height,step=Math.max(1,Math.floor(count/4096)),maximum=png.depth===16?65535:255;
+    let total=0,weight=0;
+    for(let pixel=0;pixel<count;pixel+=step){
+      const index=pixel*png.channels,palette=png.palette?.[Number(png.data[index])];
+      let r:number,g:number,b:number,alpha=1;
+      if(palette){[r,g,b]=palette;if(palette.length>3)alpha=palette[3]/255;r/=255;g/=255;b/=255;}
+      else if(png.channels<=2){r=g=b=Number(png.data[index])/maximum;if(png.channels===2)alpha=Number(png.data[index+1])/maximum;}
+      else{r=Number(png.data[index])/maximum;g=Number(png.data[index+1])/maximum;b=Number(png.data[index+2])/maximum;if(png.channels===4)alpha=Number(png.data[index+3])/maximum;}
+      if(alpha<.08)continue;total+=(.2126*r+.7152*g+.0722*b)*alpha;weight+=alpha;
+    }
+    return !weight||total/weight<.6;
+  }catch{return true;}
+}
+
 export function fitPdfImage(pdf:jsPDF,data:string,x:number,y:number,width:number,height:number) {
   const image=pdf.getImageProperties(data),scale=Math.min(width/image.width,height/image.height),w=image.width*scale,h=image.height*scale;
   pdf.addImage(data,image.fileType,x+(width-w)/2,y+(height-h)/2,w,h,undefined,'FAST');

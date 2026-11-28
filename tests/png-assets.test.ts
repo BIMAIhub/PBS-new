@@ -3,10 +3,20 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createCanvas, loadImage, type Canvas } from '@napi-rs/canvas';
 import { normalizePngAsset, PNG_ASSET_MAX_BYTES, preparePngAsset } from '../src/live/png-assets.js';
+import { needsLightPdfBackdrop } from '../src/live/pdf-image.js';
 
 const canvasFactory = () => createCanvas(1, 1) as unknown as HTMLCanvasElement;
 const source = (canvas: Canvas) => canvas as unknown as CanvasImageSource;
 const bytes = (data: string) => Buffer.from(data.split(',')[1], 'base64');
+
+test('navy certificate artwork uses a backing for dark ink while preserving light ink on transparent PNGs',async()=>{
+  const png=(color:string)=>{const canvas=createCanvas(120,40),context=canvas.getContext('2d');context.fillStyle=color;context.fillRect(15,15,90,10);return canvas.toDataURL('image/png');};
+  assert.equal(await needsLightPdfBackdrop(png('#101010')),true);
+  assert.equal(await needsLightPdfBackdrop(png('#176BB7')),true);
+  assert.equal(await needsLightPdfBackdrop(png('#F4F7FA')),false);
+  assert.equal(await needsLightPdfBackdrop(png('#D4A94D')),false);
+  assert.equal(await needsLightPdfBackdrop('data:image/png;base64,invalid'),true);
+});
 
 test('detailed transparent PNGs are reduced below the existing server limit without flattening alpha', async () => {
   const canvas = createCanvas(720, 360), context = canvas.getContext('2d'), pixels = context.createImageData(720, 360);
