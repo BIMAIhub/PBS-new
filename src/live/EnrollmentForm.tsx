@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ArrowRight, BookOpen, CheckCircle2, Copy, CreditCard } from 'lucide-react';
 import { PortalDialog } from '../components/student-dashboard/PortalUI';
 import { send, messageFrom } from './api';
+import { BatchEnrollmentSelect } from './Batches';
 import { CatalogBrowser } from './Catalog';
 import { CourseInformation } from './CourseInformation';
 import type { PriceQuote } from './experience-types';
@@ -76,7 +77,7 @@ export function EnrollmentForm({ course, catalog, account, onClose, onSuccess, i
   return <DialogForm title="Request enrollment" detail={course.title} submit="Submit application" onClose={onClose}
     onSubmit={async form => {
       const response = await send<AdmissionResult>('/enrollments', {
-        courseId: course.id,
+        courseId: course.id,batchId:value(form,'batchId'),
         name: value(form, 'name'), email: value(form, 'email'), phone: value(form, 'phone'),
         amount: paise(form, 'amount'), reference: value(form, 'reference'), code: appliedCode, quotedTotal: quote.total,
       });
@@ -92,7 +93,7 @@ export function EnrollmentForm({ course, catalog, account, onClose, onSuccess, i
       </div>
       <Input label="WhatsApp number" name="phone" type="tel" autoComplete="tel" required note="Include your country code, for example +91. PBS uses this number to share approved access details." />
     </>}
-    <div className="pbs-offer-code-field" ref={formRef}><Input label="Offer or referral code" value={code} onChange={event => setCode(event.target.value)} maxLength={40} /><Button quiet disabled={checking} onClick={() => void checkOffer()}>{checking ? 'Checking…' : 'Apply code'}</Button></div>{offerMessage && <p className="pbs-muted" role="status">{offerMessage}</p>}
+    <BatchEnrollmentSelect courseId={course.id}/><div className="pbs-offer-code-field" ref={formRef}><Input label="Offer or referral code" value={code} onChange={event => setCode(event.target.value)} maxLength={40} /><Button quiet disabled={checking} onClick={() => void checkOffer()}>{checking ? 'Checking…' : 'Apply code'}</Button></div>{offerMessage && <p className="pbs-muted" role="status">{offerMessage}</p>}
     <p className="pbs-muted pbs-small">The best eligible offer applies. Offers do not stack. A code is applied only after you select Apply code.</p>
     <PaymentFields key={quote.total} catalog={catalog} balance={quote.total} optional />
     {!account && <p className="pbs-muted pbs-small">Your workspace stays locked until admin approval. PBS will issue your sign-in details after reviewing this application.</p>}

@@ -5,6 +5,7 @@ import { type Database, type WritableDatabase, makeId, now, transaction } from '
 import { badRequest, conflict, field, integer, limitAttempts, notFound, route } from './http.js';
 import { hasCourseAccess } from './records.js';
 import { videoSourceKey } from './video.js';
+import { requireLessonRelease } from './learning-access.js';
 
 const columns = `p.lesson_id AS lessonId, p.source_key AS mediaKey, p.position, p.duration, p.revision, p.updated_at AS updatedAt`;
 
@@ -34,6 +35,7 @@ export function mountPlayback(app: Express, db: WritableDatabase, hosted: boolea
       const lesson = await tx.prepare(`SELECT l.source_url AS sourceUrl, l.file_name AS fileName, m.course_id AS courseId
         FROM lessons l JOIN modules m ON m.id = l.module_id WHERE l.id = ?`).get(req.params.id);
       if (!lesson || !await hasCourseAccess(tx, account, String(lesson.courseId))) throw notFound('This lesson is unavailable.');
+      await requireLessonRelease(tx,account,req.params.id);
       if (mediaKey !== videoSourceKey(String(lesson.sourceUrl), String(lesson.fileName))) throw conflict('This recording has changed. Reopen the classroom to continue.');
       const prior = await tx.prepare(`SELECT ${columns}, p.writer_id AS writer, p.sequence FROM lesson_progress p WHERE p.account_id = ? AND p.lesson_id = ? AND p.source_key = ?`).get(account.id, req.params.id, mediaKey);
       if (prior?.writer === writer && Number(prior.sequence) >= sequence) {

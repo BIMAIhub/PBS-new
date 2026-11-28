@@ -38,6 +38,8 @@ export interface Lesson {
   duration: string;
   description: string;
   mediaKey?: string;
+  locked?: boolean;
+  lockReason?: string;
   playback: { kind: 'video' | 'embed' | 'link'; url: string; source?: string; provider?: 'microsoft' };
 }
 
@@ -45,6 +47,9 @@ export interface Module {
   id: string;
   title: string;
   lessons: Lesson[];
+  unlocked?: boolean;
+  reason?: string;
+  releaseAt?: string;
 }
 
 export interface CourseResource {
@@ -85,6 +90,7 @@ export interface Enrollment {
   submittedAt: string;
   approvedAt: string;
   notes: string;
+  batchId?:string;batchName?:string;
   dueDate?: string;
   listPrice?: number;
   discount?: number;

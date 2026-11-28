@@ -1,3 +1,4 @@
+import { previouslyWatched } from './viewing-fixtures.js';
 import { signInApproved, activateOnAnotherCourse } from './admission-fixtures.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -93,6 +94,7 @@ test('PBS academy payments, credentials and enrollment access', async t => {
     });
     await t.test('certificate requires complete lessons and passed assessment, with stable issuance', async () => {
       const details = await req(admin, '/admin/workspace'); const lessonId = details.courses.find((item: any) => item.id === course.id).modules[0].lessons[0].id;
+      await previouslyWatched(db,enrollment.studentId,lessonId);
       await req(student, `/student/lessons/${lessonId}/completion`, { completed: true }, 'POST', 204);
       await req(student, `/student/courses/${course.id}/certificate`, {}, 'POST', 409);
       await req(student, `/student/courses/${course.id}/assessment`, { answers: [0] });

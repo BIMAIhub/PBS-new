@@ -3,8 +3,10 @@ import { Plus, X } from 'lucide-react';
 import type { AccessPackage, AccessDelivery, EnrollmentDecision } from './admissions-types';
 export { StudentAccessDialog as TemporaryAccess } from './AccessSharing';
 import { PortalDialog } from '../components/student-dashboard/PortalUI';
-import { api, send } from './api';
-import type { Account, AssessmentQuestion, Course, Enrollment, Lesson, Receipt, StudentRecord } from './types';
+import { send } from './api';
+import { BatchEnrollmentSelect } from './Batches';
+import { useAdminUploads } from './AdminUploads';
+import type { Account, AssessmentQuestion, Course, Enrollment, Lesson, Module, Receipt, StudentRecord } from './types';
 import { Button, DialogForm, Empty, Field, Input, money, paise, useApiResource, value } from './ui';
 
 type Save = () => Promise<void>;
@@ -32,61 +34,46 @@ export function CourseForm({ course, onClose, onSaved }: FormProps & { course?: 
   </DialogForm>;
 }
 
-export function ModuleForm({ course, onClose, onSaved }: FormProps & { course: Course }) {
-  return <DialogForm title="Add a module" detail={course.title} submit="Add module" onClose={onClose}
-    onSubmit={async form => { await send(`/admin/courses/${course.id}/modules`, { title: value(form, 'title') }); await onSaved(); }}>
-    <Input label="Module title" name="title" maxLength={160} required />
+export function ModuleForm({ course, module, onClose, onSaved }: FormProps & { course: Course; module?: Module }) {
+  return <DialogForm title={module ? 'Edit module' : 'Add a module'} detail={course.title} submit={module ? 'Save module' : 'Add module'} onClose={onClose}
+    onSubmit={async form => { await send(`/admin/courses/${course.id}/modules${module ? `/${module.id}` : ''}`, { title: value(form, 'title'), ...(module ? { expectedTitle: module.title } : {}) }, module ? 'PATCH' : 'POST'); await onSaved(); }}>
+    <Input label="Module title" name="title" defaultValue={module?.title} maxLength={160} required />
   </DialogForm>;
 }
 
+const videoTitle = (file: File) => file.name.replace(/\.[^.]+$/, '').replace(/[_]+/g, ' ').slice(0,160);
 export function VideoForm({ course, moduleId, lesson, onClose, onSaved }: FormProps & { course: Course; moduleId?: string; lesson?: Lesson }) {
-  const [source, setSource] = useState<'file' | 'link' | 'keep'>(lesson ? 'keep' : 'file');
-  return <DialogForm title={lesson ? 'Edit video lesson' : 'Add video lesson'} detail={course.title}
-    submit={lesson ? 'Save lesson' : source === 'file' ? 'Upload lesson' : 'Add lesson'} onClose={onClose} wide
-    onSubmit={async form => {
-      const module = lesson ? moduleId : value(form, 'module');
-      if (!module) throw new Error('Choose a course module.');
-      const route = `/admin/courses/${course.id}/modules/${module}/lessons`;
-      const details = { title: value(form, 'title'), duration: value(form, 'duration'), description: value(form, 'description'),
-        ...(lesson ? { replaceId: lesson.id } : {}) };
-      if (source === 'file') {
-        const file = form.get('file');
-        if (!(file instanceof File) || !file.size) throw new Error('Choose an MP4 or WebM video.');
-        const type = /\.mp4$/i.test(file.name) ? 'video/mp4' : /\.webm$/i.test(file.name) ? 'video/webm' : '';
-        if (!type) throw new Error('Choose an MP4 or WebM video.');
-        const upload = await send<{ storage: 'local' } | { storage: 'blob'; url: string; uploadId: string }>(
-          `${route}/upload`, { contentType: type, size: file.size });
-        if (upload.storage === 'blob') {
-          const result = await fetch(upload.url, { method: 'PUT', headers: { 'Content-Type': type }, body: file, redirect: 'error' });
-          if (!result.ok) throw new Error('The video upload failed. Try again.');
-          await send(`${route}/upload/${encodeURIComponent(upload.uploadId)}`, details);
-        } else {
-          await api(`${route}/file?${new URLSearchParams(details)}`, {
-            method: 'POST', headers: { 'Content-Type': type }, body: file,
-          });
-        }
-      } else {
-        await send(route, { ...details, url: source === 'link' ? value(form, 'url') : '' });
+  const uploads = useAdminUploads();
+  const [source,setSource] = useState<'file'|'onedrive'|'link'|'keep'>(lesson?'keep':'onedrive');
+  const [selected,setSelected] = useState<File[]>([]),[title,setTitle] = useState(lesson?.title||'');
+  const uploading = source==='file'||source==='onedrive', multiple=uploading&&selected.length>1;
+  return <DialogForm title={lesson?'Edit video lesson':'Add video lessons'} detail={course.title}
+    submit={uploading?`Start ${multiple?selected.length+' ':''}background upload${multiple?'s':''}`:lesson?'Save lesson':'Add lesson'} submitDisabled={uploading&&selected.length>5} onClose={onClose} wide
+    onSubmit={async form=>{
+      const module=lesson?moduleId:value(form,'module');if(!module)throw new Error('Choose a course module.');
+      if(uploading){
+        const files=form.getAll('file').filter((f):f is File=>f instanceof File&&f.size>0);
+        if(!files.length||files.length>5)throw new Error('Choose one to five MP4 or WebM videos.');
+        uploads.enqueue(files.map((file,i)=>({file,source,courseId:course.id,courseTitle:course.title,moduleId:module,moduleTitle:course.modules.find(m=>m.id===module)?.title||'Course module',title:files.length>1?value(form,`videoTitle${i}`):value(form,'title'),duration:value(form,files.length>1?`videoDuration${i}`:'duration'),description:value(form,'description'),...(lesson?{replaceId:lesson.id}:{})})));
+        onClose();return;
       }
+      await send(`/admin/courses/${course.id}/modules/${module}/lessons`,{title:value(form,'title'),duration:value(form,'duration'),description:value(form,'description'),...(lesson?{replaceId:lesson.id}:{}),url:source==='link'?value(form,'url'):''});
       await onSaved();
     }}>
-    {!lesson && <Field label="Module"><select name="module" defaultValue={moduleId || course.modules[0]?.id} required>
-      {course.modules.map(module => <option key={module.id} value={module.id}>{module.title}</option>)}
-    </select></Field>}
-    <div className="pbs-form-grid">
-      <Input label="Lesson title" name="title" defaultValue={lesson?.title} maxLength={160} required />
-      <Input label="Duration" name="duration" defaultValue={lesson?.duration} placeholder="e.g. 24 min" maxLength={40} />
+    {!lesson&&<Field label="Module"><select name="module" defaultValue={moduleId||course.modules[0]?.id} required>{course.modules.map(module=><option key={module.id} value={module.id}>{module.title}</option>)}</select></Field>}
+    <div className="pbs-role-control pbs-form-switch" role="group" aria-label="Video source">
+      {lesson&&<button type="button" aria-pressed={source==='keep'} onClick={()=>setSource('keep')}>Keep current video</button>}
+      <button type="button" aria-pressed={source==='onedrive'} onClick={()=>setSource('onedrive')}>Upload to OneDrive</button>
+      <button type="button" aria-pressed={source==='file'} onClick={()=>setSource('file')}>Private PBS storage</button>
+      <button type="button" aria-pressed={source==='link'} onClick={()=>setSource('link')}>Paste link</button>
     </div>
-    <div className={`pbs-role-control pbs-form-switch ${lesson ? 'pbs-three-choices' : ''}`} role="group" aria-label="Video source">
-      {lesson && <button type="button" aria-pressed={source === 'keep'} onClick={() => setSource('keep')}>Keep current video</button>}
-      <button type="button" aria-pressed={source === 'file'} onClick={() => setSource('file')}>Upload file</button>
-      <button type="button" aria-pressed={source === 'link'} onClick={() => setSource('link')}>Paste link</button>
-    </div>
-    {source === 'file'
-      ? <Input label="Video file" name="file" type="file" accept="video/mp4,video/webm,.mp4,.webm" required note="MP4 or WebM. Uploaded videos are available to enrolled students." />
-      : source === 'link' ? <Input label="Video URL" name="url" type="url" defaultValue={lesson?.playback.source}
-          required note="Paste an individual video file link, not a folder. OneDrive videos use the saved Microsoft connection and play inside PBS with resume. MP4/WebM uploads also support resume." /> : null}
-    <Field label="Lesson notes"><textarea name="description" rows={3} maxLength={3000} defaultValue={lesson?.description} /></Field>
+    {uploading?<Input label={lesson?'Replacement video':'Video files'} name="file" type="file" multiple={!lesson} accept="video/mp4,video/webm,.mp4,.webm" required
+      onChange={e=>{const files=Array.from(e.currentTarget.files||[]);setSelected(files);if(files.length===1&&!title)setTitle(videoTitle(files[0]));}}
+      note={lesson?'Choose the replacement MP4 or WebM.':'Select up to five MP4 or WebM videos. Uploads continue while you browse PBS; keep this tab open.'}/>:source==='link'?<Input label="Video URL" name="url" type="url" defaultValue={lesson?.playback.source} required note="Paste an individual video file link. Connected OneDrive recordings play inside PBS."/>:null}
+    {uploading&&selected.length>5&&<p className="pbs-form-error" role="alert">Select up to five videos per batch.</p>}
+    {multiple?<div className="pbs-upload-file-list">{selected.map((file,i)=><section className="pbs-upload-file-row" key={`${file.name}:${file.lastModified}`}><small>{i+1}. {file.name} · {(file.size/1024**2).toFixed(1)} MB</small><div className="pbs-form-grid"><Input label="Lesson title" name={`videoTitle${i}`} defaultValue={videoTitle(file)} maxLength={160} required/><Input label="Duration (optional)" name={`videoDuration${i}`} placeholder="e.g. 24 min" maxLength={40}/></div></section>)}</div>:<div className="pbs-form-grid"><Input label="Lesson title" name="title" value={title} onChange={e=>setTitle(e.target.value)} maxLength={160} required/><Input label="Duration (optional)" name="duration" defaultValue={lesson?.duration} placeholder="e.g. 24 min" maxLength={40}/></div>}
+    <Field label={multiple?'Notes for these lessons':'Lesson notes'}><textarea name="description" rows={3} maxLength={3000} defaultValue={lesson?.description}/></Field>
+    {uploading&&<p className="pbs-muted pbs-small">The upload panel shows transfer progress, verification, retry controls and downloadable logs. You can minimize it without stopping your videos.</p>}
   </DialogForm>;
 }
 
@@ -154,8 +141,8 @@ export interface CreatedStudent {
   delivery?: AccessDelivery;
 }
 
-export function EnrollStudentForm({ courses, student, initialCourseId, onExisting, onCreateCourse, onClose, onSaved }: {
-  courses: Course[]; student?: StudentRecord; initialCourseId?: string; onExisting: (enrollment: Enrollment) => void;
+export function EnrollStudentForm({ courses, student, initialCourseId, prefill, onExisting, onCreateCourse, onClose, onSaved }: {
+  courses: Course[]; student?: StudentRecord; initialCourseId?: string; prefill?: {name:string;email:string;phone:string}; onExisting: (enrollment: Enrollment) => void;
   onCreateCourse: () => void; onClose: () => void; onSaved: (result: CreatedStudent) => Promise<void>;
 }) {
   const assignable = courses.filter(course => !course.paused && !student?.enrollments.some(enrollment => enrollment.courseId === course.id && enrollment.status !== 'rejected'));
@@ -169,21 +156,21 @@ export function EnrollStudentForm({ courses, student, initialCourseId, onExistin
     onSubmit={async form => {
       const result = await send<CreatedStudent>('/admin/students', {
         name: value(form, 'name'), email: value(form, 'email'), phone: value(form, 'phone'), rollNumber: value(form, 'roll'),
-        courseId, total: paise(form, 'total'), amount: paise(form, 'amount'), reference: value(form, 'reference'), method: value(form, 'method'),
+        courseId,batchId:value(form,'batchId'), total: paise(form, 'total'), amount: paise(form, 'amount'), reference: value(form, 'reference'), method: value(form, 'method'),
         sendEmail: form.has('sendEmail'),
       });
       await onSaved(result);
     }}>
     <div className="pbs-form-grid">
-      <Input label="Full name" name="name" defaultValue={student?.name} readOnly={Boolean(student)} maxLength={120} required />
-      <Input label="Student email" name="email" type="email" defaultValue={student?.email} readOnly={Boolean(student)} required />
-      <Input label="Phone" name="phone" type="tel" defaultValue={student?.phone} readOnly={Boolean(student)} />
+      <Input label="Full name" name="name" defaultValue={student?.name||prefill?.name} readOnly={Boolean(student)} maxLength={120} required />
+      <Input label="Student email" name="email" type="email" defaultValue={student?.email||prefill?.email} readOnly={Boolean(student)} required />
+      <Input label="Phone" name="phone" type="tel" defaultValue={student?.phone||prefill?.phone} readOnly={Boolean(student)} />
       <Input label="Roll number" name="roll" defaultValue={student?.rollNumber} readOnly={Boolean(student)} placeholder="Assigned automatically if blank" />
     </div>
     <Field label="Course"><select name="course" required value={courseId} onChange={event => setCourseId(event.target.value)}>
       {courses.map(course => { const enrollment = student?.enrollments.find(item => item.courseId === course.id && item.status !== 'rejected'); return <option key={course.id} value={course.id}>{course.title}{course.paused ? ' · Paused' : enrollment?.status === 'approved' ? ' · Already enrolled' : enrollment?.status === 'pending' ? ' · Awaiting approval' : !course.published ? ' · Draft' : ''}</option>; })}
     </select></Field>
-    {inactive && <p className="pbs-form-error">This student is {student.accountStatus}. Reactivate the account from the student record before assigning a course.</p>}
+    <BatchEnrollmentSelect key={courseId} courseId={courseId} admin/>{inactive && <p className="pbs-form-error">This student is {student.accountStatus}. Reactivate the account from the student record before assigning a course.</p>}
     {selected?.paused && <div className="pbs-inset"><strong>Course paused</strong><p className="pbs-muted">{selected.pauseReason} Resume the course from Courses & videos to allow new enrollments.</p></div>}
     {existing ? <div className="pbs-inset pbs-live-form"><strong>{existing.status === 'pending' ? 'An application already exists' : 'This course is already assigned'}</strong><p className="pbs-muted">Agreed fee {money(existing.total)} · Verified paid {money(existing.paid)} · Balance {money(existing.total - existing.paid)}</p><p className="pbs-muted">{existing.status === 'pending' ? 'Review the current application to approve access. This keeps its offer and payment reference together.' : 'Open the student record to manage access, record a payment or issue documents.'}</p><Button onClick={() => onExisting(existing)}>{existing.status === 'pending' ? 'Review application' : 'Manage assigned course'}</Button></div> : <>
     <div className="pbs-form-grid">

@@ -1,16 +1,15 @@
-import { useState, type ReactNode } from 'react';
-import { BadgeCheck, Download, Printer } from 'lucide-react';
-import { PortalBrand, PortalDialog } from '../components/student-dashboard/PortalUI';
+import { useCallback, type ReactNode } from 'react';
+import { BadgeCheck } from 'lucide-react';
+import { PortalDialog } from '../components/student-dashboard/PortalUI';
 import type { Account, CourseSummary, Enrollment, Receipt, AssessmentResult } from './types';
 import { Button, dateLabel, Empty, FormError, money, Panel } from './ui';
-import { messageFrom } from './api';
 import { useBranding } from './Branding';
 
 import type { DocumentInfo, DocumentStamp } from './document-types';
 import { buildDocumentPdf } from './document-pdf';
 import { brandLogoData } from './Branding';
 import { api } from './api';
-import { DocumentSeal } from './InstitutionStamp';
+import { PdfDocument } from './PdfDocument';
 export type { DocumentInfo } from './document-types';
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
@@ -86,38 +85,15 @@ const titles = { receipt: 'Payment receipt', statement: 'Course fee statement', 
 
 export function DocumentDialog({ document, onClose }: { document: DocumentInfo; onClose: () => void }) {
   const { brand } = useBranding();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  async function download(print = false) {
-    const target = print ? window.open('', '_blank') : null;
-    if (target) target.opener = null;
-    setBusy(true); setError('');
-    try {
-      const stamp = await api<DocumentStamp>('/document-stamp');
-      let logo: string | undefined;
-      try { logo = await brandLogoData(brand); } catch { /* The institution name remains visible. */ }
-      const pdf = await buildDocumentPdf(document, brand, stamp, { logo });
-      const reference = document.kind === 'receipt' ? document.receipt.number : document.kind === 'statement' ? document.enrollment.id : document.account.id;
-      if (print && target) {
-        pdf.autoPrint(); const url = URL.createObjectURL(pdf.output('blob')); target.location.replace(url);
-        window.setTimeout(() => URL.revokeObjectURL(url), 120000);
-      } else pdf.save(`PBS-${document.kind}-${reference}.pdf`);
-    } catch (problem) { target?.close(); setError(messageFrom(problem)); }
-    finally { setBusy(false); }
-  }
+  const load=useCallback(async()=>{
+    const stamp=await api<DocumentStamp>('/document-stamp');
+    const logo=await brandLogoData(brand).catch(()=>undefined);
+    return buildDocumentPdf(document,brand,stamp,{logo});
+  },[document,brand]);
+  const reference=document.kind==='receipt'?document.receipt.number:document.kind==='statement'||document.kind==='letter'?document.enrollment.id:document.account.id;
   return <PortalDialog title={titles[document.kind]} className="pbs-dialog-wide pbs-document-dialog" onClose={onClose}>
-    <div className="pbs-document-stage">
-      <article className={`pbs-print-document pbs-document-${document.kind}`}>
-        <PortalBrand subtitle="Learning records" />
-        <DocumentContent document={document} />
-        <DocumentSeal /><footer className="pbs-doc-footer"><span>{brand.academyName}</span><span>{brand.supportEmail}</span></footer>
-      </article>
-    </div>
-    <FormError error={error} />
-    <footer className="pbs-dialog-actions">
-      <Button quiet disabled={busy} onClick={() => void download(true)}><Printer size={18} /> Print</Button>
-      <Button disabled={busy} onClick={() => void download()}><Download size={18} /> {busy ? 'Preparing…' : 'Download PDF'}</Button>
-    </footer>
+    <PdfDocument load={load} filename={`PBS-${document.kind}-${reference}.pdf`} label={titles[document.kind]}/>
+    <details className="pbs-pdf-text"><summary>Read document details</summary><DocumentContent document={document}/></details>
   </PortalDialog>;
 }
 

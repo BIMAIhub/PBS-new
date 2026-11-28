@@ -6,6 +6,7 @@ import { type Database, type WritableDatabase, makeId, now, transaction } from '
 import { audit, saveSetting, setting } from './academy-data.js';
 import { badRequest, conflict, field, integer, limitAttempts, notFound, RequestError, route } from './http.js';
 import type { AttendancePreview, AttendanceRow, AttendanceStatus, LiveClass, StudentLiveData } from '../src/live/live-session-types.js';
+import { batchAccess } from './learning-access.js';
 
 const columns = `l.id, l.course_id AS courseId, c.title AS courseTitle, l.title, l.description,
   l.starts_at AS startsAt, l.ends_at AS endsAt, l.join_before AS joinBefore, l.points, l.minimum_minutes AS minimumMinutes,
@@ -70,6 +71,7 @@ export async function studentLiveData(db: Database, accountId: string): Promise<
     FROM live_classes l JOIN courses c ON c.id = l.course_id JOIN enrollments e ON e.course_id = l.course_id
     LEFT JOIN live_attendance a ON a.class_id = l.id AND a.account_id = e.account_id
     WHERE e.account_id = ? AND e.status = 'approved' AND l.published = 1
+    AND (NOT EXISTS(SELECT 1 FROM live_class_batches cb WHERE cb.class_id=l.id) OR EXISTS(SELECT 1 FROM live_class_batches cb JOIN enrollment_batches eb ON eb.batch_id=cb.batch_id WHERE cb.class_id=l.id AND eb.enrollment_id=e.id))
     AND NOT EXISTS (SELECT 1 FROM course_controls cc WHERE cc.course_id = e.course_id AND cc.paused = 1)
     AND NOT EXISTS (SELECT 1 FROM enrollment_controls ec WHERE ec.enrollment_id = e.id AND ec.paused = 1)
     ORDER BY l.starts_at DESC LIMIT 250`).all(accountId);
@@ -85,11 +87,14 @@ async function roster(db: Database, session: LiveClass): Promise<AttendanceRow[]
     COALESCE(p.join_count, 0) AS joinCount, COALESCE(p.status, 'pending') AS status, COALESCE(p.minutes, 0) AS minutes,
     COALESCE(p.awarded_points, 0) AS points, COALESCE(p.verified_at, '') AS verifiedAt, COALESCE(p.source, '') AS source
     FROM enrollments e JOIN accounts a ON a.id = e.account_id LEFT JOIN live_attendance p ON p.class_id = ? AND p.account_id = a.id
-    WHERE e.course_id = ? AND (e.status = 'approved' OR p.account_id IS NOT NULL) ORDER BY a.name`).all(session.id, session.courseId)).map(({ enrollmentStatus, ...row }) => ({ ...row, eligible: enrollmentStatus === 'approved' })) as unknown as AttendanceRow[];
+    WHERE e.course_id = ? AND (e.status = 'approved' OR p.account_id IS NOT NULL)
+    AND (NOT EXISTS(SELECT 1 FROM live_class_batches cb WHERE cb.class_id=?) OR EXISTS(SELECT 1 FROM live_class_batches cb JOIN enrollment_batches eb ON eb.batch_id=cb.batch_id WHERE cb.class_id=? AND eb.enrollment_id=e.id))
+    ORDER BY a.name`).all(session.id, session.courseId,session.id,session.id)).map(({ enrollmentStatus, ...row }) => ({ ...row, eligible: enrollmentStatus === 'approved' })) as unknown as AttendanceRow[];
 }
 async function verifyAttendance(db: Database, session: LiveClass, actor: string, accountId: string, status: AttendanceStatus, minutes: number, source: string) {
   const previous = await db.prepare('SELECT status, awarded_points FROM live_attendance WHERE class_id = ? AND account_id = ?').get(session.id, accountId);
   if (!await approved(db, accountId, session.courseId) && (!previous || status === 'present')) throw badRequest('Only approved course students can receive attendance or points. Existing records may be corrected to a non-Present status.');
+  if(status==='present'&&!await batchAccess(db,accountId,session.courseId,session.id))throw badRequest('This student belongs to another batch.');
   if ((session.status === 'cancelled' && status === 'present') || Date.parse(session.startsAt) > Date.now()) throw badRequest('Verify attendance after a scheduled session has started.');
   const points = status === 'present' ? previous?.status === 'present' ? Number(previous.awarded_points) : session.points : 0;
   const verifiedAt = now();
@@ -162,6 +167,7 @@ export function mountLiveClasses(app: Express, db: WritableDatabase, hosted: boo
     const session = await transaction(db, async tx => {
       const session = await getClass(tx, req.params.id);
       if (!session.published || !await activeCourseAccess(tx, account.id, session.courseId)) throw notFound('An approved enrollment is required for this live session.');
+      if(!await batchAccess(tx,account.id,session.courseId,session.id))throw notFound('This live session belongs to another batch.');
       if (session.state !== 'open') throw new RequestError(403, session.state === 'upcoming' ? 'Joining opens at the scheduled join time.' : 'This live session is not open for joining.');
       const url = meetLink(session.meetUrl), time = now();
       await tx.prepare(`INSERT INTO live_attendance (class_id, account_id, first_joined_at, last_joined_at, join_count) VALUES (?, ?, ?, ?, 1)
@@ -172,6 +178,7 @@ export function mountLiveClasses(app: Express, db: WritableDatabase, hosted: boo
   app.get('/api/live-classes/:id/calendar', route(async (req, res) => {
     const account = await requireAccount(db, req, 'student'), session = await getClass(db, req.params.id);
     if (!session.published || !await activeCourseAccess(db, account.id, session.courseId)) throw notFound('This course session is unavailable.');
+    if(!await batchAccess(db,account.id,session.courseId,session.id))throw notFound('This live session belongs to another batch.');
     if (session.status === 'cancelled') throw badRequest('This session has been cancelled.');
     const origin = process.env.PBS_PUBLIC_ORIGIN || `${hosted ? 'https' : req.protocol}://${req.get('host')}`;
     res.type('text/calendar').attachment('PBS-live-session.ics').send(['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//PBS//Learning sessions//EN', 'BEGIN:VEVENT', `UID:${session.id}@pbs`, `DTSTAMP:${icsDate(now())}`, `DTSTART:${icsDate(session.startsAt)}`, `DTEND:${icsDate(session.endsAt)}`, `SUMMARY:${icsText(session.title)}`, `DESCRIPTION:${icsText(`${session.courseTitle}\nSign in to your PBS workspace to join. Your enrollment is checked when the session opens.`)}`, `URL:${origin}/?page=sessions`, 'BEGIN:VALARM', 'TRIGGER:-PT10M', 'ACTION:DISPLAY', `DESCRIPTION:${icsText(session.title)}`, 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR', ''].join('\r\n'));

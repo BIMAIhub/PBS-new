@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { CertificatePngField } from './CertificateTools';
 import { Save, Stamp } from 'lucide-react';
 import type { DocumentStamp } from './document-types';
 import { send, messageFrom } from './api';
@@ -23,26 +24,20 @@ export function DocumentSeal() {
 
 export function InstitutionStampAdmin() {
   const resource = useApiResource<DocumentStamp>('/document-stamp');
-  const [draft, setDraft] = useState<DocumentStamp>(), [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
+  const [draft, setDraft] = useState<DocumentStamp>(), [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState(''),[imageBusy,setImageBusy]=useState(false);
   useEffect(() => { if (resource.data) setDraft(resource.data); }, [resource.data]);
   const edit = <K extends keyof DocumentStamp>(key: K, v: DocumentStamp[K]) => setDraft(current => current ? { ...current, [key]: v } : current);
-  return <Panel title="Institution stamp"><FormError error={error || resource.error} />{draft && <form className="pbs-stamp-editor" onSubmit={async event => {
-    event.preventDefault(); setBusy(true); setError(''); setNotice('');
-    try { const saved = await send<DocumentStamp>('/admin/document-stamp', draft, 'PUT'); setDraft(saved); await resource.refresh(); setNotice('Stamp saved for certificates, receipts, fee statements, student IDs and bonafide letters.'); }
+  return <Panel title="Other document stamp"><p className="pbs-muted pbs-small">For receipts, brochures, fee statements, student IDs and bonafide letters. Certificates retain their fixed gold PBS seal.</p><FormError error={error || resource.error} />{draft && <form className="pbs-stamp-editor" onSubmit={async event => {
+    event.preventDefault(); if(imageBusy)return;setBusy(true); setError(''); setNotice('');
+    try { const saved = await send<DocumentStamp>('/admin/document-stamp', draft, 'PUT'); setDraft(saved); await resource.refresh(); setNotice('Stamp saved for receipts, brochures, fee statements, student IDs and bonafide letters.'); }
     catch (problem) { setError(messageFrom(problem)); } finally { setBusy(false); }
-  }}><div className="pbs-live-form"><label className="pbs-check"><input type="checkbox" checked={draft.enabled} onChange={e => edit('enabled', e.target.checked)} /> Apply the institution stamp to all documents</label>
+  }}><div className="pbs-live-form"><label className="pbs-check"><input type="checkbox" checked={draft.enabled} onChange={e => edit('enabled', e.target.checked)} /> Apply the institution stamp to other documents</label>
     <div className="pbs-form-grid"><Field label="Seal design"><select value={draft.design} onChange={e => edit('design', e.target.value as DocumentStamp['design'])}><option value="round">Double-ring seal</option><option value="square">Square seal</option></select></Field><Input label="Center text" value={draft.center} required maxLength={16} onChange={e => edit('center', e.target.value)} /></div>
     <Input label="Institution name" value={draft.institution} required maxLength={70} onChange={e => edit('institution', e.target.value)} /><Input label="Stamp caption" value={draft.caption} required maxLength={60} onChange={e => edit('caption', e.target.value)} /><Input label="Location or office (optional)" value={draft.location} maxLength={50} onChange={e => edit('location', e.target.value)} />
     <div className="pbs-form-grid"><Input label="Seal color" type="color" value={draft.color} onChange={e => edit('color', e.target.value)} /><Input label="Accent color" type="color" value={draft.accent} onChange={e => edit('accent', e.target.value)} /></div>
-    <Field label="Custom stamp image (optional)"><input type="file" accept="image/png,image/jpeg" onChange={async e => {
-      const file = e.target.files?.[0]; if (!file) return;
-      if (file.size > 100000) { setError('Choose a PNG or JPEG below 100 KB.'); return; }
-      try {
-        const data = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = () => reject(new Error('The image could not be read. Choose another PNG or JPEG.')); reader.readAsDataURL(file); });
-        edit('imageData', data); setError('');
-      } catch (problem) { setError(messageFrom(problem)); }
-    }} /><small>Transparent PNG works well. The image replaces the generated seal.</small></Field>
+    <CertificatePngField onBusy={setImageBusy} label="Institution stamp PNG" data={draft.imageData} onChange={data=>edit('imageData',data)}/>
+    <p className="pbs-muted pbs-small"><a href="/brand-assets/PBS-Institution-Stamp.png" download>Download small PBS stamp PNG</a> · <a href="/brand-assets/PBS-Website-Logo.png" download>Download website logo PNG</a></p>
     {draft.imageData && <Button quiet onClick={() => edit('imageData', '')}>Use generated seal instead</Button>}
-    {notice && <p className="pbs-form-status" role="status">{notice}</p>}<button className="pbs-button pbs-button-primary" disabled={busy}><Save size={16} />{busy ? 'Saving…' : 'Save institution stamp'}</button>
-  </div><div className="pbs-stamp-preview"><Stamp size={24} /><InstitutionSeal stamp={draft} /><p>Used on every newly downloaded document. Existing records and signatures stay unchanged.</p></div></form>}</Panel>;
+    {notice && <p className="pbs-form-status" role="status">{notice}</p>}<button className="pbs-button pbs-button-primary" disabled={busy||imageBusy}><Save size={16} />{busy ? 'Saving…' : 'Save institution stamp'}</button>
+  </div><div className="pbs-stamp-preview"><Stamp size={24} /><InstitutionSeal stamp={draft} /><p>Used on newly downloaded receipts, brochures and other administrative documents. Certificates keep their fixed gold seal.</p></div></form>}</Panel>;
 }

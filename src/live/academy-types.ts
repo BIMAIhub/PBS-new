@@ -1,10 +1,13 @@
 export interface CertificateTemplate {
   courseId: string; title: string; issuer: string; signer: string; signerRole: string;
   design: 'architectural' | 'classic' | 'minimal'; primaryColor: string; accentColor: string;
+  logoImage?:string; signatureImage?:string; detailText?:string; durationLabel?:string;
+  secondSigner?:string; secondSignerRole?:string; secondSignatureImage?:string;
 }
 export interface CertificateRecord {
   id: string; studentId: string; courseId: string; studentName: string; courseTitle: string;
   score: number; issuedAt: string; publicToken: string; published: boolean; revokedAt: string;
+  historical?: { completedAt:string; mode:string; originalNumber:string; qualification:string; scoreRecorded:boolean; hasOriginal:boolean };
   template: CertificateTemplate;
 }
 export interface Reminder {
@@ -23,5 +26,8 @@ export interface CourseStorage { courseId: string; driveId: string; itemId: stri
 export interface IntegrationStatus {
   encryptionReady: boolean; configured: boolean; clientId: string; tenant: string; secretSaved: boolean;
   redirectUri: string; connected?: { email: string; name: string; connectedAt: string };
+  mail: {clientId:string;tenant:string;secretSaved:boolean;configured:boolean;connected?:{email:string;name:string;connectedAt:string}};
   storage: CourseStorage[];
 }
+
+export interface PublicCredentialCourse {id:string;title:string;description:string;category:string;instructor:string;schedule:string;level:string;duration:string;audience:string;outcomes:string[];requirements:string[];modules:string[]}

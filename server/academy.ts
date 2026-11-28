@@ -1,3 +1,5 @@
+import { publicCredentialCourse } from './credential-course.js';
+import { saveCertificateDesign } from './certificate-documents.js';
 import { randomBytes } from 'node:crypto';
 import type { Express } from 'express';
 import { requireAccount } from './auth.js';
@@ -64,7 +66,7 @@ export function mountAcademy(app: Express, db: WritableDatabase, hosted: boolean
       }
       const enrollment = await enrollmentById(tx, req.params.id);
       if (enrollment.status !== 'approved' || enrollment.paid >= enrollment.total) throw conflict('There is no approved outstanding balance to remind.');
-      if (channel === 'email' && !await tx.prepare('SELECT 1 FROM microsoft_connections WHERE admin_id = ?').get(admin.id)) throw conflict('Connect Microsoft to send email reminders, or choose portal message.');
+      if (channel === 'email' && !await tx.prepare('SELECT 1 FROM microsoft_mail_connections WHERE admin_id = ?').get(admin.id)) throw conflict('Connect your Microsoft email account to send reminders, or choose portal message.');
       const date = now();
       await tx.prepare('INSERT INTO payment_reminders VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(id, enrollment.id, requestKey, channel, channel === 'portal' ? 'posted' : 'pending', body, date, '');
       await tx.prepare("INSERT INTO messages VALUES (?, ?, 'admin', ?, ?, ?)").run(makeId(), enrollment.studentId, 'Course fee reminder', body, date);
@@ -111,19 +113,21 @@ export function mountAcademy(app: Express, db: WritableDatabase, hosted: boolean
     const admin = await requireAccount(db, req, 'admin');
     const courseId = field(req.body?.courseId, 'course ID', 80, false);
     if (courseId && !await db.prepare('SELECT 1 FROM courses WHERE id = ?').get(courseId)) throw notFound('This course is unavailable.');
-    const color = (name: string) => {
-      const result = field(req.body?.[name], 'certificate color', 7);
+    const current=await certificateTemplate(db,courseId);
+    const color = (name: 'primaryColor'|'accentColor') => {
+      const result = field(req.body?.[name]??current[name], 'certificate color', 7);
       if (!/^#[a-f0-9]{6}$/i.test(result)) throw badRequest('Choose valid certificate colors.');
       return result;
     };
-    const design = field(req.body?.design, 'certificate design', 20);
+    const design = field(req.body?.design??current.design, 'certificate design', 20);
     if (!['architectural', 'classic', 'minimal'].includes(design)) throw badRequest('Choose a certificate design.');
     await transaction(db, async tx => {
       await tx.prepare(`INSERT INTO certificate_templates VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(course_id) DO UPDATE SET title = excluded.title, issuer = excluded.issuer, signer = excluded.signer,
         signer_role = excluded.signer_role, design = excluded.design, primary_color = excluded.primary_color, accent_color = excluded.accent_color`)
-        .run(courseId, field(req.body?.title, 'certificate title', 120), field(req.body?.issuer, 'issuer', 120),
-          field(req.body?.signer, 'signer name', 120), field(req.body?.signerRole, 'signer role', 120), design, color('primaryColor'), color('accentColor'));
+        .run(courseId, field(req.body?.title??current.title, 'certificate title', 120), field(req.body?.issuer??current.issuer, 'issuer', 120),
+          field(req.body?.signer??current.signer, 'signer name', 120), field(req.body?.signerRole??current.signerRole, 'signer role', 120), design, color('primaryColor'), color('accentColor'));
+      await saveCertificateDesign(tx,courseId,req.body||{});
       await audit(tx, admin.id, 'Certificate design saved', courseId, design);
     });
     res.json(await certificateTemplate(db, courseId));
@@ -170,6 +174,7 @@ export function mountAcademy(app: Express, db: WritableDatabase, hosted: boolean
     const record = await db.prepare(`SELECT id, student_name AS studentName, course_title AS courseTitle,
       course_id AS courseId, issued_at AS issuedAt, revoked_at AS revokedAt FROM certificates WHERE public_token = ? AND published = 1`).get(req.params.token);
     if (!record) throw notFound('This certificate is private or unavailable.');
-    res.json({ ...record, template: await certificateTemplate(db, String(record.courseId)) });
+    const history=await db.prepare('SELECT completed_at AS completedAt,mode,original_number AS originalNumber FROM legacy_training WHERE certificate_id=?').get(record.id);
+    res.json({ ...record, historical:history||undefined, template: await certificateTemplate(db, String(record.courseId)),course:await publicCredentialCourse(db,String(record.courseId)) });
   }));
 }

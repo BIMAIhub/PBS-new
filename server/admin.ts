@@ -11,6 +11,7 @@ import { grantCourseAccess, portalOrigin } from './microsoft.js';
 import { saveLiveClass } from './live-classes.js';
 import { activeStudent } from './access-controls.js';
 import { queueAutomation } from './mail.js';
+import { assignEnrollmentBatch } from './learning-access.js';
 
 export function mountAdmin(app: Express, db: WritableDatabase, hosted: boolean) {
   app.patch('/api/admin/profile', limitAttempts(10, hosted ? db : undefined), route(async (req, res) => {
@@ -163,6 +164,7 @@ export function mountAdmin(app: Express, db: WritableDatabase, hosted: boolean) 
       await tx.prepare(`INSERT INTO enrollment_details (enrollment_id, source) VALUES (?, 'admin')
         ON CONFLICT(enrollment_id) DO UPDATE SET source = 'admin'`).run(enrollmentId);
       await audit(tx, admin.id, 'Student enrolled by admin', enrollmentId, course.title);
+      await assignEnrollmentBatch(tx,enrollmentId,field(req.body?.batchId,'batch',80,false),course.id,true);
       return { student: publicAccount((await findAccount(tx, id))!), enrollment: await enrollmentById(tx, enrollmentId), receipt };
     });
     const courseAccess = await grantCourseAccess(db, result.enrollment.id, admin.id, true).catch(() => ({ status: 'failed' }));

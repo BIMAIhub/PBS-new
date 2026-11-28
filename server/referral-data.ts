@@ -4,7 +4,7 @@ import { audit, setting } from './academy-data.js';
 import { badRequest } from './http.js';
 import type { ReferralProgram } from '../src/live/engagement-types.js';
 
-export const defaultReferralProgram: ReferralProgram = { enabled: true, autoCredit: true, rewardAmount: 100000, waitDays: 7, minimumFee: 100000,
+export const defaultReferralProgram: ReferralProgram = { enabled: true, autoCredit: true, bankPayoutsEnabled: true, rewardAmount: 100000, waitDays: 7, minimumFee: 100000,
   requireReferrerPaid: true, requireStudentPaid: true, friendDiscountPercent: 0, revision: '' };
 export async function referralProgram(db: Database): Promise<ReferralProgram> { return { ...defaultReferralProgram, ...JSON.parse(await setting(db,'referral_program') || '{}') }; }
 export async function ensureReferralCode(db: WritableDatabase, accountId: string) {
@@ -19,6 +19,7 @@ export async function referralCodeOffer(db: Database, code: string, email: strin
   if(found.ownerId===accountId || String(found.email).toLowerCase()===email.toLowerCase())throw badRequest('Use a referral code shared by another student.');
   const active=await db.prepare("SELECT 1 FROM accounts a WHERE a.id=? AND a.role='student' AND NOT EXISTS(SELECT 1 FROM account_controls c WHERE c.account_id=a.id AND c.status<>'active')").get(found.ownerId);
   if(!active)throw badRequest('This referral code is currently unavailable.');
+  if(await db.prepare('SELECT 1 FROM referral_code_controls WHERE account_id=? AND enabled=0').get(found.ownerId))throw badRequest('This referral code has been paused by PBS.');
   return { ownerId:String(found.ownerId),percent:program.friendDiscountPercent,code };
 }
 export async function captureReferral(db: Database, enrollmentId: string, referrerId: string, code: string) {
@@ -38,8 +39,9 @@ export async function captureReferral(db: Database, enrollmentId: string, referr
 async function paymentQualification(db: Database, accountId: string) {
   const row=await db.prepare(`SELECT a.created_at,COALESCE(c.status,'active') AS status,COALESCE(c.updated_at,a.created_at) AS activeAt FROM accounts a LEFT JOIN account_controls c ON c.account_id=a.id WHERE a.id=? AND a.role='student'`).get(accountId);
   const fees=await db.prepare(`SELECT e.total,e.approved_at,COALESCE(SUM(r.amount),0) AS paid,MAX(r.issued_at) AS paidAt FROM enrollments e LEFT JOIN receipts r ON r.enrollment_id=e.id WHERE e.account_id=? AND e.status='approved' GROUP BY e.id`).all(accountId);
-  const paid=fees.length>0&&fees.every(e=>Number(e.paid)>=Number(e.total));
-  const times=[String(row?.activeAt||''),...fees.map(e=>String(e.paidAt||e.approved_at))].map(Date.parse).filter(Number.isFinite);
+  const legacy=fees.length?undefined:await db.prepare(`SELECT rc.verified_at AS updated_at FROM referral_code_controls rc WHERE rc.account_id=? AND rc.alumni_paid_verified=1 AND EXISTS(SELECT 1 FROM legacy_training h WHERE h.account_id=rc.account_id)`).get(accountId);
+  const paid=fees.length>0?fees.every(e=>Number(e.paid)>=Number(e.total)):Boolean(legacy);
+  const times=[String(row?.activeAt||''),String(legacy?.updated_at||''),...fees.map(e=>String(e.paidAt||e.approved_at))].map(Date.parse).filter(Number.isFinite);
   return {active:row?.status==='active',paid,at:times.length?Math.max(...times):0};
 }
 export async function reconcileReferrals(db: WritableDatabase, clock = new Date(), options: {ownerId?:string; onlyId?:string; allowCredit?:boolean} = {}) {

@@ -1,5 +1,5 @@
 export class ApiError extends Error {
-  constructor(public status: number, message: string) {
+  constructor(public status: number, message: string, public requestId = '') {
     super(message);
   }
 }
@@ -10,7 +10,7 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   const response = await fetch(`/api${path}`, { ...options, headers });
   if (!response.ok) {
     const result = await response.json().catch(() => null);
-    throw new ApiError(response.status, result?.error || 'PBS could not complete the request.');
+    throw new ApiError(response.status, result?.error || 'PBS could not complete the request.', response.headers.get('x-vercel-id') || '');
   }
   return response.status === 204 ? undefined as T : response.json();
 }

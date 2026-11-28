@@ -75,6 +75,7 @@ export function SignIn({ onSignedIn }: { onSignedIn: (account: Account) => void 
         </div>
       </div>
       <footer className="pbs-login-footer"><span>{brand.academyName}</span>
+        <a href="/app">Get the PBS app</a>
         <a href={`mailto:${brand.supportEmail}`}>Contact support <ArrowUpRight /></a>
       </footer>
     </main>

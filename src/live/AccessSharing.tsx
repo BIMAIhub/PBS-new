@@ -27,7 +27,7 @@ export function StudentAccessDialog({ access, delivery: initial, receipt, onRece
   const whatsapp = access.whatsappNumber ? `https://wa.me/${access.whatsappNumber}?text=${encodeURIComponent(access.body)}` : '';
   const alreadySent = delivery?.status === 'accepted' || delivery?.status === 'unknown' || delivery?.status === 'pending';
   return <PortalDialog title="Student access ready" onClose={onClose} className="pbs-dialog-wide">
-    <div className="pbs-live-form"><div className="pbs-access-heading"><span><Check size={24} /></span><div><h3>{access.name}</h3><p>Approved enrollment · {access.studentId}</p></div></div>
+    <div className="pbs-live-form"><div className="pbs-access-heading"><span><Check size={24} /></span><div><h3>{access.name}</h3><p>Student record · {access.studentId}</p></div></div>
       <p className="pbs-muted">Share the sign-in link, course summary and fee details privately. {access.password ? 'The student must replace this temporary password at first sign-in.' : 'The student will use their existing password. Generate a new temporary password from Manage access when a reset is needed.'}</p>
       <div className="pbs-form-grid"><Input label="Student email" value={access.email} readOnly /><Input label="Saved WhatsApp number" value={access.whatsappNumber ? `+${access.whatsappNumber}` : 'No WhatsApp number saved'} readOnly /></div>
       {access.password && <Input label="Temporary password" value={access.password} readOnly />}
@@ -35,7 +35,7 @@ export function StudentAccessDialog({ access, delivery: initial, receipt, onRece
       <div className="pbs-access-channels"><Button disabled={busy || alreadySent} onClick={() => void email()}><Send size={17} />{busy ? 'Sending…' : delivery?.status === 'accepted' ? 'Email accepted' : delivery?.status === 'failed' ? 'Retry email' : 'Send email'}</Button>
         <a className="pbs-button pbs-button-outline" href={emailDraft}><Mail size={17} />Open email draft</a>
         {whatsapp ? <a className="pbs-button pbs-button-outline" href={whatsapp} target="_blank" rel="noopener noreferrer"><MessageCircle size={17} />Open WhatsApp</a> : <span className="pbs-muted">Add the student's WhatsApp number in their admin record.</span>}
-      </div><p className="pbs-muted pbs-small">WhatsApp opens a prepared message for you to send. Saved 10-digit numbers use India’s +91 country code. Direct email uses your connected Microsoft account.</p>
+      </div><p className="pbs-muted pbs-small">WhatsApp opens a prepared message for you to send. Saved 10-digit numbers use India’s +91 country code. Direct email uses the connected PBS mailing account.</p>
       {delivery?.status === 'accepted' && <p className="pbs-form-status" role="status">Microsoft accepted the email for {access.email}. Delivery status is available in Sent Items.</p>}
       {delivery && delivery.status !== 'accepted' && <p className="pbs-form-status" role="status">{delivery.error || 'The email request is pending. Check Sent Items before trying another channel.'}</p>}
       <FormError error={error} />{copied && <p className="pbs-form-status" role="status">{copied} copied.</p>}

@@ -45,7 +45,7 @@ async function saveSections(db: Database, id: string, sections: PortfolioSection
     experience = excluded.experience, education = excluded.education`).run(id, sections.layout, sections.accentColor, JSON.stringify(sections.projects), JSON.stringify(sections.experience), JSON.stringify(sections.education));
 }
 const localCv = (id: string) => path.join(dataDirectory, 'cv', id);
-async function removeCv(location: string) {
+export async function removeCv(location: string) {
   if (/^pbs\/cv\/[\w-]+\.pdf$/.test(location)) await del(location);
   else if (/^[a-f\d-]+\.pdf$/.test(location)) await rm(localCv(location), { force: true });
 }

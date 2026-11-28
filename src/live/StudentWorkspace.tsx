@@ -1,8 +1,8 @@
 import { StudentCourseFeedback } from './CourseFeedback';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ArrowRight, Award, BookOpen, Bot, CalendarDays, Clock, CreditCard, Download, FileText, IdCard,
-  Compass, Gift, UserRound, KeyRound, Layers, LayoutDashboard, LogOut, MessageSquare, Play, Plus, Settings, Share2
+  Compass, Gift, Megaphone, Route, Smartphone, UserRound, KeyRound, Layers, LayoutDashboard, LogOut, MessageSquare, Play, Plus, Settings, Share2
 } from 'lucide-react';
 import { PortalDialog } from '../components/student-dashboard/PortalUI';
 import { WorkspaceActionRow, WorkspaceChrome, type WorkspaceNavGroup } from '../components/student-dashboard/WorkspaceChrome';
@@ -14,11 +14,18 @@ import { StudyTimer } from './StudyTools';
 import { send } from './api';
 import { StudentCertificates } from './Certificates';
 import { StudentReferrals } from './Referrals';
+import { LearningRoadmap,StudentNotices } from './AcademyExperience';
 import { PortfolioHub } from './PortfolioHub';
 import { PortfolioBuilder } from './PortfolioBuilder';
 import { ProfilePage } from './ProfilePage';
 import { NotificationCenter } from './Notifications';
+import { initialWorkspacePage, MobileAppPage } from './MobileApp';
 import { CatalogBrowser } from './Catalog';
+import { ResourceLibrary } from './LearningResources';
+import { StudentPastTraining } from './AdmissionsTools';
+import { StudentQuizzes } from './LearningQuizzes';
+import { AlumniWelcome } from './CertificateTools';
+import { CertificateDialog } from './Certificates';
 import { TaskAssignments } from './TaskAssignments';
 import { CourseInformation } from './CourseInformation';
 import { LiveClassesStudent, NextLiveSession } from './LiveClassesStudent';
@@ -26,16 +33,19 @@ import type { AcademyData } from './academy-types';
 import type { Account, AssessmentQuestion, AssessmentResult, Catalog, Course, CourseSummary, Enrollment, StudentWorkspaceData } from './types';
 import { Button, dateLabel, dateTimeLabel, DialogForm, Empty, ExternalLink, Field, FormError, Input, money, Panel, Status, useApiResource, value } from './ui';
 
-type Page = 'overview' | 'courses' | 'sessions' | 'project' | 'downloads' | 'fees' | 'reviews' | 'messages' | 'certificates' | 'portfolio' | 'profile' | 'explore' | 'course-feedback' | 'referrals';
+type Page = 'overview' | 'courses' | 'sessions' | 'project' | 'downloads' | 'fees' | 'reviews' | 'messages' | 'certificates' | 'portfolio' | 'profile' | 'explore' | 'course-feedback' | 'referrals' | 'roadmap' | 'notices' | 'mobile-app';
 const groups: WorkspaceNavGroup<Page>[] = [
   { label: 'Learning', pages: [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
     { id: 'courses', label: 'My courses', icon: BookOpen },
+    { id: 'roadmap', label: 'My learning roadmap', icon: Route },
     { id: 'explore', label: 'Explore courses', icon: Compass },
     { id: 'sessions', label: 'Live sessions', icon: CalendarDays },
-    { id: 'project', label: 'Capstone project', icon: Layers },
+    { id: 'notices', label: 'News & notices', icon: Megaphone },
+    { id: 'project', label: 'Assignments & tests', icon: Layers },
   ] },
   { label: 'Resources', pages: [
+    { id: 'mobile-app', label: 'PBS app & alerts', icon: Smartphone },
     { id: 'downloads', label: 'Downloads', icon: Download },
     { id: 'fees', label: 'Fees & payments', icon: CreditCard },
     { id: 'referrals', label: 'Refer & earn', icon: Gift },
@@ -85,8 +95,8 @@ function StudentOverview({ data, completed, open, navigate }: {
         <div className="pbs-course-feature-image" aria-hidden="true" />
       </section>
       <Panel title="Study tools">
-        <WorkspaceActionRow action={{ label: 'Study timer', detail: 'Start a focus session', icon: Clock, run: () => open({ kind: 'timer' }) }} />
-        <WorkspaceActionRow action={{ label: 'Capstone project', detail: 'Submit or review your project', icon: Layers, run: () => navigate('project') }} />
+        <WorkspaceActionRow action={{label:'My learning roadmap',detail:'Your modules, live sessions and course credential',icon:Route,run:()=>navigate('roadmap')}}/><WorkspaceActionRow action={{ label: 'Study timer', detail: 'Start a focus session', icon: Clock, run: () => open({ kind: 'timer' }) }} />
+        <WorkspaceActionRow action={{ label: 'Assignments & tests', detail: 'Submit or review your project', icon: Layers, run: () => navigate('project') }} />
         <WorkspaceActionRow action={{ label: 'BIM assistant', detail: 'Ask about a BIM workflow', icon: Bot, run: () => open({ kind: 'assistant' }) }} />
         <WorkspaceActionRow action={{ label: 'Student documents', detail: 'View and print your student ID', icon: IdCard, run: () => navigate('courses') }} />
         <WorkspaceActionRow action={{ label: 'My certificates', detail: 'Earn and share your course credentials', icon: Award, run: () => navigate('certificates') }} />
@@ -188,12 +198,18 @@ function CourseAssessment({ course, onClose, onSaved, onCertificate }: { course:
 export function StudentWorkspace({ account, onAccount, onSignOut }: {
   account: Account; onAccount: (account: Account) => void; onSignOut: () => void;
 }) {
-  const [page, setPage] = useState<Page>(() => new URLSearchParams(location.search).get('page') === 'sessions' ? 'sessions' : 'overview');
+  const [page, setPage] = useState<Page>(() => initialWorkspacePage(groups.flatMap(group => group.pages.map(page => page.id)), 'overview'));
   const [dialog, setDialog] = useState<Dialog>();
   const [notice, setNotice] = useState('');
   const { data, error, refresh } = useApiResource<StudentWorkspaceData>('/student/workspace');
   const catalog = useApiResource<Catalog>('/catalog');
   const academy = useApiResource<AcademyData>('/student/academy');
+  useEffect(() => {
+    const update = () => { if (document.visibilityState === 'visible') void refresh(); };
+    const timer = setInterval(update, 60000);
+    document.addEventListener('visibilitychange', update);
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', update); };
+  }, [refresh]);
   async function refreshAll() { await Promise.all([refresh(), academy.refresh(), catalog.refresh()]); }
   const completed = new Set(data?.completions.map(completion => completion.lessonId));
   const course = dialog && 'courseId' in dialog ? data?.courses.find(course => course.id === dialog.courseId) : undefined;
@@ -206,8 +222,11 @@ export function StudentWorkspace({ account, onAccount, onSignOut }: {
   async function saved(message: string) {
     await refreshAll(); close(); setNotice(message);
   }
+  const [alumniCertificate,setAlumniCertificate]=useState<import('./academy-types').CertificateRecord>();
   const enrollment = data && activeEnrollment(data.enrollments);
   return <>
+    {!dialog&&!alumniCertificate&&<AlumniWelcome accountId={account.id} onCertificate={setAlumniCertificate} onReferrals={()=>navigate('referrals')}/>}
+    {alumniCertificate&&<CertificateDialog record={alumniCertificate} onClose={()=>setAlumniCertificate(undefined)}/>}
     <WorkspaceChrome groups={groups} activePage={page} onNavigate={navigate} userName={account.name}
       notifications={<NotificationCenter onNavigate={target => { if (groups.some(group => group.pages.some(item => item.id === target))) navigate(target as Page); }} />}
       onHelp={() => show({ kind: 'help' })}
@@ -227,23 +246,26 @@ export function StudentWorkspace({ account, onAccount, onSignOut }: {
       <FormError error={error || academy.error} />
       {!data && !error && <p className="pbs-muted" role="status">Loading your workspace…</p>}
       {notice && <p className="pbs-form-status pbs-notice" role="status">{notice}</p>}
-      {data && page === 'overview' && <StudentOverview data={data} completed={completed} open={show} navigate={navigate} />}
-      {data && page === 'courses' && <StudentCourses data={data} account={account} open={show} academy={academy.data} />}
+      {data && page === 'overview' && <div className="pbs-live-stack"><StudentOverview data={data} completed={completed} open={show} navigate={navigate} /><StudentNotices compact/><StudentPastTraining onCertificates={()=>navigate('certificates')} onProfile={()=>navigate('profile')}/></div>}
+      {data && page === 'courses' && <div className="pbs-live-stack"><StudentCourses data={data} account={account} open={show} academy={academy.data} /><StudentPastTraining onCertificates={()=>navigate('certificates')} onProfile={()=>navigate('profile')}/></div>}
       {data && page === 'fees' && <StudentFees data={data} catalog={catalog.data} open={show} academy={academy.data} onWallet={() => navigate('referrals')} />}
       {data && page === 'referrals' && <StudentReferrals enrollments={data.enrollments} onChanged={refreshAll} />}
+      {page === 'roadmap' && <LearningRoadmap onCourses={()=>navigate('courses')} onCertificates={()=>navigate('certificates')}/>}
+      {page === 'notices' && <StudentNotices/>}
       {data && academy.data && page === 'certificates' && <StudentCertificates data={data} academy={academy.data} onSaved={refreshAll} onFeedback={() => navigate('course-feedback')} />}
       {data && page === 'portfolio' && <PortfolioBuilder account={account} portfolio={data.portfolio} certificates={academy.data?.certificates || []} onSaved={refreshAll} />}
       {page === 'profile' && <ProfilePage account={account} onAccount={onAccount} />}
+      {page === 'mobile-app' && <MobileAppPage />}
       {page === 'explore' && catalog.data && <CatalogBrowser catalog={catalog.data} onChoose={course => show({ kind: 'course-info', course })} />}
       {page === 'course-feedback' && <StudentCourseFeedback account={account} />}
       {page === 'sessions' && <LiveClassesStudent />}
-      {data && page === 'downloads' && <Panel title="Course resources">
-        {!data.courses.some(course => course.resources.length) && <Empty title="No resources yet">Course files and practice materials will appear here.</Empty>}
+      {data && page === 'downloads' && <div className="pbs-live-stack"><ResourceLibrary/><Panel title="Additional course links">
+        {!data.courses.some(course => course.resources.length) && <Empty title="No additional course links">Your published practice downloads appear in the section above.</Empty>}
         {data.courses.flatMap(course => course.resources.map(resource => <article className="pbs-record-row" key={resource.id}>
           <div><h3>{resource.title}</h3><p className="pbs-muted">{course.title}</p></div><ExternalLink href={resource.url}>Open resource</ExternalLink>
         </article>))}
-      </Panel>}
-      {data && page === 'project' && <div className="pbs-live-stack"><TaskAssignments /><Panel title="Project submissions" action={data.courses.length > 0 && <Button onClick={() => show({ kind: 'assignment' })}>Submit project</Button>}>
+      </Panel></div>}
+      {data && page === 'project' && <div className="pbs-live-stack"><TaskAssignments /><StudentQuizzes/><Panel title="Project submissions" action={data.courses.length > 0 && <Button onClick={() => show({ kind: 'assignment' })}>Submit project</Button>}>
         {!data.assignments.length && <Empty title="No projects submitted">Submit a project link for your instructor to review.</Empty>}
         {data.assignments.map(assignment => <article className="pbs-record-row" key={assignment.id}>
           <div><h3>{assignment.courseTitle}</h3><p className="pbs-muted">{dateLabel(assignment.submittedAt)}</p><ExternalLink href={assignment.url}>Open project</ExternalLink></div>

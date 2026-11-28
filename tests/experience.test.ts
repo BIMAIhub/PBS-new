@@ -1,3 +1,4 @@
+import { previouslyWatched } from './viewing-fixtures.js';
 import { signInApproved, activateOnAnotherCourse } from './admission-fixtures.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -144,6 +145,7 @@ test('PBS discovery, offers, profiles, notifications and curriculum', async t =>
       lessonId = (await req(admin, `/admin/courses/${courseId}/modules/${moduleId}/lessons`, { title: 'QA linked model lesson', duration: '5 min', description: '', url: 'https://example.org/lesson.mp4' }, 'POST', 201)).id;
       await req(admin, `/admin/courses/${courseId}/assessment`, { questions: [{ prompt: 'Should linked model coordinates be reviewed?', options: ['Yes', 'No'], answer: 0 }], passingScore: 75 }, 'PUT', 204);
       await req(student, `/student/courses/${courseId}/certificate`, {}, 'POST', 409);
+      await previouslyWatched(db,studentId,lessonId);
       await req(student, `/student/lessons/${lessonId}/completion`, { completed: true }, 'POST', 204);
       await req(student, `/student/courses/${courseId}/assessment`, { answers: [0] });
       const ready = await req(student, '/notifications'); assert.equal(ready.items.filter((item: any) => item.kind === 'certificate').length, 1);

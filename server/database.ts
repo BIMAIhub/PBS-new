@@ -4,11 +4,15 @@ import { DatabaseSync, type SQLOutputValue } from 'node:sqlite';
 import type { Client, Transaction } from '@libsql/client/web';
 import { randomUUID } from 'node:crypto';
 import { engagementSchema } from './engagement-schema.js';
+import { academyUpgradeSchema } from './academy-upgrade-schema.js';
+import { databaseConfiguration } from './database-config.js';
+import { pushSchema } from './push-schema.js';
+import { educationSchema } from './education-schema.js';
 
 export const dataDirectory = path.resolve(process.env.PBS_DATA_DIR || 'data');
 export const videoDirectory = path.join(dataDirectory, 'videos');
 
-const schema = engagementSchema + `
+const schema = academyUpgradeSchema + engagementSchema + `
     CREATE TABLE IF NOT EXISTS lesson_progress (
       account_id TEXT NOT NULL REFERENCES accounts(id), lesson_id TEXT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
       source_key TEXT NOT NULL, position REAL NOT NULL DEFAULT 0, duration REAL NOT NULL DEFAULT 0,
@@ -275,7 +279,7 @@ const schema = engagementSchema + `
       account_id TEXT PRIMARY KEY REFERENCES accounts(id),
       status TEXT NOT NULL, target_role TEXT NOT NULL, notes TEXT NOT NULL
     );
-`;
+` + pushSchema + educationSchema;
 
 type Row = Record<string, SQLOutputValue>;
 type Parameter = string | number | bigint | Uint8Array | null;
@@ -358,16 +362,12 @@ function libsqlConnection(client: Pick<Client | Transaction, 'execute'>): Databa
 }
 
 export async function openDatabase(requireRemote = false): Promise<WritableDatabase> {
-  const pbsUrl = process.env.PBS_TURSO_DATABASE_URL?.trim();
-  const pbsToken = process.env.PBS_TURSO_AUTH_TOKEN?.trim();
-  const usePrefix = Boolean(pbsUrl || pbsToken);
-  const url = usePrefix ? pbsUrl : process.env.TURSO_DATABASE_URL?.trim();
-  const authToken = usePrefix ? pbsToken : process.env.TURSO_AUTH_TOKEN?.trim();
-  if (!url && !authToken && !process.env.VERCEL && !requireRemote) return openLocalDatabase();
-  if (!url || !authToken) throw new Error('Connect a Turso database and configure both its URL and auth token.');
+  const connectionConfig = databaseConfiguration(process.env);
+  if (!connectionConfig && !requireRemote) return openLocalDatabase();
+  if (!connectionConfig) throw new Error('Connect a Turso database and configure both its URL and auth token.');
 
   const { createClient } = await import('@libsql/client/web');
-  const client = createClient({ url, authToken });
+  const client = createClient(connectionConfig);
   try {
     await client.executeMultiple(schema);
     const connection = libsqlConnection(client);

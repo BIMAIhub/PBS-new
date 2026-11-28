@@ -1,6 +1,6 @@
 import { type Database } from './database.js';
 import { graph, graphContentLocation } from './microsoft.js';
-import { externalUrl, isMicrosoftVideo } from './video.js';
+import { externalUrl, isMicrosoftVideo, videoSourceKey } from './video.js';
 import { RequestError } from './http.js';
 import { microsoftDownloadLocation } from './microsoft-content.js';
 
@@ -31,6 +31,7 @@ export async function resolveMicrosoftVideo(db: Database, courseId: string, less
   const shared = await request(db, owner, `/shares/${share}/driveItem${fields}`);
   const item = shared.remoteItem || shared;
   if (!item.file || (!item.video && !String(item.file.mimeType || '').startsWith('video/'))) throw new RequestError(422, 'This OneDrive link is not a video file. PBS needs to choose the recording, not a folder or document.');
+  if(Number.isFinite(item.video?.duration)&&item.video.duration>0)await db.prepare('INSERT INTO lesson_media_durations VALUES (?,?,?) ON CONFLICT(lesson_id) DO UPDATE SET media_key=excluded.media_key,duration=excluded.duration').run(lessonId,videoSourceKey(source,''),item.video.duration/1000);
   let location = item['@microsoft.graph.downloadUrl'] || shared['@microsoft.graph.downloadUrl'];
   if (typeof location !== 'string' || !location.trim()) {
     const path = item.id && item.parentReference?.driveId

@@ -27,6 +27,14 @@ function lightness(hex: string) {
   const channels = [1, 3, 5].map(index => { const v = parseInt(hex.slice(index, index + 2), 16) / 255; return v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; });
   return .2126 * channels[0] + .7152 * channels[1] + .0722 * channels[2];
 }
+export async function brandingLogoData(db:Database) {
+  const logo=await asset(db,'logo');if(!logo)return undefined;let bytes:Buffer;
+  if(/^pbs\/branding\/[a-f\d-]+\.(png|jpg|webp)$/.test(logo.location)){
+    const result=await get(logo.location,{access:'private',useCache:true});if(!result||result.statusCode!==200)throw notFound('The institution logo is unavailable. Re-upload it in Branding.');
+    const parts:Buffer[]=[];let size=0;for await(const chunk of Readable.fromWeb(result.stream as import('node:stream/web').ReadableStream)){const part=Buffer.from(chunk);size+=part.length;if(size>512*1024)throw badRequest('The institution logo is too large.');parts.push(part);}bytes=Buffer.concat(parts);
+  }else if(/^[a-f\d-]+\.(png|jpg|webp)$/.test(logo.location))bytes=await readFile(localFile(logo.location));else throw notFound('The institution logo is unavailable.');
+  return `data:${logo.type};base64,${bytes.toString('base64')}`;
+}
 function settings(input: any): BrandSettings {
   const color = (key: string) => { const v = field(input?.[key], 'theme color', 7); if (!/^#[a-f0-9]{6}$/i.test(v)) throw badRequest('Choose a six-digit hex color.'); return v; };
   const primaryColor = color('primaryColor'), accentColor = color('accentColor'), backgroundColor = color('backgroundColor');

@@ -4,11 +4,14 @@ import type { Lesson } from './types';
 import { api, messageFrom } from './api';
 import { playbackTime, resumeTime } from './playback-types';
 import { Button, Empty, Field } from './ui';
+import { useViewingTracker } from './useViewingTracker';
 
-export function LessonPlayer({ lesson, initialPosition, videoRef, onSnapshot }: {
+export function LessonPlayer({ lesson, initialPosition, videoRef, onSnapshot,trackViewing=false,onComplete }: {
   lesson: Lesson; initialPosition: number; videoRef: RefObject<HTMLVideoElement | null>;
   onSnapshot: (position: number, duration: number, immediate?: boolean) => void;
+  trackViewing?:boolean;onComplete?:()=>void;
 }) {
+  const viewing=useViewingTracker(lesson,videoRef,trackViewing,onComplete);
   const [attempt, setAttempt] = useState(0), [error, setError] = useState(''), [paused, setPaused] = useState(true);
   const [duration, setDuration] = useState(0), [rate, setRate] = useState(1), [resumed, setResumed] = useState(0);
   const touched = useRef(false), restoring = useRef(false), last = useRef<{ position: number; duration: number } | undefined>(undefined);
@@ -41,11 +44,12 @@ export function LessonPlayer({ lesson, initialPosition, videoRef, onSnapshot }: 
         if (position > 0) { restoring.current = true; video.currentTime = position; setResumed(position); }
         video.playbackRate = rate;
       }}
-      onPlay={() => { touched.current = true; setPaused(false); capture(true); }}
-      onPause={() => { setPaused(true); capture(true); }}
-      onTimeUpdate={() => capture()}
+      onPlay={() => { touched.current = true; setPaused(false); capture(true);void viewing.start(); }}
+      onPause={() => { setPaused(true); capture(true);viewing.tick(true); }}
+      onTimeUpdate={() => {capture();viewing.tick();}}
+      onSeeking={()=>viewing.seek()}
       onSeeked={() => { restoring.current = false; capture(true); }}
-      onEnded={() => { setPaused(true); capture(true); }}
+      onEnded={() => { setPaused(true); capture(true);viewing.tick(true); }}
       onError={() => void playbackError()} />}
     {!error && <div className="pbs-video-controls" aria-label="Video playback tools">
       <div className="pbs-actions"><Button quiet disabled={!duration} onClick={() => {
@@ -58,6 +62,7 @@ export function LessonPlayer({ lesson, initialPosition, videoRef, onSnapshot }: 
       </div>
       <Field label="Playback speed"><select aria-label="Playback speed" value={rate} onChange={event => { const speed = Number(event.target.value); setRate(speed); if (videoRef.current) videoRef.current.playbackRate = speed; }}>{[.75, 1, 1.25, 1.5, 1.75, 2].map(speed => <option key={speed} value={speed}>{speed}×</option>)}</select></Field>
       {resumed > 0 && <p className="pbs-resume-note">Resumed from {playbackTime(resumed)}</p>}
+      {trackViewing&&<div className="pbs-watching-progress"><progress max={80} value={Math.min(80,viewing.progress.percent)} aria-label="Watched progress toward completion"/><span>{viewing.progress.percent}% watched · completes at 80%</span><small role="status">{viewing.status}</small></div>}
     </div>}
   </div>;
 }

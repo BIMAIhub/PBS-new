@@ -8,6 +8,8 @@ import { audit, paymentSettings } from './academy-data.js';
 import { availablePromotion, promotions, publicPrice, quotePrice, savePrice } from './commerce.js';
 import { portfolioSections, studentProfile } from './profiles.js';
 import { certificateRecords } from './academy-data.js';
+import { assignEnrollmentBatch,requireLessonRelease } from './learning-access.js';
+import { requireWatchCompletion } from './learning-progress.js';
 import { activeStudent } from './access-controls.js';
 import { enrollmentCounts, learnerCommunity, publishedFeedback } from './feedback.js';
 import {
@@ -100,6 +102,7 @@ export function mountStudent(app: Express, db: WritableDatabase, hosted: boolean
         reference = excluded.reference, submitted_at = excluded.submitted_at, notes = '', approved_at = ''`)
         .run(enrollmentId, id, course.id, quote.total, claim.amount, claim.reference, now());
       await savePrice(tx, enrollmentId, quote);
+      await assignEnrollmentBatch(tx,enrollmentId,field(req.body?.batchId,'batch',80,false),course.id);
       await tx.prepare(`INSERT INTO enrollment_details (enrollment_id, source) VALUES (?, 'student')
         ON CONFLICT(enrollment_id) DO UPDATE SET source = 'student'`).run(enrollmentId);
       await audit(tx, id, 'Enrollment application submitted', enrollmentId, course.title);
@@ -140,7 +143,9 @@ export function mountStudent(app: Express, db: WritableDatabase, hosted: boolean
     const lesson = await db.prepare(`SELECT m.course_id AS courseId FROM lessons l JOIN modules m ON m.id = l.module_id
       WHERE l.id = ?`).get(req.params.id) as { courseId: string } | undefined;
     if (!lesson || !await hasCourseAccess(db, account, lesson.courseId)) throw notFound('This lesson is unavailable.');
+    await requireLessonRelease(db,account,req.params.id);
     if (req.body?.completed === true) {
+      await requireWatchCompletion(db,account.id,req.params.id);
       await db.prepare('INSERT OR IGNORE INTO completions VALUES (?, ?, ?)').run(account.id, req.params.id, now());
     } else if (req.body?.completed === false) {
       await db.prepare('DELETE FROM completions WHERE account_id = ? AND lesson_id = ?').run(account.id, req.params.id);

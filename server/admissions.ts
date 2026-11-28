@@ -3,6 +3,7 @@ import type { Express } from 'express';
 import { findAccount, requireAccount } from './auth.js';
 import { type Database, type WritableDatabase, makeId, now, transaction } from './database.js';
 import { audit, saveSetting, setting } from './academy-data.js';
+import { manualMailSender } from './mail.js';
 import { publicBranding } from './branding.js';
 import { conflict, field, limitAttempts, notFound, RequestError, route } from './http.js';
 import { verifyPassword } from './passwords.js';
@@ -36,7 +37,10 @@ export async function accessPackage(db: Database, studentId: string, origin: str
   const student = await findAccount(db, studentId);
   if (!student || student.role !== 'student' || student.accountStatus !== 'active') throw notFound('This student is inactive or unavailable.');
   const approved = (await enrollments(db, studentId)).filter(item => item.status === 'approved');
-  if (!approved.length) throw conflict('Approve an enrollment before sharing student access.');
+  const historical = await db.prepare(`SELECT c.course_title AS title,h.completed_at AS completedAt,h.mode FROM legacy_training h JOIN certificates c ON c.id=h.certificate_id WHERE h.account_id=? AND c.revoked_at=''`).all(studentId);
+  const contact=Boolean(await db.prepare('SELECT 1 FROM past_student_contacts WHERE account_id=?').get(studentId));
+  if (!approved.length && !historical.length && !contact) throw conflict('Approve an enrollment or verify a past training record before sharing student access.');
+  if(await db.prepare("SELECT 1 FROM student_admissions WHERE account_id=? AND approved_at=''").get(studentId))throw conflict('This existing application is still awaiting approval. Its access settings are unchanged.');
   const brand = await publicBranding(db);
   const summaries = await Promise.all(approved.map(async item => {
     const course = await db.prepare('SELECT description FROM courses WHERE id = ?').get(item.courseId);
@@ -45,20 +49,22 @@ export async function accessPackage(db: Database, studentId: string, origin: str
   }));
   const recent = (await receipts(db, studentId)).slice(0, 3);
   const signInUrl = `${origin}/`;
-  const body = [`Hello ${student.name},`, `Your enrollment at ${brand.academyName} is approved.`,
+  const body = [`Hello ${student.name},`, approved.length ? `Your enrollment at ${brand.academyName} is approved.` : historical.length ? `Your past training record at ${brand.academyName} is verified. Your student portal and certificates are ready.` : `Welcome to your past-student account at ${brand.academyName}. Your profile is ready. The academy will add verified course and certificate details later.`,
     `Sign in: ${signInUrl}`, `Email: ${student.email}`, `Student ID: ${student.id}`,
     password ? `Temporary password: ${password}\nSet a new password when you first sign in.` : 'Use your existing PBS password. Contact the academy if you need a password reset.',
-    ...summaries,
-    recent.length ? `Receipts: ${recent.map(item => `${item.number} (${currency(item.amount)})`).join(', ')}` : 'A receipt is issued after PBS verifies a payment.',
-    `Receipts and current fee statement: ${origin}/?page=fees\nBonafide enrollment letter: ${origin}/?page=downloads`,
+    'Login process: 1. Open the sign-in link and choose Student. 2. Enter your email and password. 3. Set your own new password when prompted. 4. Open your profile; course access and certificates appear when the academy adds them.',
+    ...summaries, ...historical.map(item => `Verified past training: ${item.title}\nCompleted: ${item.completedAt} | Mode: ${item.mode}\nCertificates: ${origin}/?page=certificates\nEnable public verification in My certificates to share on LinkedIn. Current online lesson access is separate.`),
+    approved.length && recent.length ? `Receipts: ${recent.map(item => `${item.number} (${currency(item.amount)})`).join(', ')}` : approved.length ? 'A receipt is issued after PBS verifies a payment.' : '',
+    approved.length ? `Receipts and current fee statement: ${origin}/?page=fees\nBonafide enrollment letter: ${origin}/?page=downloads` : '',
     `Support: ${brand.supportEmail}`].filter(Boolean).join('\n\n');
   return { studentId, name: student.name, email: student.email, phone: student.phone, whatsappNumber: whatsappNumber(student.phone), signInUrl, password,
-    subject: `${brand.shortName} enrollment approved — your student access`, body };
+    subject: approved.length ? `${brand.shortName} enrollment approved — your student access` : historical.length ? `${brand.shortName} verified past training — your student access` : `${brand.shortName} past-student account — sign-in instructions`, body };
 }
 
 // Delivery records contain status and a digest, never the temporary password or message body.
 export async function deliverAccessEmail(db: WritableDatabase, adminId: string, kit: AccessPackage, requestKey: string, sendMail = sendMicrosoftMail): Promise<AccessDelivery> {
-  if (!await db.prepare('SELECT 1 FROM microsoft_connections WHERE admin_id = ?').get(adminId)) {
+  const sendingAccount=await manualMailSender(db,adminId);
+  if (!sendingAccount) {
     return { status: 'unconfigured', error: 'Email was not sent. Connect Microsoft in OneDrive & email to send directly, or use the email draft or WhatsApp button.' };
   }
   const contentHash = createHash('sha256').update(`${kit.studentId}\n${kit.email}\n${kit.body}`).digest('hex');
@@ -79,7 +85,7 @@ export async function deliverAccessEmail(db: WritableDatabase, adminId: string, 
   });
   if (prepared.prior) return prepared.prior;
   let status: AccessDelivery['status'] = 'accepted', error = '';
-  try { await sendMail(db, adminId, kit.email, kit.subject, kit.body); }
+  try { await sendMail(db, sendingAccount, kit.email, kit.subject, kit.body); }
   catch (problem) {
     status = problem instanceof RequestError ? 'failed' : 'unknown';
     error = problem instanceof RequestError ? problem.message : 'Delivery is uncertain. Check Microsoft Sent Items before sending another message.';

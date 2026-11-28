@@ -1,0 +1,126 @@
+/* Course journeys use the academy's blue ink, gold guides and warm glass. */
+.pbs-sidebar { overflow: hidden; gap: 20px; padding: 20px 12px 12px; }
+.pbs-sidebar > .pbs-brand { flex-shrink: 0; padding-inline: 4px; }
+.pbs-sidebar .pbs-brand img { width: 36px; height: 36px; flex-basis: 36px; }
+.pbs-sidebar .pbs-brand strong { font-size: 14px; line-height: 1.35; }
+.pbs-sidebar .pbs-brand small { font-size: 11px; margin-top: 4px; }
+.pbs-sidebar .pbs-navigation { min-height: 0; flex: 1; overflow-y: auto; overscroll-behavior: contain; align-content: start; gap: 20px; padding-right: 4px; scrollbar-width: thin; scrollbar-color: #b99a50 #09283f; }
+.pbs-sidebar .pbs-navigation::-webkit-scrollbar { width: 4px; }
+.pbs-sidebar .pbs-navigation::-webkit-scrollbar-track { background: transparent; }
+.pbs-sidebar .pbs-navigation::-webkit-scrollbar-thumb { background: #b99a5070; border-radius: 4px; }
+.pbs-sidebar .pbs-nav-group { gap: 2px; }
+.pbs-sidebar .pbs-nav-group p { font-size: 11px; padding: 0 12px 6px; }
+.pbs-sidebar .pbs-nav-group button { min-height: 36px; gap: 8px; font-size: 12px; padding: 8px 12px; border-radius: 8px; }
+.pbs-sidebar .pbs-nav-group svg { width: 16px; height: 16px; stroke-width: 1.5; }
+.pbs-sidebar .pbs-nav-group button span { white-space: nowrap; line-height: 1.25; }
+.pbs-sidebar .pbs-sidebar-help { min-height: 36px; flex-shrink: 0; font-size: 12px; }
+.pbs-sidebar .pbs-nav-group button[aria-current='page'] { font-weight: 500; }
+
+/* Fit the sign-in at normal browser zoom; short screens can scroll naturally. */
+@media (min-width: 901px) {
+  .pbs-login { min-height: 100svh; padding: clamp(24px, 4svh, 40px) clamp(28px, 4vw, 72px); grid-template-columns: minmax(0, 1fr) minmax(360px, 440px); gap: clamp(32px, 5vw, 96px); align-items: center; }
+  .pbs-login-art { display: flex; flex-direction: column; justify-content: space-between; min-height: min(720px, calc(100svh - 64px)); height: 100%; }
+  .pbs-login-art-top { min-height: 0; }
+  .pbs-login-intro { max-width: 640px; margin-block: clamp(28px, 5svh, 56px) 24px; }
+  .pbs-login-intro h2 { font-size: clamp(44px, 4.3vw, 64px); line-height: 1.05; max-width: 12ch; }
+  .pbs-login-description { font-size: 16px; max-width: 56ch; line-height: 1.65; }
+  .pbs-login-pane { max-width: 440px; width: 100%; align-self: center; padding: 20px 24px; margin: 0 0 0 auto; }
+  .pbs-login-content { padding-block: 12px; }
+  .pbs-login-pane-top { min-height: 28px; }
+  .pbs-login-heading h1 { font-size: 32px; }
+  .pbs-login-heading p { font-size: 13px; }
+  .pbs-login-form { margin-top: 16px; gap: 12px; }
+  .pbs-login-form .pbs-live-field input { min-height: 44px; padding: 10px 12px; }
+  .pbs-login-form .pbs-check { min-height: 28px; }
+  .pbs-login-admissions { margin-top: 16px; padding-top: 16px; }
+  .pbs-login-features { gap: 24px; margin-top: 28px; padding-top: 20px; }
+  .pbs-login-art-caption { margin-top: 24px; }
+}
+@media (min-width: 901px) and (max-height: 760px) {
+  .pbs-login { padding-block: 20px; }
+  .pbs-login-art { min-height: 600px; }
+  .pbs-login-intro h2 { font-size: clamp(42px, 4vw, 56px); }
+  .pbs-login-intro { margin-top: 28px; }
+  .pbs-login-pane { padding-block: 16px; }
+}
+.pbs-public-batches { margin-block: 28px; }
+.pbs-public-batches > h2 { margin-bottom: 16px; font-size: 24px; font-weight: 500; }
+.pbs-batch-card { padding: 24px; background: var(--pbs-glass-raised); border: 1px solid #cbb78a; border-radius: 16px; margin-top: 16px; }
+.pbs-batch-card h3 { font-size: 18px; font-weight: 600; }
+.pbs-batch-card > p { margin-top: 12px; line-height: 1.6; }
+.pbs-batch-card dl { display: flex; flex-wrap: wrap; gap: 20px 40px; margin-block: 20px; }
+.pbs-batch-card dt { display: flex; align-items: center; gap: 8px; color: #52677a; font-size: 12px; }
+.pbs-batch-card dd { margin-top: 8px; font-size: 16px; color: #133b5a; }
+.pbs-batch-card small { display: block; margin-top: 12px; color: #52677a; font-size: 12px; }
+.pbs-batch-deadline { color: #78591d; font-size: 13px; }
+.pbs-release-row { padding-block: 24px; border-bottom: 1px solid #cdbf9d; }
+.pbs-release-row h3 { display: flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 500; }
+.pbs-release-row > .pbs-form-grid { align-items: start; }
+.pbs-module-lock-note { padding: 12px 16px; color: #725820; background: #d4a94d1a; font-size: 13px; line-height: 1.6; }
+.pbs-completion-guidance { color: #d1deea; font-size: 13px; max-width: 52ch; line-height: 1.6; }
+.pbs-watching-progress { width: 100%; display: grid; grid-template-columns: minmax(100px, 1fr) auto; align-items: center; gap: 8px 16px; padding-top: 8px; color: #e1ebf3; font-size: 12px; }
+.pbs-watching-progress progress { width: 100%; height: 6px; accent-color: var(--studio-gold); }
+.pbs-watching-progress small { grid-column: 1 / -1; color: #a8c0d3; font-size: 11px; }
+.pbs-upload-drop { padding: 24px; border: 1px dashed #b99a50; border-radius: 14px; background: #d4a94d0d; }
+.pbs-upload-drop > svg { color: var(--studio-accent); margin-bottom: 16px; }
+.pbs-live-form progress { width: 100%; height: 8px; accent-color: var(--studio-accent); }
+.pbs-assignment-files { border: 1px solid #ccb98b; border-radius: 12px; padding: 4px 16px; }
+.pbs-assignment-files:empty { display: none; }
+.pbs-assignment-files strong { font-size: 13px; overflow-wrap: anywhere; }
+.pbs-academy-notice { padding: 24px 0; border-top: 1px solid #ccb98b; }
+.pbs-academy-notice:first-of-type { padding-top: 0; border-top: 0; }
+.pbs-academy-notice h3 { display: flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 600; }
+.pbs-academy-notice > p { line-height: 1.7; font-size: 14px; margin-top: 16px; }
+.pbs-academy-notice > small { display: block; color: #536b7f; font-size: 12px; margin-top: 16px; }
+.pbs-journey-heading { display: flex; justify-content: space-between; align-items: center; gap: 24px; padding: 28px; background: #d4a94d12; border: 1px solid #d4a94d60; border-radius: 20px; color: #f4f7fa; }
+.pbs-journey-heading svg { color: var(--studio-gold); }
+.pbs-journey-heading h2 { font-size: clamp(24px, 3vw, 36px); font-weight: 500; line-height: 1.2; margin-block: 12px; }
+.pbs-journey-heading p { color: #b9cedf; font-size: 14px; line-height: 1.6; }
+.pbs-journey-summary { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 24px; margin-block: 28px; padding-block: 24px; border-block: 1px solid #cbb78a; }
+.pbs-journey-summary strong { display: block; color: #13446d; font-size: 32px; font-weight: 500; line-height: 1.1; }
+.pbs-journey-summary strong small { color: #7b6f56; font-size: 18px; }
+.pbs-journey-summary span { display: block; color: #536b7f; font-size: 12px; margin-top: 8px; }
+.pbs-journey-batch { display: flex; gap: 8px; align-items: center; font-size: 13px; color: #536b7f; }
+.pbs-roadmap { list-style: none; padding: 0; margin: 24px 0; }
+.pbs-roadmap > li { display: grid; grid-template-columns: 80px minmax(0,1fr); gap: 20px; min-height: 160px; }
+.pbs-roadmap-track { position: relative; display: grid; place-items: center; }
+.pbs-roadmap-track > svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.pbs-roadmap-track path { fill: none; stroke: #c1b38e; stroke-width: 7; }
+.pbs-roadmap-track > span { position: relative; z-index: 1; display: grid; place-items: center; width: 36px; height: 36px; border: 2px solid #b7a277; border-radius: 50%; color: #506a80; background: #ede4cc; font-size: 13px; }
+.pbs-roadmap-step { border: 1px solid #cbb78a; background: #f4f7fa40; border-radius: 14px; padding: 24px; margin-block: 12px; }
+.pbs-roadmap-step h3 { font-size: 18px; font-weight: 500; line-height: 1.4; }
+.pbs-roadmap-step > p { color: #536b7f; font-size: 13px; line-height: 1.7; margin-block: 12px; }
+.pbs-roadmap-step > progress { width: 100%; height: 6px; accent-color: var(--studio-accent); }
+.pbs-roadmap-step ul { list-style: none; display: grid; gap: 10px; padding: 0; margin-top: 16px; font-size: 13px; color: #3e5e76; }
+.pbs-roadmap-step li { display: flex; gap: 8px; align-items: flex-start; }
+.pbs-roadmap-step li svg { margin-top: 2px; flex-shrink: 0; }
+.pbs-roadmap .is-current .pbs-roadmap-step { border-color: var(--studio-accent); box-shadow: inset 3px 0 0 var(--studio-gold); }
+.pbs-roadmap .is-complete .pbs-roadmap-track path { stroke: var(--studio-accent); }
+.pbs-roadmap .is-complete .pbs-roadmap-track > span { border-color: var(--studio-accent); background: var(--studio-accent); color: #f4f7fa; }
+.pbs-roadmap .is-current .pbs-roadmap-track > span { border-color: #9c752c; background: var(--studio-gold); color: #18334b; }
+.pbs-roadmap .is-locked .pbs-roadmap-step { background: #d4a94d0a; }
+.pbs-roadmap-step { animation: pbs-roadmap-enter 320ms ease-out both; }
+@keyframes pbs-roadmap-enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.pbs-payout-bank-summary, .pbs-reset-preserved { display: flex; align-items: flex-start; gap: 16px; padding: 20px; margin-block: 20px; border: 1px solid #cbb78a; border-radius: 12px; background: #d4a94d12; }
+.pbs-payout-bank-summary > svg, .pbs-reset-preserved > svg { flex-shrink: 0; color: var(--studio-accent); }
+.pbs-payout-bank-summary p, .pbs-payout-bank-summary small { display: block; margin-top: 8px; font-size: 13px; line-height: 1.6; color: #536b7f; }
+.pbs-bank-details { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 20px; padding: 20px; border: 1px solid #cbb78a; border-radius: 12px; }
+.pbs-bank-details dt { color: #536b7f; font-size: 12px; }
+.pbs-bank-details dd { margin-top: 6px; font-size: 15px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.pbs-reset-counts { display: flex; flex-wrap: wrap; gap: 24px; margin-block: 24px; }
+.pbs-reset-counts dt { color: #536b7f; font-size: 12px; }
+.pbs-reset-counts dd { font-size: 28px; color: #143c5c; margin-top: 8px; }
+.pbs-reset-preserved ul { list-style: disc; padding-left: 18px; margin-top: 12px; display: grid; gap: 8px; font-size: 13px; color: #536b7f; }
+@media (max-width: 650px) {
+  .pbs-journey-heading { align-items: flex-start; flex-direction: column; padding: 24px; }
+  .pbs-journey-summary { gap: 16px; }
+  .pbs-journey-summary strong { font-size: 24px; }
+  .pbs-journey-summary span { line-height: 1.5; }
+  .pbs-roadmap > li { grid-template-columns: 44px minmax(0,1fr); gap: 12px; }
+  .pbs-roadmap-track > span { width: 30px; height: 30px; }
+  .pbs-roadmap-step { padding: 16px; }
+  .pbs-bank-details { grid-template-columns: 1fr; }
+  .pbs-watching-progress { grid-template-columns: 1fr; }
+  .pbs-batch-card { padding: 20px; }
+}
+@media (prefers-reduced-motion: reduce) { .pbs-roadmap-step { animation: none; } }

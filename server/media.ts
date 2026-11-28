@@ -11,6 +11,7 @@ import { httpsLink } from './inputs.js';
 import { hasCourseAccess } from './records.js';
 import { isMicrosoftVideo, videoPlayback } from './video.js';
 import { resolveMicrosoftVideo } from './microsoft-video.js';
+import { requireLessonRelease } from './learning-access.js';
 
 const videoTypes = { 'video/mp4': '.mp4', 'video/webm': '.webm' } as const;
 const routes = '/api/admin/courses/:courseId/modules/:moduleId/lessons';
@@ -132,6 +133,7 @@ export function mountMedia(app: Express, db: WritableDatabase, hosted: boolean, 
     }
     const { id, oldFile } = await transaction(db, async tx => {
       await requireAccount(tx, req, 'admin');
+      await getModule(tx, req.params.courseId, moduleId);
       const saved = await saveLesson(tx, moduleId, lesson, source ? { sourceUrl: source, fileName: '', contentType: '' } : null, replace);
       if (source) {
         await tx.prepare('DELETE FROM lesson_video_owners WHERE lesson_id = ?').run(saved.id);
@@ -146,7 +148,14 @@ export function mountMedia(app: Express, db: WritableDatabase, hosted: boolean, 
   app.post(`${routes}/upload`, route(async (req, res) => {
     const admin = await requireAccount(db, req, 'admin');
     const moduleId = await getModule(db, req.params.courseId, req.params.moduleId);
-    if (!cloud) return res.json({ storage: 'local' });
+    if (!cloud) {
+      const size = typeof req.body?.size === 'number' ? req.body.size : 0, type = checkFile(req.body?.contentType, size), id = makeId(), expiresAt = Date.now() + 86400000;
+      await transaction(db, async tx => {
+        await getModule(tx, req.params.courseId, moduleId);
+        await tx.prepare('INSERT INTO video_uploads (id, account_id, module_id, content_type, size, expires_at) VALUES (?, ?, ?, ?, ?, ?)').run(id,admin.id,moduleId,type,size,expiresAt);
+      });
+      return res.json({ storage: 'local', uploadId:id, expiresAt });
+    }
     if (!blobConfigured) throw new RequestError(503, 'Connect private video storage before uploading files. You can add a video link now.');
 
     const size = typeof req.body?.size === 'number' ? req.body.size : 0;
@@ -159,9 +168,12 @@ export function mountMedia(app: Express, db: WritableDatabase, hosted: boolean, 
     const { presignedUrl } = await presignUrl(token, {
       access: 'private', operation: 'put', pathname, validUntil, ...constraints,
     });
-    await db.prepare('INSERT INTO video_uploads (id, account_id, module_id, content_type, size, expires_at) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(id, admin.id, moduleId, contentType, size, validUntil);
-    res.json({ storage: 'blob', uploadId: id, url: presignedUrl });
+    await transaction(db, async tx => {
+      await getModule(tx, req.params.courseId, moduleId);
+      await tx.prepare('INSERT INTO video_uploads (id, account_id, module_id, content_type, size, expires_at) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(id, admin.id, moduleId, contentType, size, validUntil);
+    });
+    res.json({ storage: 'blob', uploadId: id, url: presignedUrl, expiresAt:validUntil });
   }));
 
   app.post(`${routes}/upload/:id`, route(async (req, res) => {
@@ -176,6 +188,7 @@ export function mountMedia(app: Express, db: WritableDatabase, hosted: boolean, 
     await verifyBlob(fileName, upload);
     const result = await transaction(db, async tx => {
       await requireAccount(tx, req, 'admin');
+      await getModule(tx, req.params.courseId, moduleId);
       const current = await getUpload(tx, req.params.id, admin.id, moduleId);
       if (current.lessonId) return { id: current.lessonId, oldFile: '' };
       const lesson = await saveLesson(tx, moduleId, details, { sourceUrl: '', fileName, contentType: current.contentType }, replace);
@@ -187,12 +200,15 @@ export function mountMedia(app: Express, db: WritableDatabase, hosted: boolean, 
   }));
 
   app.post(`${routes}/file`, route(async (req, res) => {
-    await requireAccount(db, req, 'admin');
+    const admin = await requireAccount(db, req, 'admin');
     if (cloud) throw badRequest('Use the cloud upload flow to save videos on this server.');
     const moduleId = await getModule(db, req.params.courseId, req.params.moduleId);
     const lesson = lessonFields(req.query);
     const replace = field(req.query.replaceId, 'lesson ID', 80, false);
     const contentType = checkFile(req.get('content-type')?.split(';')[0], Number(req.get('content-length')));
+    const uploadId = field(req.query.uploadId,'upload session',80,false), upload = uploadId ? await getUpload(db,uploadId,admin.id,moduleId) : undefined;
+    if(upload?.lessonId){req.resume();return res.json({id:upload.lessonId});}
+    if(upload&&(upload.contentType!==contentType||upload.size!==Number(req.get('content-length'))))throw badRequest('This file does not match the prepared upload.');
     const name = `${makeId()}${videoTypes[contentType]}`;
     const target = path.join(videoDirectory, name);
     const temp = `${target}.partial`;
@@ -208,11 +224,15 @@ export function mountMedia(app: Express, db: WritableDatabase, hosted: boolean, 
       }
       if (!matchesVideoFormat(header, contentType)) throw badRequest('The uploaded bytes do not match the video format.');
       await rename(temp, target);
-      const { id, oldFile } = await transaction(db, async tx => {
+      const { id, oldFile, reused } = await transaction(db, async tx => {
         await requireAccount(tx, req, 'admin');
-        return saveLesson(tx, moduleId, lesson, { sourceUrl: '', fileName: name, contentType }, replace);
+        await getModule(tx, req.params.courseId, moduleId);
+        if(uploadId){const latest=await getUpload(tx,uploadId,admin.id,moduleId);if(latest.lessonId)return{id:latest.lessonId,oldFile:'',reused:true};}
+        const result=await saveLesson(tx, moduleId, lesson, { sourceUrl: '', fileName: name, contentType }, replace);
+        if(uploadId)await tx.prepare('UPDATE video_uploads SET lesson_id=? WHERE id=?').run(result.id,uploadId);
+        return {...result,reused:false};
       });
-      saved = true;
+      saved = !reused;
       await removePriorFile(oldFile);
       res.status(replace ? 200 : 201).json({ id });
     } finally {
@@ -226,6 +246,7 @@ export function mountMedia(app: Express, db: WritableDatabase, hosted: boolean, 
     const lesson = await db.prepare(`SELECT l.source_url AS sourceUrl, m.course_id AS courseId
       FROM lessons l JOIN modules m ON m.id = l.module_id WHERE l.id = ?`).get(req.params.id);
     if (!lesson || !await hasCourseAccess(db, account, String(lesson.courseId))) throw notFound('This video is unavailable.');
+    await requireLessonRelease(db,account,req.params.id);
     if (lesson.sourceUrl && isMicrosoftVideo(String(lesson.sourceUrl))) await microsoftVideo(db, String(lesson.courseId), req.params.id, String(lesson.sourceUrl));
     res.json({ ready: true });
   }));
@@ -236,6 +257,7 @@ export function mountMedia(app: Express, db: WritableDatabase, hosted: boolean, 
       FROM lessons l JOIN modules m ON m.id = l.module_id WHERE l.id = ?`).get(req.params.id) as
       { fileName: string; sourceUrl: string; contentType: string; courseId: string } | undefined;
     if (!lesson || !await hasCourseAccess(db, account, lesson.courseId)) throw notFound('This video is unavailable.');
+    await requireLessonRelease(db,account,req.params.id);
     if (!lesson.fileName && lesson.sourceUrl && isMicrosoftVideo(lesson.sourceUrl)) {
       // A video-element redirect stays inside the player and lets Microsoft serve
       // byte ranges for seeking without buffering an entire lesson in Vercel.

@@ -1,3 +1,4 @@
+import { previouslyWatched } from './viewing-fixtures.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -60,7 +61,7 @@ test('PBS approval credentials, private feedback and financial records', async t
       await req(visitor, `/admin/students/${applied.account.id}/access-package`, undefined, 'GET', 401);
     });
     await t.test('email retries do not duplicate messages and delivery history contains no password', async () => {
-      await db.prepare('INSERT INTO microsoft_connections VALUES (?, ?, ?, ?, ?)').run(adminId, 'qa-sender@example.invalid', 'Isolated sender', 'unused-test-cache', new Date().toISOString());
+      await db.prepare('INSERT INTO microsoft_mail_connections VALUES (?, ?, ?, ?, ?)').run(adminId, 'qa-sender@example.invalid', 'Isolated sender', 'unused-test-cache', new Date().toISOString());
       let sends = 0;
       const transport: any = async (_db: unknown, id: string, to: string, subject: string, body: string) => { sends++; assert.equal(id, adminId); assert.equal(to, applied.account.email); assert.match(subject, /approved/); assert.ok(body.includes(approval.access.password)); };
       assert.equal((await deliverAccessEmail(db, adminId, approval.access, 'qa-email-1', transport)).status, 'accepted');
@@ -70,7 +71,7 @@ test('PBS approval credentials, private feedback and financial records', async t
       assert.equal((await deliverAccessEmail(db, adminId, approval.access, 'qa-email-2', timeout)).status, 'unknown'); assert.equal(uncertain, 1);
       const records = JSON.stringify(await db.prepare('SELECT * FROM access_deliveries').all()); assert.equal(records.includes(approval.access.password), false); assert.equal(records.includes(approval.access.body), false);
       await assert.rejects(() => deliverAccessEmail(db, adminId, { ...approval.access, email: 'wrong@example.invalid' }, 'qa-wrong-recipient', transport), /changed/);
-      await db.prepare('DELETE FROM microsoft_connections WHERE admin_id = ?').run(adminId);
+      await db.prepare('DELETE FROM microsoft_mail_connections WHERE admin_id = ?').run(adminId);
     });
     await t.test('first sign-in requires a new password and permanent passwords cannot be emailed', async () => {
       const login = await req(student, '/auth/login', { identifier: applied.account.email, password: approval.access.password, role: 'student' }); assert.equal(login.account.mustChangePassword, true);
@@ -91,6 +92,7 @@ test('PBS approval credentials, private feedback and financial records', async t
     });
     await t.test('feedback requires completion and a real image; completion date and name come from records', async () => {
       await req(student, '/student/feedback', reviewInput(), 'POST', 409);
+      await previouslyWatched(db,applied.account.id,lessonId);
       await req(student, `/student/lessons/${lessonId}/completion`, { completed: true }, 'POST', 204);
       await req(student, `/student/courses/${courseId}/assessment`, { answers: [0] });
       const eligible = await req(student, '/student/feedback'); assert.equal(eligible.eligible.length, 1);

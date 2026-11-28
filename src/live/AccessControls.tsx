@@ -1,17 +1,19 @@
+import {PermanentStudentDelete} from './PermanentStudentDelete';
 import type { Course, Enrollment, StudentRecord } from './types';
 import { send } from './api';
 import { DialogForm, Field, Input, PasswordInput, value } from './ui';
 
 export type AccessControlDialog =
-  | { kind: 'student-status' | 'delete-student' | 'restore-student'; student: StudentRecord }
+  | { kind: 'student-status' | 'delete-student' | 'archive-student' | 'restore-student'; student: StudentRecord }
   | { kind: 'pause-course'; course: Course }
   | { kind: 'pause-enrollment'; enrollment: Enrollment };
 
 export function AccessControlForm({ control, onClose, onSaved }: { control: AccessControlDialog; onClose: () => void; onSaved: (message: string) => Promise<void> }) {
+  if(control.kind==='delete-student')return <PermanentStudentDelete student={control.student} onClose={onClose} onSaved={onSaved}/>;
   const student = 'student' in control ? control.student : undefined;
-  const removing = control.kind === 'delete-student', restoring = control.kind === 'restore-student';
+  const removing = control.kind === 'archive-student', restoring = control.kind === 'restore-student';
   const paused = control.kind === 'pause-course' ? Boolean(control.course.paused) : control.kind === 'pause-enrollment' ? Boolean(control.enrollment.accessPaused) : false;
-  const title = student ? removing ? 'Delete student' : restoring ? 'Restore student' : student.accountStatus === 'inactive' ? 'Reactivate student' : 'Deactivate student'
+  const title = student ? removing ? 'Archive student' : restoring ? 'Restore student' : student.accountStatus === 'inactive' ? 'Reactivate student' : 'Deactivate student'
     : control.kind === 'pause-course' ? paused ? 'Resume course' : 'Pause course' : paused ? 'Resume student course access' : 'Pause student course access';
   return <DialogForm title={title} detail={student?.email || (control.kind === 'pause-course' ? control.course.title : control.kind === 'pause-enrollment' ? `${control.enrollment.studentName} · ${control.enrollment.courseTitle}` : '')} submit={title} onClose={onClose} onSubmit={async form => {
     if (student) {

@@ -1,3 +1,4 @@
+import {RemoveEnrollments,type EnrollmentRemovalResult} from './RemoveEnrollments';
 import { useState } from 'react';
 import { ArrowDownToLine, ArrowRight, Bell, CalendarDays, Check, Cloud, CreditCard, IndianRupee, Search, Settings, ShieldCheck, Users } from 'lucide-react';
 import { send, messageFrom } from './api';
@@ -74,6 +75,7 @@ export function PaymentLedger({ data, academy, open, onSaved }: {
 }) {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('all');
+  const [selected,setSelected]=useState<string[]>([]),[removing,setRemoving]=useState<string[]>(),[removalNotice,setRemovalNotice]=useState('');
   const [dialog, setDialog] = useState<{ kind: 'reminder' | 'followup'; enrollment: Enrollment } | { kind: 'settings' }>();
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
   const records = data.enrollments.filter(item => {
@@ -89,6 +91,8 @@ export function PaymentLedger({ data, academy, open, onSaved }: {
     <Panel title="Enrollment & payment ledger" action={<a className="pbs-button pbs-button-outline" href="/api/admin/payment-ledger.csv"><ArrowDownToLine size={16} /> Export CSV</a>}>
       <div className="pbs-ledger-filters"><label className="pbs-live-search"><Search size={17} /><input type="search" aria-label="Search payment ledger" placeholder="Find a student, email or course" value={query} onChange={e => setQuery(e.target.value)} /></label>
         <Field label="Payment status"><select value={filter} onChange={e => setFilter(e.target.value)}><option value="all">All records</option><option value="review">Reference to verify</option><option value="due">Balance due</option><option value="overdue">Past due date</option><option value="paid">Fully paid</option></select></Field></div>
+      {removalNotice&&<p className="pbs-form-status" role="status">{removalNotice}</p>}
+      <div className="pbs-actions"><Button quiet disabled={!records.length||records.length>25} onClick={()=>setSelected(records.map(e=>e.id))}>Select visible enrollments</Button><Button quiet disabled={!selected.length} onClick={()=>setSelected([])}>Clear selection</Button><Button quiet disabled={!selected.length} onClick={()=>setRemoving([...selected])}>Remove selected enrollments{selected.length?` (${selected.length})`:""}</Button></div>
       <p className="pbs-muted">{records.length} records · Amounts in INR · Verified payments only</p>
       {!records.length && <Empty title="No matching payment records">Applications and admin enrollments appear here with their complete fee history.</Empty>}
       {records.map(item => {
@@ -96,6 +100,7 @@ export function PaymentLedger({ data, academy, open, onSaved }: {
         const reminder = academy.reminders.find(row => row.enrollmentId === item.id);
         const access = academy.grants.find(row => row.enrollmentId === item.id);
         return <article className="pbs-ledger-record" key={item.id}>
+          <label className="pbs-check" style={{marginBottom:12}}><input type="checkbox" aria-label={`Select enrollment for ${item.email} — ${item.courseTitle}`} checked={selected.includes(item.id)} disabled={!selected.includes(item.id)&&selected.length>=25} onChange={event=>setSelected(current=>event.target.checked?[...current,item.id]:current.filter(id=>id!==item.id))}/> Select enrollment</label>
           <div className="pbs-section-top"><div><h3>{item.studentName}</h3><p className="pbs-muted">{item.email}</p><p>{item.courseTitle}</p></div><Status value={item.status} /></div>
           <div className="pbs-ledger-amounts"><div><small>Agreed fee</small><strong>{money(item.total)}</strong></div><div><small>Verified paid</small><strong>{money(item.paid)}</strong></div><div><small>Outstanding</small><strong>{money(balance(item))}</strong></div><div><small>Awaiting verification</small><strong>{money(item.requestedPayment)}</strong></div></div>
           <p className="pbs-muted">{detail?.source === 'admin' ? 'Enrolled by admin' : detail?.source === 'student' ? 'Student application' : 'Enrollment recorded'} · {dateLabel(item.submittedAt)}{detail?.dueDate ? ` · Due ${dateLabel(detail.dueDate)}` : ''}</p>
@@ -116,6 +121,7 @@ export function PaymentLedger({ data, academy, open, onSaved }: {
       {!academy.reminders.length && <Empty title="No reminders sent">Send a reminder from a student's payment record.</Empty>}
       {academy.reminders.slice(0, 20).map(reminder => <article className="pbs-record-row" key={reminder.id}><div><strong>{data.enrollments.find(item => item.id === reminder.enrollmentId)?.studentName || 'Student'}</strong><p className="pbs-muted">{dateTimeLabel(reminder.sentAt)} · {reminder.channel} · {reminder.status}</p><p className="pbs-pre-wrap">{reminder.body}</p>{reminder.error && <p className="pbs-form-error">{reminder.error}</p>}</div></article>)}
     </Panel>
+    {removing&&<RemoveEnrollments ids={removing} onClose={()=>setRemoving(undefined)} onSaved={async(result:EnrollmentRemovalResult)=>{await onSaved();setRemoving(undefined);setSelected([]);setRemovalNotice(`${result.removed.enrollments} enrollments and ${result.removed.receipts} receipts removed. Student accounts and passwords were kept.${result.permissionCleanupPending?' OneDrive permission cleanup is queued; retry from Data reset if needed.':''}`);}}/>}
     {dialog?.kind === 'settings' && <PaymentSettingsForm payment={academy.payment} onClose={() => setDialog(undefined)} onSaved={async () => { await onSaved(); setDialog(undefined); }} />}
     {dialog?.kind === 'followup' && <FollowupForm enrollment={dialog.enrollment} detail={academy.details.find(item => item.enrollmentId === dialog.enrollment.id)} onClose={() => setDialog(undefined)} onSaved={async () => { await onSaved(); setDialog(undefined); }} />}
     {dialog?.kind === 'reminder' && <ReminderForm enrollment={dialog.enrollment} onClose={() => setDialog(undefined)} onSaved={async () => { await onSaved(); }} />}

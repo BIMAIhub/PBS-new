@@ -32,7 +32,9 @@ export async function certificateTemplate(db: Database, courseId: string): Promi
   const row = await db.prepare(`SELECT course_id AS courseId, title, issuer, signer, signer_role AS signerRole,
     design, primary_color AS primaryColor, accent_color AS accentColor FROM certificate_templates
     WHERE course_id IN (?, '') ORDER BY CASE WHEN course_id = ? THEN 0 ELSE 1 END LIMIT 1`).get(courseId, courseId);
-  return row ? row as unknown as CertificateTemplate : defaultTemplate;
+  const assets=await db.prepare(`SELECT logo_image AS logoImage,signature_image AS signatureImage,detail_text AS detailText,duration_label AS durationLabel FROM certificate_design_assets WHERE course_id IN (?, '') ORDER BY CASE WHEN course_id=? THEN 0 ELSE 1 END LIMIT 1`).get(courseId,courseId);
+  const second=await db.prepare(`SELECT second_signer AS secondSigner,second_role AS secondSignerRole,second_signature_image AS secondSignatureImage FROM certificate_signature_details WHERE course_id IN (?, '') ORDER BY CASE WHEN course_id=? THEN 0 ELSE 1 END LIMIT 1`).get(courseId,courseId);
+  return {...(row?row as unknown as CertificateTemplate:defaultTemplate),...(assets||{}),...(second||{})};
 }
 
 export async function certificateRecords(db: Database, accountId?: string) {
@@ -40,7 +42,10 @@ export async function certificateRecords(db: Database, accountId?: string) {
     student_name AS studentName, course_title AS courseTitle, score, issued_at AS issuedAt,
     public_token AS publicToken, published, revoked_at AS revokedAt FROM certificates
     ${accountId ? 'WHERE account_id = ?' : ''} ORDER BY issued_at DESC`).all(...(accountId ? [accountId] : []));
-  return Promise.all(rows.map(async row => ({ ...row, published: Boolean(row.published), template: await certificateTemplate(db, String(row.courseId)) } as unknown as CertificateRecord)));
+  return Promise.all(rows.map(async row => {
+    const history=await db.prepare('SELECT completed_at AS completedAt,mode,original_number AS originalNumber,qualification,score_recorded AS scoreRecorded,file_id AS fileId FROM legacy_training WHERE certificate_id=?').get(row.id);
+    return { ...row,published:Boolean(row.published),historical:history ? {completedAt:String(history.completedAt),mode:String(history.mode),originalNumber:String(history.originalNumber),qualification:String(history.qualification),scoreRecorded:Boolean(history.scoreRecorded),hasOriginal:Boolean(history.fileId)}:undefined,template:await certificateTemplate(db,String(row.courseId)) } as unknown as CertificateRecord;
+  }));
 }
 
 export async function enrollmentDetails(db: Database, id: string) {

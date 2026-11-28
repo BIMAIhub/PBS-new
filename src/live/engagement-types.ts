@@ -1,5 +1,5 @@
 export interface ReferralProgram {
-  enabled: boolean; autoCredit: boolean; rewardAmount: number; waitDays: number; minimumFee: number;
+  enabled: boolean; autoCredit: boolean; bankPayoutsEnabled: boolean; rewardAmount: number; waitDays: number; minimumFee: number;
   requireReferrerPaid: boolean; requireStudentPaid: boolean; friendDiscountPercent: number; revision: string;
 }
 export interface ReferralProgress {
@@ -10,11 +10,12 @@ export interface ReferralProgress {
 }
 export interface WalletEntry { id: string; amount: number; kind: string; note: string; createdAt: string }
 export interface ReferralDashboard {
+  codeEnabled?:boolean;
   program: ReferralProgram; code: string; referrals: ReferralProgress[]; balance: number; earned: number;
   total: number; credited: number; waiting: number; entries: WalletEntry[];
 }
-export type MailTemplateId = 'welcome' | 'login' | 'portal_guide' | 'payment_reminder' | 'certificate' | 'referral_credit' | 'offer' | 'update' | 'custom';
+export type MailTemplateId = 'app_guide' | 'app_launch' | 'announcement' | 'welcome' | 'login' | 'portal_guide' | 'payment_reminder' | 'certificate' | 'referral_credit' | 'payout_paid' | 'offer' | 'update' | 'custom';
 export interface MailTemplate { id: MailTemplateId; label: string; subject: string; body: string; marketing: boolean }
-export interface MailAutomation { enabled: boolean; senderId: string; welcome: boolean; certificate: boolean; referral_credit: boolean }
+export interface MailAutomation { enabled: boolean; senderId: string; welcome: boolean; certificate: boolean; referral_credit: boolean; payout_paid:boolean }
 export interface MailCampaign { id: string; title: string; status: string; subject: string; body: string; message: string; templateId: MailTemplateId; total: number; accepted: number; failed: number; pending: number; skipped: number; uncertain: number; createdAt: string; revision: string }
-export interface MailDelivery { id: string; email: string; name: string; status: string; error: string; createdAt: string; sentAt: string; subject: string }
+export interface MailDelivery { kind?:'campaign'|'certificate'|'access'; id: string; email: string; name: string; status: string; error: string; createdAt: string; sentAt: string; subject: string }

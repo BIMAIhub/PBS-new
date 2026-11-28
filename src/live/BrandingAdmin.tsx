@@ -4,6 +4,7 @@ import { useBranding } from './Branding';
 import { defaultBrandSettings, type Branding, type BrandSettings } from './branding-types';
 import { api, messageFrom, send } from './api';
 import { Button, Field, FormError, Input, Panel } from './ui';
+import { InstitutionStampAdmin } from './InstitutionStamp';
 
 function BrandImageEditor({ kind }: { kind: 'logo' | 'hero' }) {
   const { brand, apply } = useBranding();
@@ -70,7 +71,7 @@ export function BrandingAdmin() {
         <div className="pbs-brand-colors">{[{ key: 'primaryColor', label: 'Primary blue' }, { key: 'accentColor', label: 'Accent gold' }, { key: 'backgroundColor', label: 'Reading surface' }].map(({ key, label }) => <Field key={key} label={label}><span><input type="color" aria-label={label} value={draft[key as keyof BrandSettings] as string} onChange={event => update(key as 'primaryColor', event.target.value)} /><code>{draft[key as keyof BrandSettings]}</code></span></Field>)}</div>
         <label className="pbs-appearance-toggle"><span><strong>Glass surfaces</strong><small>Translucent panels and layered blue backgrounds</small></span><input type="checkbox" checked={draft.glassEnabled} onChange={event => update('glassEnabled', event.target.checked)} /></label>
         <label className="pbs-appearance-toggle"><span><strong>Interface animation</strong><small>Page transitions, dialog entrances and interaction feedback. Device motion preferences always take priority.</small></span><input type="checkbox" checked={draft.motionEnabled} onChange={event => update('motionEnabled', event.target.checked)} /></label>
-        <p className="pbs-muted">Payment payee details and previously issued certificate records keep their saved values. Certificate wording remains editable in Certificates.</p>
+        <p className="pbs-muted">Payment payee details and previously issued certificate records keep their saved values. Manage the two certificate signatories in Certificates. The approved certificate artwork stays fixed.</p>
         <div className="pbs-actions"><button className="pbs-button pbs-button-primary" disabled={busy || !loaded}>{busy ? 'Saving…' : 'Save branding'}</button><Button quiet disabled={busy} onClick={() => setDraft(defaultBrandSettings)}>Reset form to PBS defaults</Button></div>
       </form>
     </Panel><aside className="pbs-branding-preview"><div className="pbs-brand-preview-scene" style={{ backgroundImage: `linear-gradient(110deg, rgba(5,23,41,.94), rgba(8,35,60,.55)), url("${brand.heroUrl}")` }}>
@@ -78,5 +79,6 @@ export function BrandingAdmin() {
       <p>{draft.heroEyebrow}</p><h2 className="pbs-pre-wrap">{draft.heroTitle}</h2><span>{draft.heroDescription}</span>
       <div className="pbs-brand-preview-glass"><strong>Your next chapter in BIM</strong><span>Preview of your colour palette</span><div style={{ background: draft.primaryColor, color: '#fff' }}>Continue learning</div><i style={{ background: draft.accentColor }} /></div>
     </div><p className="pbs-muted"><ImagePlus size={15} />Preview only. Save details or publish an image to update the website.</p></aside></div>
+    <InstitutionStampAdmin/>
   </div>;
 }
