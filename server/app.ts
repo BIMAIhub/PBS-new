@@ -1,4 +1,5 @@
 import express from 'express';
+import {mountEnrollmentErasure} from './enrollment-erasure.js';
 import {mountStudentErasure} from './student-erasure.js';
 import { openDatabase } from './database.js';
 import { provisionInitialAdministrator } from './administrators.js';
@@ -107,6 +108,7 @@ export async function createPortalApp(hosted = false, dependencies: {microsoftGr
   mountAdmin(app, db, hosted);
   mountCourseContent(app, db);
   mountControls(app, db, hosted);
+  mountEnrollmentErasure(app,db,{defer:dependencies.defer,request:dependencies.microsoftGraph});
   mountStudentErasure(app,db,{defer:dependencies.defer,request:dependencies.microsoftGraph});
   mountPlayback(app, db, hosted);
   mountAdmissions(app, db, hosted);

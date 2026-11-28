@@ -58,6 +58,7 @@ export async function queueAutomation(db: WritableDatabase, kind: 'welcome' | 'c
   const variables = await templateVariables(db, origin, accountId, extra);
   const queued=await transaction(db, async tx => {
     if(!await tx.prepare("SELECT 1 FROM accounts a WHERE a.id=? AND a.role='student' AND NOT EXISTS(SELECT 1 FROM account_controls c WHERE c.account_id=a.id AND c.status<>'active')").get(accountId))return false;
+    if(kind==='welcome'&&eventKey.startsWith('welcome:')&&!await tx.prepare("SELECT 1 FROM enrollments WHERE id=? AND account_id=? AND status='approved'").get(eventKey.split(':')[1],accountId))return false;
     await tx.prepare(`INSERT OR IGNORE INTO mail_outbox (id,event_key,admin_id,account_id,email,name,subject,body,origin,created_at)
       VALUES (?,?,?,?,?,?,?,?,?,?)`).run(makeId(), eventKey, adminId, accountId, String(recipient.email), String(recipient.name), fillMailTemplate(template.subject, variables), fillMailTemplate(template.body, variables), origin, now());
     return true;
