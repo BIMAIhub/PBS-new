@@ -214,7 +214,7 @@ function StudentRecordPanel({ student, open, onClose, onSaved }: { student: Stud
         <div><dt>Lessons completed</dt><dd>{student.completedLessons}</dd></div>
       </dl>
       <div className="pbs-actions">
-        {student.accountStatus === 'deleted' ? <Button onClick={() => open({ kind: 'restore-student', student })}>Restore student</Button> : <><Button quiet onClick={() => open({ kind: 'student-status', student })}>{student.accountStatus === 'inactive' ? 'Reactivate student' : 'Deactivate account'}</Button><Button quiet onClick={() => open({ kind: 'delete-student', student })}>Delete student</Button></>}
+        {student.accountStatus === 'deleted' ? <Button onClick={() => open({ kind: 'restore-student', student })}>Restore student</Button> : <><Button quiet onClick={() => open({ kind: 'student-status', student })}>{student.accountStatus === 'inactive' ? 'Reactivate student' : 'Deactivate account'}</Button><Button quiet onClick={() => open({kind:'archive-student',student})}>Archive student</Button></>}<Button quiet onClick={()=>open({kind:'delete-student',student})}>Delete student permanently</Button>
         <Button disabled={student.accountStatus === 'deleted'} onClick={() => open({ kind: 'enroll', student })}>Assign course</Button>
         <Button quiet onClick={() => open({ kind: 'edit-student', student })}>Edit record</Button>
         <Button quiet onClick={() => open({ kind: 'reset', student })}>Reset password</Button>
@@ -343,7 +343,7 @@ export function AdminWorkspace({ account, onAccount, onSignOut }: {
         onReply={message => show({ kind: 'message', student: { id: message.studentId, name: message.studentName }, subject: `Re: ${message.subject}`.slice(0, 140) })} />}
     </WorkspaceChrome>
 
-    {dialog && ['student-status', 'delete-student', 'restore-student', 'pause-course', 'pause-enrollment'].includes(dialog.kind) && <AccessControlForm control={dialog as AccessControlDialog} onClose={close} onSaved={saved} />}
+    {dialog && ['student-status', 'delete-student', 'archive-student', 'restore-student', 'pause-course', 'pause-enrollment'].includes(dialog.kind) && <AccessControlForm control={dialog as AccessControlDialog} onClose={close} onSaved={saved} />}
     {dialog?.kind === 'payment-settings' && academy.data && <PaymentSettingsForm payment={academy.data.payment} onClose={close} onSaved={() => saved('Student payment destination saved.')} />}
     {dialog?.kind === 'course' && <CourseForm course={dialog.course} onClose={close} onSaved={() => { navigate('courses'); return saved('Course saved.'); }} />}
     {dialog?.kind === 'module' && <ModuleForm course={dialog.course} module={dialog.module} onClose={close} onSaved={() => saved(dialog.module ? 'Module updated.' : 'Module added.')} />}

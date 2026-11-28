@@ -9,11 +9,12 @@
     "start": "node dist/server.cjs --production",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test": "node --import tsx --test tests/academy.test.ts tests/experience.test.ts tests/branding.test.ts tests/live-classes.test.ts tests/admissions-feedback.test.ts tests/access-controls.test.ts tests/playback.test.ts tests/microsoft-content.test.ts tests/engagement.test.ts tests/documents.test.ts tests/learning-platform.test.ts tests/database-config.test.ts tests/upload-queue.test.ts tests/course-content.test.ts tests/mobile-app.test.ts tests/education.test.ts tests/certificate-sharing.test.ts tests/png-assets.test.ts tests/past-student-contacts.test.ts",
+    "test": "node --import tsx --test tests/academy.test.ts tests/experience.test.ts tests/branding.test.ts tests/live-classes.test.ts tests/admissions-feedback.test.ts tests/access-controls.test.ts tests/playback.test.ts tests/microsoft-content.test.ts tests/engagement.test.ts tests/documents.test.ts tests/learning-platform.test.ts tests/database-config.test.ts tests/upload-queue.test.ts tests/course-content.test.ts tests/mobile-app.test.ts tests/education.test.ts tests/certificate-sharing.test.ts tests/png-assets.test.ts tests/past-student-contacts.test.ts tests/mail-and-erasure.test.ts",
     "admin:setup": "node --import tsx scripts/admin-setup.ts",
     "video:add": "node scripts/add-video.mjs",
     "migrate:legacy": "node --import tsx scripts/import-legacy.ts",
-    "build:web": "node --import tsx scripts/check-database.ts && vite build"
+    "build:web": "node --import tsx scripts/check-database.ts && vite build",
+    "mail:check-domain": "node --import tsx scripts/check-mail-domain.ts"
   },
   "dependencies": {
     "@azure/msal-node": "^7.2.3",

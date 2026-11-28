@@ -9,6 +9,7 @@ import { badRequest, conflict, field, limitAttempts, notFound, RequestError, rou
 import { verifyPassword } from './passwords.js';
 import { courseById, enrollmentById } from './records.js';
 import { readMicrosoftContentLocation } from './microsoft-content.js';
+import {marketingMime} from './mail-mime.js';
 import { brandedEmail } from './email-layout.js';
 import { publicBranding } from './branding.js';
 
@@ -68,8 +69,9 @@ async function accessToken(db: Database, adminId: string, purpose: MicrosoftPurp
 }
 
 async function graphToken(token: string, path: string, init: RequestInit = {}) {
+  const headers=new Headers(init.headers);if(!headers.has('Content-Type'))headers.set('Content-Type','application/json');headers.set('Authorization',`Bearer ${token}`);
   const response = await fetch(`https://graph.microsoft.com/v1.0${path}`, {
-    ...init, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(20_000),
+    ...init, headers, signal: AbortSignal.timeout(20_000),
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({})) as { error?: { code?: string } };
@@ -105,8 +107,13 @@ export function portalOrigin(req: Request) {
 }
 
 export async function sendMicrosoftMail(db: Database, adminId: string, email: string, subject: string, body: string, options: { unsubscribeUrl?: string;attachments?:{name:string;contentType:string;contentBytes:string}[] } = {}) {
-  const html = brandedEmail(await publicBranding(db), subject, body, options.unsubscribeUrl);
-  await graphToken(await accessToken(db, adminId, 'mail'), '/me/sendMail', { method: 'POST', body: JSON.stringify({
+  const brand=await publicBranding(db),html=brandedEmail(brand,subject,body,options.unsubscribeUrl),token=await accessToken(db,adminId,'mail');
+  if(options.unsubscribeUrl&&!options.attachments?.length){
+    const profile=await graphToken(token,'/me?$select=mail,userPrincipalName');
+    const mime=marketingMime({from:String(profile.mail||profile.userPrincipalName||''),name:brand.academyName,to:email,subject,text:`${body}\n\n${brand.academyName}\nUnsubscribe from offers and updates: ${options.unsubscribeUrl}\nSupport: ${brand.supportEmail}`,html,unsubscribeUrl:options.unsubscribeUrl});
+    await graphToken(token,'/me/sendMail',{method:'POST',headers:{'Content-Type':'text/plain'},body:mime});return;
+  }
+  await graphToken(token, '/me/sendMail', { method: 'POST', body: JSON.stringify({
     message: { subject, body: { contentType: 'HTML', content: html }, toRecipients: [{ emailAddress: { address: email } }],...(options.attachments?.length?{attachments:options.attachments.map(file=>({'@odata.type':'#microsoft.graph.fileAttachment',...file}))}:{}) },
     saveToSentItems: true,
   }) });

@@ -1,3 +1,5 @@
+import {mountMailHistory,releaseExpiredMailLocks} from './mail-history.js';
+import {mountMailDeliverability} from './mail-deliverability.js';
 import { randomBytes } from 'node:crypto';
 import type { Express } from 'express';
 import { requireAccount } from './auth.js';
@@ -54,24 +56,27 @@ export async function queueAutomation(db: WritableDatabase, kind: 'welcome' | 'c
   if (!recipient) return { queued: false, reason: 'Student account is unavailable.' };
   const template = (await mailTemplates(db)).find(item => item.id === kind)!;
   const variables = await templateVariables(db, origin, accountId, extra);
-  await transaction(db, async tx => {
+  const queued=await transaction(db, async tx => {
+    if(!await tx.prepare("SELECT 1 FROM accounts a WHERE a.id=? AND a.role='student' AND NOT EXISTS(SELECT 1 FROM account_controls c WHERE c.account_id=a.id AND c.status<>'active')").get(accountId))return false;
     await tx.prepare(`INSERT OR IGNORE INTO mail_outbox (id,event_key,admin_id,account_id,email,name,subject,body,origin,created_at)
       VALUES (?,?,?,?,?,?,?,?,?,?)`).run(makeId(), eventKey, adminId, accountId, String(recipient.email), String(recipient.name), fillMailTemplate(template.subject, variables), fillMailTemplate(template.body, variables), origin, now());
+    return true;
   });
-  return { queued: true };
+  return { queued, ...(!queued?{reason:'Student account is unavailable.'}:{}) };
 }
 
 export async function processMailQueue(db: WritableDatabase, adminId?: string, limit = 10, transport: typeof sendMicrosoftMail = sendMicrosoftMail) {
+  await releaseExpiredMailLocks(db);
   const rows = await db.prepare(`SELECT * FROM mail_outbox WHERE status = 'pending' ${adminId ? 'AND admin_id = ?' : ''} ORDER BY created_at LIMIT ?`).all(...(adminId ? [adminId] : []), Math.min(20, Math.max(1, limit)));
   const result = { accepted: 0, failed: 0, uncertain: 0, skipped: 0 };
   for (const row of rows) {
-    const claim = await db.prepare("UPDATE mail_outbox SET status = 'sending' WHERE id = ? AND status = 'pending'").run(row.id);
-    if (!claim.changes) continue;
+    const claimed=await transaction(db,async tx=>{const claim=await tx.prepare("UPDATE mail_outbox SET status='sending' WHERE id=? AND status='pending'").run(row.id);if(!claim.changes)return false;await tx.prepare('INSERT INTO mail_delivery_locks VALUES (?,?,?) ON CONFLICT(outbox_id) DO UPDATE SET lease_token=excluded.lease_token,expires_at=excluded.expires_at').run(row.id,makeId(),Date.now()+120000);return true;});
+    if(!claimed)continue;
     let active = !row.account_id || Boolean(await db.prepare(`SELECT 1 FROM accounts a WHERE a.id = ? AND NOT EXISTS(SELECT 1 FROM account_controls c WHERE c.account_id=a.id AND c.status<>'active')`).get(row.account_id));
     if (String(row.event_key).startsWith('certificate:')) active = active && Boolean(await db.prepare("SELECT 1 FROM certificates WHERE id=? AND revoked_at=''").get(String(row.event_key).slice('certificate:'.length)));
     const contact = await db.prepare('SELECT consent, unsubscribed, unsubscribe_token FROM mail_contacts WHERE email = ?').get(row.email);
     if (!active || row.marketing && (!contact?.consent || contact.unsubscribed)) {
-      await db.prepare("UPDATE mail_outbox SET status='skipped', error=? WHERE id=?").run(active ? 'Recipient opted out of marketing.' : 'Account is inactive.', row.id); result.skipped++; continue;
+      await db.prepare("UPDATE mail_outbox SET status='skipped', error=? WHERE id=?").run(active ? 'Recipient opted out of marketing.' : 'Account is inactive.', row.id); await db.prepare('DELETE FROM mail_delivery_locks WHERE outbox_id=?').run(row.id); result.skipped++; continue;
     }
     let status = 'accepted', error = '';
     try {
@@ -84,7 +89,7 @@ export async function processMailQueue(db: WritableDatabase, adminId?: string, l
       error = problem instanceof RequestError ? problem.message : 'Delivery is uncertain. Check Microsoft Sent Items before creating another message.';
       if (confirmedFailure) result.failed++; else result.uncertain++;
     }
-    await db.prepare('UPDATE mail_outbox SET status=?,error=?,sent_at=? WHERE id=?').run(status, error, now(), row.id);
+    await transaction(db,async tx=>{await tx.prepare('UPDATE mail_outbox SET status=?,error=?,sent_at=? WHERE id=?').run(status,error,now(),row.id);await tx.prepare('DELETE FROM mail_delivery_locks WHERE outbox_id=?').run(row.id);});
   }
   return result;
 }
@@ -112,12 +117,13 @@ const campaignSql = `SELECT c.id,c.title,c.template_id AS templateId,c.subject,c
   (SELECT COUNT(*) FROM mail_outbox o WHERE o.campaign_id=c.id AND o.status IN ('sending','unknown')) AS uncertain FROM mail_campaigns c`;
 
 export function mountMail(app: Express, db: WritableDatabase, hosted: boolean) {
+  mountMailHistory(app,db);mountMailDeliverability(app,db);
   app.post('/api/admin/mail/check-connection',route(async(req,res)=>{const admin=await requireAccount(db,req,'admin'),id=await manualMailSender(db,admin.id);if(!id)throw conflict('Connect or select the institution mailing account in OneDrive & email.');res.json(await checkMicrosoftMail(db,id));}));
   app.get('/api/admin/mail', route(async (req, res) => {
-    const admin=await requireAccount(db, req, 'admin');
+    const admin=await requireAccount(db, req, 'admin');await releaseExpiredMailLocks(db);
     res.json({ effectiveSenderId:await manualMailSender(db,admin.id),templates: await mailTemplates(db), automation: await mailAutomation(db), scheduledProcessing: Boolean(process.env.CRON_SECRET),
       senders: await db.prepare('SELECT m.admin_id AS id,m.profile_email AS email,m.profile_name AS name FROM microsoft_mail_connections m').all(),
-      campaigns: await db.prepare(`${campaignSql} ORDER BY c.created_at DESC LIMIT 100`).all(),
+      campaigns: (await db.prepare(`${campaignSql} ORDER BY c.created_at DESC LIMIT 100`).all()).map(c=>({...c,status:c.status==='queued'&&!Number(c.pending)?Number(c.uncertain)||Number(c.failed)?'attention':'completed':c.status})),
       deliveries: await db.prepare(`SELECT * FROM (
         SELECT id,email,name,subject,status,error,created_at AS createdAt,sent_at AS sentAt,'campaign' AS kind FROM mail_outbox
         UNION ALL SELECT d.id,d.email,c.student_name AS name,'Certificate PDF' AS subject,d.status,d.error,d.created_at AS createdAt,d.sent_at AS sentAt,'certificate' AS kind FROM certificate_mail_deliveries d JOIN certificates c ON c.id=d.certificate_id
@@ -174,7 +180,7 @@ export function mountMail(app: Express, db: WritableDatabase, hosted: boolean) {
     const id=makeId(),revision=makeId();
     await transaction(db,async tx=>{
       await tx.prepare('INSERT INTO mail_campaigns (id,title,template_id,subject,body,message,admin_id,marketing,revision,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)').run(id,title,template.id,subject,body,message,admin.id,Number(template.marketing),revision,now());
-      for(const r of unique) { await ensureContact(tx,r.email,r.name,mode==='leads'?false:template.marketing); await tx.prepare('INSERT INTO mail_campaign_recipients VALUES (?,?,?,?)').run(id,r.email,r.name,r.accountId); if(r.courseId)await tx.prepare('INSERT INTO campaign_lead_links VALUES (?,?,?)').run(id,r.email,r.courseId); }
+      for(const r of unique) { if(r.accountId&&!await tx.prepare("SELECT 1 FROM accounts WHERE id=? AND role='student'").get(r.accountId))throw conflict('A selected student was removed. Review the audience again.'); await ensureContact(tx,r.email,r.name,mode==='leads'?false:template.marketing); await tx.prepare('INSERT INTO mail_campaign_recipients VALUES (?,?,?,?)').run(id,r.email,r.name,r.accountId); if(r.courseId)await tx.prepare('INSERT INTO campaign_lead_links VALUES (?,?,?)').run(id,r.email,r.courseId); }
       await audit(tx,admin.id,'Email campaign drafted',id,`${unique.length} recipients`);
     }); res.status(201).json({id,revision,total:unique.length});
   }));
@@ -191,8 +197,8 @@ export function mountMail(app: Express, db: WritableDatabase, hosted: boolean) {
       prepared.push({r,subject:fillMailTemplate(String(campaign.subject),vars),body:fillMailTemplate(String(campaign.body),vars)});
     }
     await transaction(db,async tx=>{
-      const current=await tx.prepare('SELECT status FROM mail_campaigns WHERE id=?').get(req.params.id); if(current?.status==='cancelled') throw conflict('This campaign is cancelled.');
-      for(const {r,subject,body} of prepared) await tx.prepare('INSERT OR IGNORE INTO mail_outbox (id,event_key,campaign_id,admin_id,account_id,email,name,subject,body,marketing,origin,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)').run(makeId(),`campaign:${campaign.id}:${r.email}`,campaign.id,sendingAccount,r.account_id,r.email,r.name,subject,body,campaign.marketing,portalOrigin(req),now());
+      const current=await tx.prepare('SELECT status FROM mail_campaigns WHERE id=?').get(req.params.id);if(!current)throw notFound('This campaign was removed.');if(current.status==='cancelled')throw conflict('This campaign is cancelled.');
+      for(const {r,subject,body} of prepared){if(!await tx.prepare('SELECT 1 FROM mail_campaign_recipients WHERE campaign_id=? AND email=?').get(campaign.id,r.email))continue;await tx.prepare('INSERT OR IGNORE INTO mail_outbox (id,event_key,campaign_id,admin_id,account_id,email,name,subject,body,marketing,origin,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)').run(makeId(),`campaign:${campaign.id}:${r.email}`,campaign.id,sendingAccount,r.account_id,r.email,r.name,subject,body,campaign.marketing,portalOrigin(req),now());}
       await tx.prepare("UPDATE mail_campaigns SET status='queued' WHERE id=?").run(req.params.id);
       await audit(tx,admin.id,'Email campaign queued',req.params.id,`${recipients.length} recipient snapshots`);
     });

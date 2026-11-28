@@ -6,7 +6,7 @@ import { processMailQueue } from './mail.js';
 import { portalOrigin } from './microsoft.js';
 import { reconcileReferrals } from './referral-data.js';
 import { notifyReferralCredits } from './referrals.js';
-import { cleanupPrivateFiles } from './private-files.js';
+import {cleanupAllPrivateFiles as cleanupPrivateFiles} from './student-storage-cleanup.js';
 
 export function mountEngagementJobs(app: Express, db: WritableDatabase) {
   app.get('/api/jobs/academy', route(async (req, res) => {

@@ -5,7 +5,7 @@ import { type Database,type WritableDatabase,now,transaction } from './database.
 import { audit,saveSetting,setting } from './academy-data.js';
 import { badRequest,conflict,limitAttempts,route } from './http.js';
 import { verifyPassword } from './passwords.js';
-import { cleanupPrivateFiles } from './private-files.js';
+import {cleanupAllPrivateFiles as cleanupPrivateFiles} from './student-storage-cleanup.js';
 
 async function resetSummary(db:Database){
   const count=async(sql:string)=>Number((await db.prepare(sql).get())?.n||0);
@@ -14,7 +14,7 @@ async function resetSummary(db:Database){
   return{...summary,reviewToken:createHash('sha256').update(JSON.stringify({students,summary})).digest('hex')};
 }
 export function mountAcademyReset(app:Express,db:WritableDatabase,hosted:boolean){
-  app.get('/api/admin/reset-preview',route(async(req,res)=>{await requireAccount(db,req,'admin');res.json({...await resetSummary(db),privateFileCleanupPending:Number((await db.prepare('SELECT COUNT(*) AS n FROM private_file_cleanup').get())?.n||0),preserved:['Current administrator email, name and password','Course content and videos','Branding, certificate designs and stamps','Batches, live sessions and release rules','Microsoft account connections and application settings']});}));
+  app.get('/api/admin/reset-preview',route(async(req,res)=>{await requireAccount(db,req,'admin');res.json({...await resetSummary(db),privateFileCleanupPending:Number((await db.prepare('SELECT (SELECT COUNT(*) FROM private_file_cleanup)+(SELECT COUNT(*) FROM student_storage_cleanup) AS n').get())?.n||0),preserved:['Current administrator email, name and password','Course content and videos','Branding, certificate designs and stamps','Batches, live sessions and release rules','Microsoft account connections and application settings']});}));
   app.post('/api/admin/reset-cleanup',route(async(req,res)=>{await requireAccount(db,req,'admin');res.json(await cleanupPrivateFiles(db));}));
   app.post('/api/admin/reset-students',limitAttempts(3,hosted?db:undefined),route(async(req,res)=>{
     const admin=await requireAccount(db,req,'admin');if(!await verifyPassword(String(req.body?.current||''),admin.passwordHash))throw badRequest('The current admin password is incorrect.');

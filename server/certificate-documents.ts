@@ -14,7 +14,8 @@ import { buildCertificatePdf,certificateLayoutVersion } from '../src/live/certif
 import type { CertificateRecord } from '../src/live/academy-types.js';
 
 let fonts:Promise<string[]>|undefined,artwork:Promise<string>|undefined;
-const cached=new Map<string,Buffer>();
+const cached=new Map<string,{studentId:string;bytes:Buffer}>();
+export function forgetStudentCertificateFiles(studentId:string){for(const [key,value] of cached)if(value.studentId===studentId)cached.delete(key);}
 const certificateFilename=(record:CertificateRecord)=>`${record.id.replace(/[^a-zA-Z0-9._-]/g,'-').slice(0,120)}.pdf`;
 async function serverFonts(){fonts??=Promise.all(['LiberationSans-Regular.ttf','LiberationSans-Bold.ttf','LiberationSerif-Regular.ttf','LiberationSerif-Italic.ttf','InstrumentSans-Regular.ttf','InstrumentSans-Bold.ttf'].map(async file=>(await readFile(path.join(process.cwd(),'src/assets/pdf-fonts',file))).toString('base64'))).catch(error=>{fonts=undefined;throw error;});return fonts;}
 async function serverArtwork(){artwork??=readFile(path.join(process.cwd(),'src/assets/certificate-art/pbs-certificate-blueprint.jpg')).then(bytes=>'data:image/jpeg;base64,'+bytes.toString('base64')).catch(error=>{artwork=undefined;throw error;});return artwork;}
@@ -26,11 +27,11 @@ export async function certificateFile(db:Database,record:CertificateRecord,origi
   const brand=await publicBranding(db);
   const page=await db.prepare('SELECT duration FROM course_pages WHERE course_id=?').get(record.courseId),duration=String(page?.duration||'');
   const url=`${origin}/verify/certificate/${encodeURIComponent(record.publicToken)}`;
-  const key=createHash('sha256').update(JSON.stringify({layout:certificateLayoutVersion,record,brand,duration,url})).digest('hex');const previous=cached.get(key);if(previous)return previous;
+  const key=createHash('sha256').update(JSON.stringify({layout:certificateLayoutVersion,record,brand,duration,url})).digest('hex');const previous=cached.get(key);if(previous)return previous.bytes;
   const qr=record.published&&!record.revokedAt?await (await import('qrcode')).toDataURL(url,{margin:1,width:200,errorCorrectionLevel:'M'}):undefined;
   const pdf=await buildCertificatePdf(record,brand,{qr,verificationUrl:url,duration,fonts:await serverFonts(),background:await serverArtwork()});
   pdf.setCreationDate(new Date(record.issuedAt));pdf.setFileId(key.slice(0,32));
-  const bytes=Buffer.from(pdf.output('arraybuffer'));if(cached.size>=20)cached.delete(cached.keys().next().value!);cached.set(key,bytes);return bytes;
+  const bytes=Buffer.from(pdf.output('arraybuffer'));if(cached.size>=20)cached.delete(cached.keys().next().value!);cached.set(key,{studentId:record.studentId,bytes});return bytes;
 }
 function png(input:unknown,label:string) {
   const data=field(input,label,190000,false);if(!data)return '';

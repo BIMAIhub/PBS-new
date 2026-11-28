@@ -1,4 +1,6 @@
 export const educationSchema = `
+CREATE TABLE IF NOT EXISTS student_storage_cleanup (id TEXT PRIMARY KEY,admin_id TEXT NOT NULL REFERENCES accounts(id),operation TEXT NOT NULL,drive_id TEXT NOT NULL DEFAULT '',item_id TEXT NOT NULL DEFAULT '',permission_id TEXT NOT NULL DEFAULT '',upload_url TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,attempts INTEGER NOT NULL DEFAULT 0,error TEXT NOT NULL DEFAULT '');
+CREATE TABLE IF NOT EXISTS mail_delivery_locks (outbox_id TEXT PRIMARY KEY REFERENCES mail_outbox(id) ON DELETE CASCADE,lease_token TEXT NOT NULL,expires_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS certificate_design_assets (
  course_id TEXT PRIMARY KEY,logo_image TEXT NOT NULL DEFAULT '',signature_image TEXT NOT NULL DEFAULT '',detail_text TEXT NOT NULL DEFAULT '',duration_label TEXT NOT NULL DEFAULT '',revision TEXT NOT NULL
 );
